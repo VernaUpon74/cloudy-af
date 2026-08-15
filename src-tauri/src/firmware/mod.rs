@@ -4,6 +4,7 @@ pub mod definition;
 pub mod encryption;
 pub mod loader;
 pub mod patch;
+pub mod state;
 
 #[cfg(test)]
 mod tests;
