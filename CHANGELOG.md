@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0 — 2026-08-15
+
+### Added
+- Firmware Editor window accessible from **Advanced → Settings → Firmware Editor**.
+- Open encrypted ArcticFox/Joyetech `.bin` firmware files, detect the device definition, and list compatible XML patches.
+- Apply and rollback binary patches with wildcard support and rollback logging.
+- Save modified firmware back to disk with the original encryption.
+- Bundled ArcticFox firmware definition and patch directory.
+
 ## 1.2.1 — 2026-08-15
 
 ### Fixed
