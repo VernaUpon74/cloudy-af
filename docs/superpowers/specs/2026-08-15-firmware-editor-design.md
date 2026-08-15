@@ -137,3 +137,133 @@ The window is designed so the following can be added later without changing the 
 - Unit tests for each decryptor using small known-ciphertext samples.
 - Unit tests for patch apply/rollback/conflict logic.
 - Manual end-to-end test: open a known ArcticFox `.bin`, apply a known patch, save, and verify the byte change with a hex dump.
+
+
+## Deep Dive: Images, Resource Packs, and On-Device Display
+
+This section documents the firmware image system so future work on the Images, Strings, Resource Packs tabs — and a planned animation feature — has a solid reference.
+
+### Firmware Image Block Formats
+
+Every stored image begins with a 2-byte header:
+
+| Offset | Field  | Type   | Meaning                    |
+|--------|--------|--------|----------------------------|
+| 0      | Width  | `byte` | Image width in pixels      |
+| 1      | Height | `byte` | Image height in pixels     |
+
+The pixel payload follows immediately after the header.
+
+#### Block1 — SSD1306-style vertical packing
+
+- Used by many ArcticFox monochrome OLED displays.
+- `DataLength = Width * ceil(Height / 8)`.
+- Byte layout: each byte stores 8 vertical pixels in one column.
+  - `byteIndex = (y / 8) * Width + x`
+  - `bitIndex  = y % 8`
+  - `imageBytes[byteIndex] |= (1 << bitIndex)` sets pixel `(x, y)`
+  - Bit 0 is the top pixel of the 8-pixel group.
+
+#### Block2 — SSD1327-style horizontal packing
+
+- Used by some larger/color-compatible displays.
+- `DataLength = ceil(Width / 8) * Height`.
+- Byte layout: each byte stores 8 horizontal pixels in one row.
+  - `byteIndex = y * stride + x / 8`, where `stride = ceil(Width / 8)`
+  - `bitIndex  = 7 - (x % 8)`
+  - `imageBytes[byteIndex] |= (1 << bitIndex)` sets pixel `(x, y)`
+  - The most significant bit is the leftmost pixel.
+
+#### Image table layout
+
+Definitions specify `ImageTable1` and `ImageTable2` as either absolute ranges (`From`/`To`) or pointer-table bounds (`PtrFrom`/`PtrTo`). For ArcticFox the pointer-table form is used:
+
+```xml
+<ImageTable1 PtrFrom="0x144" PtrTo="0x148" />
+<ImageTable2 PtrFrom="0x14C" PtrTo="0x150" />
+```
+
+The loader reads a table of 32-bit image-data offsets. A zero offset means “no image.” Image indices are 1-based (`0x01`, `0x02`, …). The loader seeks to each offset and reads the 2-byte header to obtain width and height.
+
+### Resource Pack Format (`.respack`)
+
+A `.respack` is an XML file describing replacement glyphs/images for a given definition.
+
+Root attributes:
+
+- `Definition` — comma-separated list of compatible firmware definitions
+- `Name`, `Version`, `Author`
+
+Structure:
+
+```xml
+<ResourcePack Definition="ArcticFox" Name="Neo" Version="1.0" Author="...">
+  <Description>...</Description>
+  <Images>
+    <Image Index="01" Width="12" Height="32">
+      <Data>
+.......XXX....
+......XX.XX...
+...
+      </Data>
+    </Image>
+  </Images>
+</ResourcePack>
+```
+
+- `TrueChar = 'X'`, `FalseChar = '.'`; `'1'` is also accepted as true.
+- Rows are separated by `\r` or `\n`; empty lines are ignored.
+- Each row is read left-to-right into the bitmap.
+
+When applied, the importer looks up the same `Index` in **both** Block1 and Block2. If found, it pastes the imported glyph over the original, cropping to the original size. An optional “Resize original images” mode overwrites the original width/height metadata as well.
+
+### Image Editor Capabilities
+
+The upstream image editor supports these operations on `bool[,]` bitmaps:
+
+- `Clear`, `Invert`
+- `FlipHorizontal`, `FlipVertical`
+- `ShiftUp`, `ShiftDown`, `ShiftLeft`, `ShiftRight` (wrap-around)
+- `Rotate` (clockwise or counter-clockwise; swaps width/height)
+- `PasteImage`, `ResizeImage`, `MergeImages`
+
+UI features include a pixel grid with zoom/block size, grid toggle, left/right mouse editing, line drawing with Ctrl/Shift, and an undo/redo stack up to 128 levels.
+
+Import/export formats:
+
+- Import: BMP/PNG/JPG via threshold or Floyd-Steinberg dithering; TTF/OTF font rendering into glyph slots.
+- Export: BMP, raw `.bin`, `.s` assembly resource file, `.respack`.
+
+### How Images Are Used on Device
+
+Image indices are numeric and firmware-specific; definitions do not carry human-readable names. Known consumers from the ArcticFox configuration model include:
+
+- Startup logo (`UIConfiguration.IsLogoEnabled`, `ShowLogoDelay`)
+- Screensaver / screen protection timeout (`ScreenProtectionTime`)
+- Charge screen (`ChargeExtraType` can be set to `Logo`)
+- Main screen skins (Classic, Circle, Foxy, Lite)
+- Clock type (analog/digital)
+- Strings composed as sequences of glyph indices
+
+Because image usage is hard-coded by index in the firmware, the editor must operate on numeric indices and let the user infer semantic meaning from context or external documentation.
+
+### Animation Planning Notes
+
+The current firmware and editor contain **no native animation support**:
+
+- Image blocks are flat arrays of single images.
+- Resource packs replace one static image at a time.
+- Patches are static byte diffs, not animation descriptors.
+- ArcticFox configuration has no frame-rate, frame-count, or animation-index fields.
+
+To add animations in a future feature, a planner would need to:
+
+1. Reserve a contiguous or known set of image indices for animation frames.
+2. Generate frames as standard Block1/Block2 images.
+3. Either:
+   - Replace existing glyphs at the reserved indices (keeping identical dimensions), or
+   - Append new frame data and patch the image pointer table to point at it.
+4. Provide a patch or custom binary edit that cycles the display through those indices on a timer.
+5. Maintain tool-level metadata (outside the firmware formats) describing frame order, duration, and target index.
+
+This is intentionally out of scope for the first Patches milestone, but the image-block decode/encode code implemented for the Images tab should be designed so it can be reused for animation frame generation later.
