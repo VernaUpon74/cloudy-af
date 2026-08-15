@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 pub mod definition;
+pub mod encryption;
 
 #[cfg(test)]
 mod tests;
