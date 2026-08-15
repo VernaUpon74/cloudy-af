@@ -832,3 +832,120 @@ git tag v1.3.0
 **Placeholder scan:** No TBD/TODO placeholders. Each task contains concrete file paths, code snippets, and test commands.
 
 **Type consistency:** `FirmwareState` uses `HashMap<String, Mutex<OpenFirmware>>`; commands take `State<'_, FirmwareState>` consistently. Patch mutation happens through a mutable borrow from the mutex guard.
+
+
+### Task 12: Implement HID flashing commands
+
+**Files:**
+- Create: `src-tauri/src/firmware/flasher.rs`
+- Modify: `src-tauri/src/commands/firmware.rs`
+- Modify: `sidecar/hid-bridge.js` or add Rust HID commands
+
+**Interfaces:**
+- Consumes: `node-hid` or `hidapi-rs`, firmware bytes.
+- Produces: Tauri commands `read_dataflash`, `flash_firmware`, `restart_device`.
+
+**Notes:**
+- Device VID = `0x0416`, PID = `0x5020` for the update interface.
+- Command packet format: `[cmd, 0x0E, arg1 LE i32, arg2 LE i32, "HIDC", checksum]` (15 bytes).
+- `ReadDataflash` (`0x35`) returns 4-byte checksum + 2044 bytes.
+- `WriteDataflash` (`0x53`) writes 4-byte checksum + 2044 bytes.
+- `WriteData` (`0xC3`) streams firmware bytes after `WriteData(0, len)`.
+- `Restart` (`0xB4`) reboots the device.
+- If not in LDROM mode, set dataflash[9] = 1, write dataflash, restart, wait for re-enumeration.
+
+- [ ] **Step 1: Add HID dependency**
+
+Use `hidapi` Rust crate or extend the existing Node sidecar. Recommended: Rust crate for direct Tauri command.
+
+Run: `cd src-tauri && cargo add hidapi`
+
+- [ ] **Step 2: Implement `read_dataflash`**
+
+Open HID device, send `CreateCommand(0x35, 0, 0)`, accumulate 2048 bytes, verify checksum, return bytes.
+
+- [ ] **Step 3: Implement `flash_firmware`**
+
+```rust
+#[tauri::command]
+pub async fn flash_firmware(path: String) -> Result<(), String>;
+```
+
+1. Read dataflash to identify Product ID.
+2. If dataflash[9] != 1, set it to 1, write dataflash, restart, wait for re-enumeration.
+3. Read firmware file, decrypt if needed.
+4. Send `WriteData(0, len)` then stream bytes.
+
+- [ ] **Step 4: Implement `restart_device`**
+
+Send restart command and wait.
+
+- [ ] **Step 5: Add frontend wrappers**
+
+In `src/lib/tauri-bridge.js`:
+
+```javascript
+export async function readDataflash() { return invoke('read_dataflash'); }
+export async function flashFirmware(path) { return invoke('flash_firmware', { path }); }
+export async function restartDevice() { return invoke('restart_device'); }
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src-tauri/src/firmware/flasher.rs src-tauri/src/commands/firmware.rs src-tauri/Cargo.toml src-tauri/Cargo.lock src/lib/tauri-bridge.js
+git commit -m "feat(firmware): add HID flashing commands"
+```
+
+---
+
+### Task 13: Add Undo Changes button and backup management
+
+**Files:**
+- Modify: `src/renderer-firmware.js`
+- Modify: `firmware.html`
+- Modify: `src-tauri/src/commands/firmware.rs`
+- Modify: `src-tauri/src/firmware/state.rs`
+
+**Interfaces:**
+- Consumes: `flash_firmware`, cached original firmware path.
+- Produces: UI button **Undo Changes** that reflashes the original firmware.
+
+- [ ] **Step 1: Track original firmware backup**
+
+When `flash_firmware` is called, copy the source `.bin` to `~/.config/cloudy-af/firmware-backups/<product-id>-<timestamp>.bin` before flashing. Store the path in `OpenFirmware` state.
+
+- [ ] **Step 2: Add `undo_firmware_changes` command**
+
+```rust
+#[tauri::command]
+pub async fn undo_firmware_changes(handle: String) -> Result<(), String>;
+```
+
+Reflash the cached original firmware file and set animation config to `Off`.
+
+- [ ] **Step 3: Add UI button**
+
+In `firmware.html` toolbar, add:
+
+```html
+<button id="undo-changes" class="btn btn-default" disabled>Undo Changes</button>
+```
+
+Enable it after a successful flash.
+
+- [ ] **Step 4: Wire button in `src/renderer-firmware.js`**
+
+```javascript
+$('#undo-changes').click(async () => {
+    await undoFirmwareChanges(handle);
+    alert('Original firmware restored. Device will restart.');
+});
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/renderer-firmware.js firmware.html src-tauri/src/commands/firmware.rs src-tauri/src/firmware/state.rs
+git commit -m "feat(firmware): add Undo Changes button and firmware backup"
+```
