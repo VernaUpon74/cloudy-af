@@ -3,6 +3,7 @@ use thiserror::Error;
 pub mod definition;
 pub mod encryption;
 pub mod loader;
+pub mod patch;
 
 #[cfg(test)]
 mod tests;
