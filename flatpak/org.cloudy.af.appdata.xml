@@ -34,6 +34,16 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
+    <release version="1.2.1" date="2026-08-15">
+      <description>
+        <p>Fixed Advanced Materials list to show each TFR table as [TFR] &lt;name&gt; and updated the TFR curve editor chart to match the original NToolbox spline plot.</p>
+      </description>
+    </release>
+    <release version="1.2.0" date="2026-08-15">
+      <description>
+        <p>Renamed all runtime and packaging references from arcticfox-config to cloudy-af for consistent branding.</p>
+      </description>
+    </release>
     <release version="1.14.1" date="2026-08-14">
       <description>
         <p>Flatpak permission hardening: removed the WebKit sandbox bypass, removed Flatpak spawn access, and allowed native Wayland use.</p>

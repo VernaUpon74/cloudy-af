@@ -11,6 +11,9 @@ body {
 
 .window-content {
     flex: 1 1 auto !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
     overflow: hidden !important;
 }
 
@@ -136,7 +139,11 @@ tr:active {
 
 
 #version {
+    display: block;
     font-size: 10px;
+    text-align: center;
+    margin-top: 4px;
+    color: var(--fg-color);
 }
 
 /* Default dark mode overrides for Photon UI */
@@ -171,10 +178,10 @@ body,
 .content-scale-wrap {
     display: flex !important;
     flex-direction: column !important;
-    width: 536px !important;
-    height: 100% !important;
+    width: var(--base-width, 536px) !important;
+    height: var(--base-content-height, 551px) !important;
     transform: scale(var(--content-scale, 1)) !important;
-    transform-origin: top left !important;
+    transform-origin: center center !important;
     overflow: hidden !important;
 }
 
@@ -210,6 +217,14 @@ body,
 .toolbar-footer {
     position: relative !important;
     z-index: 10 !important;
+}
+
+/* Scale the Configuration dropdown and footer action buttons so they stay
+   visually consistent with the scaled content area. */
+#configuration-menu,
+.toolbar-footer .btn {
+    transform: scale(var(--content-scale, 1)) !important;
+    transform-origin: center center !important;
 }
 
 .toolbar-footer .toolbar-actions > .btn {
@@ -265,7 +280,7 @@ body,
 
 .tab-item {
     position: relative !important;
-    flex: 0 0 auto !important;
+    flex: 1 1 auto !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -284,6 +299,10 @@ body,
     background-image: none !important;
     cursor: default !important;
     box-sizing: border-box !important;
+}
+
+.tab-item-fixed {
+    flex: 0 0 auto !important;
 }
 
 .tab-item:after {
@@ -361,6 +380,33 @@ select,
 select option {
     background-color: var(--input-bg) !important;
     color: var(--input-fg) !important;
+}
+
+/* Make the Configuration menu button look like the other dropdown selects
+   (e.g., Active Profile) instead of a Photon push button. */
+#configuration-menu {
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    background-color: var(--input-bg) !important;
+    color: var(--input-fg) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 4px !important;
+    padding: 2px 20px 2px 8px !important;
+    background-image: linear-gradient(45deg, transparent 50%, var(--fg-color) 50%),
+                      linear-gradient(135deg, var(--fg-color) 50%, transparent 50%) !important;
+    background-position: calc(100% - 10px) 50%, calc(100% - 6px) 50% !important;
+    background-size: 4px 4px, 4px 4px !important;
+    background-repeat: no-repeat !important;
+    box-shadow: none !important;
+    text-decoration: none !important;
+    font-size: 12px !important;
+    line-height: 1.2 !important;
+    height: 22px !important;
+}
+
+#configuration-menu::after {
+    display: none !important;
 }
 
 input:disabled,

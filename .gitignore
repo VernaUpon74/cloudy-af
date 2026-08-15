@@ -7,4 +7,8 @@ src-tauri/gen
 flatpak/build-dir
 flatpak/repo
 flatpak/.flatpak-builder
+flatpak/.cargo-cache
 *.flatpak
+builds/
+src-tauri/binaries/
+*.log

@@ -39,7 +39,7 @@ export async function getAppVersion() {
     try {
         return await getVersion();
     } catch (e) {
-        return '1.14.0';
+        return '1.2.0';
     }
 }
 

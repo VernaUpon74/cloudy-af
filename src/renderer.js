@@ -2,11 +2,13 @@ import 'photonkit/dist/css/photon.css';
 import './style.css';
 import $ from 'jquery';
 import Highcharts from 'highcharts';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { PhysicalSize } from '@tauri-apps/api/dpi';
 import { ipc, getLocale, getAppVersion, readTextFile, resolveResourcePath, showError, openConfig, saveConfig } from './lib/tauri-bridge.js';
 
 let config;
 let lang;
-let appVersion = '1.14.0';
+let appVersion = '1.2.0';
 
 ipc.on('connect', (event, status) => {
     $('#connection-status').html(_('Status.Device') + ' ' + (status ? _('Status.Connected') : _('Status.Disconnected')));
@@ -300,14 +302,20 @@ function uiUpdate() {
     const $MaterialTable = $('#table-material');
     $Material.html('');
     $MaterialTable.html('');
+    // DEVIATION: Keep the original ArcticFox coil material labels so the dropdown
+    // matches the mod's firmware choices: Nickel 200, Titanium 1, SS 316, TCR,
+    // and the eight user-editable TFR tables (TFR1..TFR8).
     $Material.append('<option value="1">Nickel 200</option>');
     $Material.append('<option value="2">Titanium 1</option>');
     $Material.append('<option value="3">SS 316</option>');
     $Material.append('<option value="4">TCR</option>');
 
     config.TFRTables.forEach((tfr, index) => {
-        $Material.append('<option value="' + (index + 5) + '">[TFR] ' + tfr.Name + '</option>');
-        $MaterialTable.append('<tr><td>' + tfr.Name + '</td><td><button class="tfr-button btn btn-default" data-tfr="' + index + '">Edit</button></td></tr>');
+        $Material.append('<option value="' + (index + 5) + '">TFR' + (index + 1) + '</option>');
+        // DEVIATION: The original NToolbox Advanced Materials list shows each
+        // user-editable TFR table as "[TFR] <name>" (e.g. "[TFR] Ni"), not a
+        // generic TFR1..TFR8 label. Render the stored table name here.
+        $MaterialTable.append('<tr><td>[TFR] ' + tfr.Name.replace(/\u0000/g, '') + '</td><td><button class="tfr-button btn btn-default" data-tfr="' + index + '">Edit</button></td></tr>');
     });
 
     $('.tfr-button').click(function () {
@@ -891,10 +899,11 @@ function uiInitBootIcon() {
     stack.addEventListener('click', onBootIconClick);
 }
 
-// Wrap the main tab bar and the view container in a fixed-width, centered
-// wrapper so they scale as a single block. The HTML keeps them as direct
-// children of .window-content for backward compatibility; we relocate them at
-// runtime so the transform/scale applies to the whole content area.
+// Wrap the main tab bar and the view container in a full-width wrapper so
+// the tab bars extend to the window borders while the view content scales
+// from the center. The HTML keeps them as direct children of .window-content
+// for backward compatibility; we relocate them at runtime so the transform
+// applies consistently.
 function uiWrapContentForScaling() {
     const main = document.getElementById('main');
     const content = document.querySelector('.window-content');
@@ -909,10 +918,10 @@ function uiWrapContentForScaling() {
     content.appendChild(wrap);
 }
 
-// Scale the whole content area (main tabs + views) to fit the window while
-// keeping the header/footer at their natural size. The content block is fixed
-// at the 536px design width and centered horizontally, matching the centered
-// header/footer layout.
+// Scale the view content to fit the window while keeping the header/footer
+// at their natural size. The wrapper is sized to the base window dimensions
+// and centered in the content area; the tab bars stretch to the wrapper edges
+// and scale with it so they reach the window borders while staying centered.
 function updateContentZoom() {
     const header = document.querySelector('.toolbar-header');
     const footer = document.querySelector('.toolbar-footer');
@@ -920,7 +929,7 @@ function updateContentZoom() {
     if (!header || !footer || !content) return;
 
     const baseWidth = 536;
-    const baseHeight = 596;
+    const baseHeight = 621;
     const headerHeight = header.offsetHeight;
     const footerHeight = footer.offsetHeight;
 
@@ -929,7 +938,38 @@ function updateContentZoom() {
     const availableContentHeight = window.innerHeight - headerHeight - footerHeight;
 
     const scale = Math.min(availableWidth / baseWidth, availableContentHeight / baseContentHeight);
+    document.documentElement.style.setProperty('--base-width', `${baseWidth}px`);
+    document.documentElement.style.setProperty('--base-content-height', `${baseContentHeight}px`);
     document.documentElement.style.setProperty('--content-scale', scale.toFixed(4));
+}
+
+// DEVIATION: Lock the Tauri window to the base aspect ratio so every resize is
+// diagonal. This keeps the fixed 536x621 UI layout proportional and avoids the
+// dead-space / tab-bar-stretch problems that come from free-form resizing.
+const BASE_WINDOW_WIDTH = 536;
+const BASE_WINDOW_HEIGHT = 621;
+const BASE_ASPECT = BASE_WINDOW_WIDTH / BASE_WINDOW_HEIGHT;
+
+function lockWindowAspectRatio() {
+    const win = getCurrentWindow();
+    let enforcing = false;
+    win.onResized(({ payload: size }) => {
+        if (enforcing) return;
+        const { width, height } = size;
+        const aspect = width / height;
+        if (Math.abs(aspect - BASE_ASPECT) < 0.001) return;
+        let newWidth = width;
+        let newHeight = height;
+        if (aspect > BASE_ASPECT) {
+            newWidth = Math.round(height * BASE_ASPECT);
+        } else {
+            newHeight = Math.round(width / BASE_ASPECT);
+        }
+        enforcing = true;
+        win.setSize(new PhysicalSize(newWidth, newHeight)).finally(() => {
+            enforcing = false;
+        });
+    });
 }
 
 window.addEventListener('resize', updateContentZoom);
@@ -939,3 +979,4 @@ uiInit();
 uiInitStatsIcon();
 uiInitBootIcon();
 updateContentZoom();
+lockWindowAspectRatio();

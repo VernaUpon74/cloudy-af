@@ -16,9 +16,7 @@
 
 Pre-built Flatpak bundle is available on the
 [releases page](https://github.com/VernaUpon74/cloudy-af/releases/)
-and in the local `builds/` directory after running the build scripts. 
-
-Or click [here](https://github.com/VernaUpon74/cloudy-af/releases/download/v1.14.1-flatpak/cloudy-af.flatpak) for a direct link.
+and in the local `builds/` directory after running the build scripts.
 
 Portable Appimage binary also provided on the releases page. Installable .deb and .rpm files can be found there as well. And in the local `builds/` directory after running the build scripts.
 
@@ -71,8 +69,8 @@ Native Linux packages are produced by `scripts/build-appimage.sh` and placed in 
 Make the file executable and run it:
 
 ```bash
-chmod +x builds/Cloudy_AF-1.14.1-x86_64.AppImage
-./builds/Cloudy_AF-1.14.1-x86_64.AppImage
+chmod +x builds/Cloudy_AF-1.2.0-x86_64.AppImage
+./builds/Cloudy_AF-1.2.0-x86_64.AppImage
 ```
 
 The AppImage uses a static runtime and works on systems with only FUSE3.
@@ -81,10 +79,10 @@ The AppImage uses a static runtime and works on systems with only FUSE3.
 
 ```bash
 # Debian / Ubuntu
-sudo apt install ./builds/Cloudy\ AF_1.14.1_amd64.deb
+sudo apt install ./builds/Cloudy\ AF_1.2.0_amd64.deb
 
 # Fedora
-sudo dnf install ./builds/Cloudy\ AF-1.14.1-1.x86_64.rpm
+sudo dnf install ./builds/Cloudy\ AF-1.2.0-1.x86_64.rpm
 ```
 
 #### USB permissions
@@ -175,7 +173,7 @@ The AppImage / .deb / .rpm build script also copies completed packages to `build
 
 ```bash
 cd flatpak
-flatpak-builder --force-clean --repo=repo build-dir org.cloudy.af.yml
+flatpak-builder --disable-rofiles-fuse --force-clean --repo=repo build-dir org.cloudy.af.yml
 flatpak build-bundle repo cloudy-af.flatpak org.cloudy.af
 mv cloudy-af.flatpak ../builds/
 ```
@@ -189,6 +187,11 @@ npm run appimage:build
 
 All native Linux packages are copied to `builds/`.
 
+> The AppImage build script runs Tauri's release build inside the org.gnome.Sdk
+> Flatpak runtime, so the host does not need GTK/WebKit development headers.
+> `scripts/build-appimage.sh` will reuse freshly built Flatpak binary, sidecar,
+> and Node runtime artifacts when they are present.
+
 ## Usage
 
 Start the application and connect your ArcticFox device. The app will automatically detect the
@@ -197,9 +200,44 @@ and device settings, then click **Upload** to write the configuration back to th
 
 ## Debug
 
-Work in progress. Issues welcome.  
+If no device is detected, follow the USB permissions instructions above.
 
-If no device detected, follow the USB permissions instruction above.
+### Native binary fails with `libwebkit2gtk-4.1.so.0: cannot open shared object file`
+
+The native Linux binary needs the system's WebKitGTK 4.1 runtime libraries:
+
+```bash
+# Fedora / RPM-based
+sudo dnf install webkit2gtk4.1
+
+# Debian / Ubuntu / apt-based
+sudo apt install libwebkit2gtk-4.1-0
+```
+
+### WebKit crashes on NVIDIA (`WebKitWebProcess` ABRT in `libnvidia-gpucomp`)
+
+The default package keeps WebKit's internal WebProcess/GPU sandbox enabled.
+On some NVIDIA systems this sandbox conflicts with the driver and the webview
+process aborts. Two runtime workarounds are available; try the first one
+before the second because it keeps the sandbox intact.
+
+1. **Software rendering** (keeps the sandbox):
+   ```bash
+   ./builds/cloudy-af --software-rendering
+   # Flatpak
+   flatpak run --env=WEBKIT_FORCE_SOFTWARE_RENDERING=1 org.cloudy.af
+   # AppImage
+   WEBKIT_FORCE_SOFTWARE_RENDERING=1 ./builds/Cloudy_AF-1.2.0-x86_64.AppImage
+   ```
+
+2. **Disable the WebKit sandbox** (last resort):
+   ```bash
+   ./builds/cloudy-af --disable-webkit-sandbox
+   # Flatpak
+   flatpak run --env=WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 org.cloudy.af
+   # AppImage
+   WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 ./builds/Cloudy_AF-1.2.0-x86_64.AppImage
+   ```
 
 ## Project structure
 
@@ -236,6 +274,7 @@ Notable changes include:
 - Dark UI by default. Up Material UIrs
 - Window scaling
 - Freedom units by default
+- Removed Coil Material gobbledygook, TFR list back. She's got curves, baby.
 - Autofire added to multi-click / shortcut dropdowns
 - Device auto-reconnect on unexpected disconnect
 - Lite mode support in Appearance settings

@@ -5,26 +5,26 @@ sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.node22
   - org.freedesktop.Sdk.Extension.rust-stable
-command: arcticfox-config
+command: cloudy-af
 finish-args:
   - --share=ipc
   - --socket=wayland
   - --device=all
   - --filesystem=xdg-documents
-  - --persist=.config/arcticfox-config
+  - --persist=.config/cloudy-af
   - --talk-name=org.freedesktop.portal.Desktop
   - --talk-name=org.freedesktop.portal.FileChooser
   - --env=PATH=/app/bin:/usr/bin
 
 modules:
-  - name: arcticfox-config
+  - name: cloudy-af
     buildsystem: simple
     build-options:
       append-path: /usr/lib/sdk/node22/bin:/usr/lib/sdk/rust-stable/bin
       build-args:
         - --share=network
       env:
-        CARGO_HOME: /run/build/arcticfox-config/cargo
+        CARGO_HOME: /run/build/cloudy-af/cargo
         CARGO_BUILD_JOBS: "1"
     sources:
       - type: dir
@@ -43,19 +43,19 @@ modules:
         # Build Tauri release (also builds frontend via beforeBuildCommand and embeds assets).
         npm run tauri:build -- --no-bundle
         # Install application files.
-        install -Dm755 src-tauri/target/release/arcticfox-config /app/bin/arcticfox-config
+        install -Dm755 src-tauri/target/release/cloudy-af /app/bin/cloudy-af
         install -Dm644 flatpak/org.cloudy.af.desktop /app/share/applications/org.cloudy.af.desktop
         install -Dm644 flatpak/org.cloudy.af.appdata.xml /app/share/metainfo/org.cloudy.af.metainfo.xml
         install -Dm644 icon.png /app/share/icons/hicolor/512x512/apps/org.cloudy.af.png
         # Bundle sidecar resources and Node runtime.
-        mkdir -p /app/lib/arcticfox-config/resources
-        cp -r sidecar /app/lib/arcticfox-config/resources/
-        cp -r public/i18n /app/lib/arcticfox-config/resources/
-        cp public/default.afc.json /app/lib/arcticfox-config/resources/
-        cp "public/Tux&Foxx.png" /app/lib/arcticfox-config/resources/
+        mkdir -p /app/lib/cloudy-af/resources
+        cp -r sidecar /app/lib/cloudy-af/resources/
+        cp -r public/i18n /app/lib/cloudy-af/resources/
+        cp public/default.afc.json /app/lib/cloudy-af/resources/
+        cp "public/Tux&Foxx.png" /app/lib/cloudy-af/resources/
         # Strip dev tooling, documentation, examples, tests, and platform-specific
         # native prebuilds from the sidecar to reduce the Flatpak size.
-        cd /app/lib/arcticfox-config/resources/sidecar
+        cd /app/lib/cloudy-af/resources/sidecar
         npm prune --production
         # npm's file: override for put can leave a broken symlink after prune;
         # replace it with a real copy of the local zero-initialized replacement.

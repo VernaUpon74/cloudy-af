@@ -2,6 +2,7 @@ use thiserror::Error;
 
 pub mod definition;
 pub mod encryption;
+pub mod loader;
 
 #[cfg(test)]
 mod tests;

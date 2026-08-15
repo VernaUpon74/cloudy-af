@@ -96,14 +96,27 @@ const chart = new Highcharts.Chart({
 
     xAxis: {
         min: 0,
-        max: 800
+        max: 800,
+        tickInterval: 100,
+        gridLineWidth: 1,
+        gridLineColor: '#e6e6e6',
+        lineColor: '#a9a9a9',
+        tickLength: 5,
+        labels: {
+            step: 2
+        }
     },
     yAxis: {
         title: {
             text: null
         },
         min: 1,
-        max: 4
+        max: 4,
+        tickInterval: 0.5,
+        gridLineWidth: 1,
+        gridLineColor: '#e6e6e6',
+        lineColor: '#a9a9a9',
+        tickLength: 5
     },
 
     plotOptions: {
@@ -115,12 +128,16 @@ const chart = new Highcharts.Chart({
                             $('#temp' + i).val(parseInt(c.x));
                             $('#factor' + i).val(c.y);
                         });
+                        chart.series[0].update({ dataLabels: { enabled: true } }, false);
+                        chart.redraw();
                     },
                     drop: function () {
                         chart.series[0].data.forEach((c, i) => {
                             $('#temp' + i).val(parseInt(c.x));
                             $('#factor' + i).val(c.y);
                         });
+                        chart.series[0].update({ dataLabels: { enabled: true } }, false);
+                        chart.redraw();
                     }
                 }
             },
@@ -129,15 +146,33 @@ const chart = new Highcharts.Chart({
         column: {
             stacking: 'normal'
         },
-        line: {
+        spline: {
             cursor: 'ns-resize',
+            color: '#9acd32',
+            lineWidth: 2,
             marker: {
-                enabled: true
+                enabled: true,
+                symbol: 'circle',
+                radius: 4
+            },
+            dataLabels: {
+                enabled: true,
+                formatter: function () {
+                    return this.y.toFixed(4);
+                },
+                style: {
+                    fontSize: '10px',
+                    color: '#333',
+                    fontWeight: 'normal'
+                },
+                align: 'right',
+                y: -6
             }
         }
     },
 
     series: [{
+        type: 'spline',
         data: [],
         draggableY: true,
         draggableX: true

@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Cloudy AF
 Comment=Configuration Tool for Vape Battery Mods with Arcticfox Firmware
-Exec=arcticfox-config
+Exec=cloudy-af
 Icon=org.cloudy.af
 Type=Application
 Categories=Utility;Electronics;
