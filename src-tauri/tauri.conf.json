@@ -39,7 +39,9 @@
     ],
     "resources": {
       "../public/default.afc.json": "default.afc.json",
-      "../public/i18n": "i18n"
+      "../public/i18n": "i18n",
+      "../resources/definitions": "definitions",
+      "../resources/patches": "patches"
     }
   }
 }

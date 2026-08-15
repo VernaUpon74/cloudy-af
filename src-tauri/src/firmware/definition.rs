@@ -4,7 +4,7 @@ use std::ops::Range;
 
 use super::{FirmwareError, Result};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct FirmwareDefinition {
     pub id: String,
     pub name: String,
@@ -16,7 +16,25 @@ pub struct FirmwareDefinition {
     pub char_width: u8,
 }
 
+impl Default for FirmwareDefinition {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            marker: Vec::new(),
+            image_table_1: Range::default(),
+            image_table_2: Range::default(),
+            string_table_1: Range::default(),
+            string_table_2: Range::default(),
+            char_width: 1,
+        }
+    }
+}
+
 fn hex_to_bytes(s: &str) -> Result<Vec<u8>> {
+    // Split on whitespace and "0x"/"0X" prefixes so inputs like
+    // "0x41 0x46 0x4F 0x58" or "41464F58" both work.
+    let s = s.replace("0x", " ").replace("0X", " ");
     let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
     if s.len() % 2 != 0 {
         return Err(FirmwareError::Xml("odd hex byte count".into()));
@@ -56,6 +74,11 @@ fn parse_range(attrs: Attributes<'_>) -> Result<Range<usize>> {
     Ok(start..end)
 }
 
+fn parse_bool(s: &str) -> bool {
+    let s = s.trim().to_lowercase();
+    s == "true" || s == "1" || s == "yes"
+}
+
 pub fn parse_definition(xml: &str) -> Result<Vec<FirmwareDefinition>> {
     let mut reader = Reader::from_str(xml);
     reader.config_mut().trim_text(true);
@@ -69,7 +92,7 @@ pub fn parse_definition(xml: &str) -> Result<Vec<FirmwareDefinition>> {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
                 match e.name().as_ref() {
-                    b"Definition" => {
+                    b"FirmwareDefinition" | b"Definition" => {
                         let mut def = FirmwareDefinition::default();
                         for attr in e.attributes() {
                             let attr = attr.map_err(|e| FirmwareError::Xml(e.to_string()))?;
@@ -81,7 +104,28 @@ pub fn parse_definition(xml: &str) -> Result<Vec<FirmwareDefinition>> {
                         }
                         current = Some(def);
                     }
-                    b"Marker" => pending_text = None,
+                    b"Marker" => {
+                        if let Some(ref mut def) = current {
+                            let mut bytes_text = String::new();
+                            let mut offset_text = String::new();
+                            for attr in e.attributes() {
+                                let attr = attr.map_err(|e| FirmwareError::Xml(e.to_string()))?;
+                                let value = String::from_utf8_lossy(&attr.value).to_string();
+                                match attr.key.as_ref() {
+                                    b"Bytes" => bytes_text = value,
+                                    b"Offset" => offset_text = value,
+                                    _ => {}
+                                }
+                            }
+                            if !bytes_text.is_empty() {
+                                def.marker = hex_to_bytes(&bytes_text)?;
+                            }
+                            // Offset is currently informational; the marker bytes
+                            // themselves are enough for detection.
+                            let _ = offset_text;
+                        }
+                        pending_text = None;
+                    }
                     b"ImageTable1" => {
                         if let Some(ref mut def) = current {
                             def.image_table_1 = parse_range(e.attributes())?;
@@ -95,6 +139,15 @@ pub fn parse_definition(xml: &str) -> Result<Vec<FirmwareDefinition>> {
                     b"StringTable1" => {
                         if let Some(ref mut def) = current {
                             def.string_table_1 = parse_range(e.attributes())?;
+                            for attr in e.attributes() {
+                                let attr = attr.map_err(|e| FirmwareError::Xml(e.to_string()))?;
+                                if attr.key.as_ref() == b"TwoBytesPerChar" {
+                                    let value = String::from_utf8_lossy(&attr.value);
+                                    if parse_bool(&value) {
+                                        def.char_width = 2;
+                                    }
+                                }
+                            }
                         }
                     }
                     b"StringTable2" => {
@@ -111,16 +164,9 @@ pub fn parse_definition(xml: &str) -> Result<Vec<FirmwareDefinition>> {
                 }
             }
             Ok(Event::End(e)) => match e.name().as_ref() {
-                b"Definition" => {
+                b"FirmwareDefinition" | b"Definition" => {
                     if let Some(def) = current.take() {
                         defs.push(def);
-                    }
-                }
-                b"Marker" => {
-                    if let Some(ref mut def) = current {
-                        if let Some(text) = pending_text.take() {
-                            def.marker = hex_to_bytes(&text)?;
-                        }
                     }
                 }
                 _ => {
@@ -135,4 +181,26 @@ pub fn parse_definition(xml: &str) -> Result<Vec<FirmwareDefinition>> {
     }
 
     Ok(defs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_arcticfox_definition() {
+        let xml = r#"<FirmwareDefinition Name="ArcticFox">
+    <Marker Offset="0x140" Bytes="0x41 0x46 0x4F 0x58" />
+    <ImageTable1 PtrFrom="0x144" PtrTo="0x148" />
+    <ImageTable2 PtrFrom="0x14C" PtrTo="0x150" />
+    <StringTable1 PtrFrom="0x154" PtrTo="0x158" TwoBytesPerChar="false" />
+</FirmwareDefinition>"#;
+        let defs = parse_definition(xml).unwrap();
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs[0].name, "ArcticFox");
+        assert_eq!(defs[0].marker, vec![0x41, 0x46, 0x4F, 0x58]);
+        assert_eq!(defs[0].image_table_1, 0x144..0x148);
+        assert_eq!(defs[0].string_table_1, 0x154..0x158);
+        assert_eq!(defs[0].char_width, 1);
+    }
 }

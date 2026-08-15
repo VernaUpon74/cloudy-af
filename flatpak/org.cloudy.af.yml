@@ -53,6 +53,8 @@ modules:
         cp -r public/i18n /app/lib/cloudy-af/resources/
         cp public/default.afc.json /app/lib/cloudy-af/resources/
         cp "public/Tux&Foxx.png" /app/lib/cloudy-af/resources/
+        cp -r resources/definitions /app/lib/cloudy-af/resources/
+        cp -r resources/patches /app/lib/cloudy-af/resources/
         # Strip dev tooling, documentation, examples, tests, and platform-specific
         # native prebuilds from the sidecar to reduce the Flatpak size.
         cd /app/lib/cloudy-af/resources/sidecar
