@@ -284,6 +284,10 @@ function uiInitButtons() {
         const index = $('#BatteryModel').val() - 1;
         ipc.send('bat', { index, table: config.CustomBatteryProfiles[index] });
     });
+
+    $('#firmware-editor').click(function () {
+        ipc.send('firmware', {});
+    });
 }
 
 function uiUpdate() {
