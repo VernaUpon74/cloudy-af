@@ -21,6 +21,7 @@ export default defineConfig({
         power: resolve(__dirname, 'power.html'),
         tfr: resolve(__dirname, 'tfr.html'),
         pireg: resolve(__dirname, 'pireg.html'),
+        firmware: resolve(__dirname, 'firmware.html'),
       },
       output: {
         entryFileNames: 'assets/[name]-[hash].js',

@@ -104,3 +104,27 @@ export async function importBat() {
 export async function exportBat(table) {
     return invoke('export_bat', { table });
 }
+
+export async function openFirmware(path) {
+    return invoke('open_firmware', { path });
+}
+
+export async function listPatches(handle) {
+    return invoke('list_patches', { handle });
+}
+
+export async function applyPatchCmd(handle, patchId) {
+    return invoke('apply_patch_cmd', { handle, patchId });
+}
+
+export async function rollbackPatchCmd(handle, patchId) {
+    return invoke('rollback_patch_cmd', { handle, patchId });
+}
+
+export async function saveFirmware(handle, path) {
+    return invoke('save_firmware', { handle, path });
+}
+
+export async function closeFirmware(handle) {
+    return invoke('close_firmware', { handle });
+}

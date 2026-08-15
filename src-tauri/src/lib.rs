@@ -161,6 +161,7 @@ async fn open_sub_window(
         "tfr" => ("tfr", "TFR Profile", 545, 380, "tfr.html"),
         "pc" => ("pc", "Power Curve", 545, 520, "power.html"),
         "pireg" => ("pireg", "PI Regulator", 400, 275, "pireg.html"),
+        "firmware" => ("firmware", "Firmware Editor", 900, 600, "firmware.html"),
         _ => return Err("Unknown sub-window".to_string()),
     };
 
