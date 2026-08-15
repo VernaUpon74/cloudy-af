@@ -14,6 +14,7 @@ use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
+mod commands;
 mod firmware;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -589,6 +590,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
         .manage(SidecarState::new())
+        .manage(firmware::state::FirmwareState::new())
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
             let _ = window.set_title("Cloudy AF");
@@ -645,6 +647,12 @@ pub fn run() {
             export_tfr,
             import_bat,
             export_bat,
+            commands::firmware::open_firmware,
+            commands::firmware::list_patches,
+            commands::firmware::apply_patch_cmd,
+            commands::firmware::rollback_patch_cmd,
+            commands::firmware::save_firmware,
+            commands::firmware::close_firmware,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
