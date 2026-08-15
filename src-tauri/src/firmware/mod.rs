@@ -1,5 +1,10 @@
 use thiserror::Error;
 
+pub mod definition;
+
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug, Error)]
 pub enum FirmwareError {
     #[error("IO error: {0}")]
