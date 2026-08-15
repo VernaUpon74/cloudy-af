@@ -16,15 +16,20 @@ pub struct FirmwareImage {
 /// scanning for a known marker.
 pub fn load_firmware(path: &Path, definitions: &[FirmwareDefinition]) -> Result<FirmwareImage> {
     let data = std::fs::read(path)?;
-    let (decrypted, encryption) = decrypt(&data)?;
-    detect_definition(&decrypted, encryption, definitions)
+    load_firmware_from_bytes(&data, definitions)
 }
 
 /// Testable helper that detects a definition from already-loaded bytes.
+///
+/// Plaintext firmware is checked first so that already-decrypted dumps or
+/// unencrypted test payloads are not mangled by the decryption heuristics.
 pub fn load_firmware_from_bytes(
     bytes: &[u8],
     definitions: &[FirmwareDefinition],
 ) -> Result<FirmwareImage> {
+    if let Ok(image) = detect_definition(bytes, EncryptionType::None, definitions) {
+        return Ok(image);
+    }
     let (decrypted, encryption) = decrypt(bytes)?;
     detect_definition(&decrypted, encryption, definitions)
 }
