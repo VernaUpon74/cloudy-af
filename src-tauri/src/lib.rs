@@ -14,6 +14,8 @@ use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
+mod firmware;
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct IpcEvent {
     channel: String,
@@ -61,7 +63,7 @@ fn find_sidecar_script(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .map(|p| p.join("../lib/arcticfox-config/resources/sidecar/hid-bridge.js")),
+            .map(|p| p.join("../lib/cloudy-af/resources/sidecar/hid-bridge.js")),
         std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
@@ -200,11 +202,11 @@ async fn resolve_resource_path(
     let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
     let candidates = vec![
         resource_dir.join(&relative_path),
-        PathBuf::from("/app/lib/arcticfox-config/resources").join(&relative_path),
+        PathBuf::from("/app/lib/cloudy-af/resources").join(&relative_path),
         std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .map(|p| p.join("../lib/arcticfox-config/resources").join(&relative_path))
+            .map(|p| p.join("../lib/cloudy-af/resources").join(&relative_path))
             .unwrap_or_default(),
     ];
     if let Some(manifest) = option_env!("CARGO_MANIFEST_DIR") {
@@ -568,6 +570,19 @@ async fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 pub fn run() {
+    // DEVIATION: WebKit's internal WebProcess/GPU sandbox can crash on some
+    // NVIDIA systems (ABRT inside libnvidia-gpucomp). We keep the sandbox
+    // enabled by default and expose runtime escape hatches so users can opt in
+    // only when needed instead of weakening the package's default posture.
+    if std::env::args().any(|arg| arg == "--disable-webkit-sandbox") {
+        std::env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
+    }
+    if std::env::args().any(|arg| arg == "--software-rendering") {
+        // Force WebKit to render without the GPU. This avoids the NVIDIA
+        // driver path while leaving the WebProcess sandbox intact.
+        std::env::set_var("WEBKIT_FORCE_SOFTWARE_RENDERING", "1");
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())

@@ -1,15 +1,15 @@
 [package]
-name = "arcticfox-config"
-version = "1.14.0"
+name = "cloudy-af"
+version = "1.2.1"
 description = "Configuration Tool for Vape Battery Mods with Arcticfox Firmware"
-authors = ["Sebastian Raff"]
+authors = ["Sebastian Raff", "OneButtFarting"]
 license = "GPL-3.0"
-repository = "https://github.com/hobbyquaker/arcticfox-config"
+repository = "https://github.com/VernaUpon74/cloudy-af"
 edition = "2021"
 rust-version = "1.77.2"
 
 [lib]
-name = "arcticfox_config_lib"
+name = "cloudy_af_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -27,3 +27,4 @@ tokio = { version = "1", features = ["process", "io-util", "sync", "rt", "macros
 log = "0.4"
 base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
+thiserror = "2.0.20"
