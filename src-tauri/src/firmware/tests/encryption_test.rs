@@ -57,3 +57,18 @@ fn test_vandalproof_unsupported() {
     let result = encrypt(&data, EncryptionType::VandalProof);
     assert!(result.is_err());
 }
+
+#[test]
+fn test_arcticfox2_real_build_marker_correction() {
+    // Real ArcticFox 170222 build: encrypted with the AF2 parameters
+    // (key key 0x19, table length 11) but the build toolchain's PRNG
+    // differed slightly from .NET Random, so the decryptor must correct
+    // the table using the known plaintext marker.
+    let data = std::fs::read("/var/home/j/Desktop/NFE-Tools-v7.1.1/af_170222.bin")
+        .expect("read af_170222.bin");
+    let (plain, enc) = decrypt(&data).unwrap();
+    assert!(matches!(enc, EncryptionType::ArcticFox2));
+    assert!(plain
+        .windows(b"Joyetech APROM".len())
+        .any(|w| w == b"Joyetech APROM"));
+}

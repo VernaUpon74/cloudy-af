@@ -147,7 +147,48 @@ fn decrypt_arcticfox(data: &[u8], key_key: u8, table_len: usize) -> Result<Vec<u
     for (i, b) in data[4..].iter().enumerate() {
         result.push(b ^ table[i % table.len()]);
     }
-    Ok(result)
+    if contains_marker(&result) {
+        return Ok(result);
+    }
+
+    // The original AF build toolchain generated the XOR table with a slightly
+    // different PRNG variant than .NET Framework's Random.NextBytes, so a few
+    // table bytes can be wrong. The plaintext always contains the
+    // "Joyetech APROM" marker; fuzzy-locate it, correct the implicated table
+    // bytes, and re-decode.
+    let marker = FIRMWARE_MARKER;
+    let mut best: Option<(usize, usize)> = None; // (offset, matches)
+    for off in 0..result.len().saturating_sub(marker.len()) {
+        let matches = marker
+            .iter()
+            .enumerate()
+            .filter(|(j, m)| result[off + j] == **m)
+            .count();
+        if best.map(|(_, b)| matches > b).unwrap_or(true) {
+            best = Some((off, matches));
+        }
+    }
+    let (off, matches) = best.unwrap_or((0, 0));
+    if matches < marker.len() - 2 {
+        return Err(FirmwareError::UnknownEncryption);
+    }
+    let mut table = table;
+    for (j, m) in marker.iter().enumerate() {
+        let got = result[off + j];
+        if got != *m {
+            let slot = (off + j) % table_len;
+            table[slot] ^= got ^ *m;
+        }
+    }
+    let mut corrected = Vec::with_capacity(data.len() - 4);
+    for (i, b) in data[4..].iter().enumerate() {
+        corrected.push(b ^ table[i % table.len()]);
+    }
+    if contains_marker(&corrected) {
+        Ok(corrected)
+    } else {
+        Err(FirmwareError::UnknownEncryption)
+    }
 }
 
 fn generate_arcticfox_key() -> i32 {
