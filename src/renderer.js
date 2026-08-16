@@ -97,6 +97,18 @@ function uiInitTabs() {
         const view = $(this).data('view');
         $('.view-container.view-advanced .subview').hide();
         $('.view-container.view-advanced #view-' + view).show();
+        // Reflow curve charts when their container becomes visible so they
+        // render at the correct size (they may have been initialised while hidden).
+        window.setTimeout(() => {
+            const prefix = view === 'advanced-powercurves' ? 'pc' : (view === 'advanced-materials' ? 'tfr' : null);
+            if (prefix && window.curveCharts) {
+                Object.keys(window.curveCharts).forEach(key => {
+                    if (key.startsWith(prefix)) {
+                        window.curveCharts[key].reflow();
+                    }
+                });
+            }
+        }, 0);
     });
 
     $('.tab-group#controls .tab-item').click(function () {
@@ -325,21 +337,25 @@ function uiUpdate() {
     // DEVIATION: Render the user-editable TFR tables in the same grid layout the
     // original NToolbox/NFirmwareEditor Advanced Materials list used: each item
     // shows a curve preview above the [TFR] name, and clicking the card opens the
-    // TFR plot editor. The eight default tables are Ni, Ti, 304, 316, 316L, 321,
-    // NF30 and NiFe.
+    // TFR plot editor. Fixed display names match the NFE defaults: Ni, Ti, 304,
+    // 316, 316L, 321, NF30, NiFe.
+    const tfrDisplayNames = ['Ni', 'Ti', '304', '316', '316L', '321', 'NF30', 'NiFe'];
     $MaterialTable.addClass('curve-grid');
     config.TFRTables.forEach((tfr, index) => {
         $Material.append('<option value="' + (index + 5) + '">TFR' + (index + 1) + '</option>');
-        const name = tfr.Name.replace(/\u0000/g, '');
+        const displayName = tfrDisplayNames[index] || tfr.Name.replace(/\u0000/g, '');
         $MaterialTable.append(
             '<div class="curve-card tfr-card" data-tfr="' + index + '">' +
             '<div class="curve-preview tfr-preview" id="tfr' + index + '"></div>' +
-            '<div class="curve-label">[TFR] ' + name + '</div>' +
+            '<div class="curve-label">[TFR] ' + displayName + '</div>' +
             '</div>'
         );
-        new Highcharts.Chart({
+        window.curveCharts = window.curveCharts || {};
+        window.curveCharts['tfr' + index] = new Highcharts.Chart({
             chart: {
                 renderTo: 'tfr' + index,
+                width: 100,
+                height: 48,
                 margin: [0, 0, 0, 0],
                 style: { overflow: 'visible' }
             },
@@ -349,6 +365,7 @@ function uiUpdate() {
             xAxis: {
                 labels: { enabled: false },
                 tickLength: 0,
+                lineWidth: 0,
                 min: 0,
                 max: 800
             },
@@ -386,64 +403,6 @@ function uiUpdate() {
 
     const $PowerTable = $('#table-power');
     $PowerTable.html('');
-    Highcharts.setOptions({
-        chart: {
-            margin: [0, 0, 0, 0],
-            style: {
-                overflow: 'visible'
-            }
-        },
-        title: {
-            text: ''
-        },
-        credits: {
-            enabled: false
-        },
-        legend: {
-            enabled: false
-        },
-        xAxis: {
-            labels: {
-                enabled: false
-            },
-            tickLength: 0,
-            min: 0,
-            max: 8
-        },
-        yAxis: {
-            title: {
-                text: null
-            },
-            maxPadding: 0,
-            minPadding: 0,
-            gridLineWidth: 0,
-            ticks: false,
-            endOnTick: false,
-            labels: {
-                enabled: false
-            },
-            min: 0,
-            max: 250
-        },
-        tooltip: {
-            enabled: false
-        },
-        plotOptions: {
-            series: {
-                enableMouseTracking: false,
-                lineWidth: 1,
-                shadow: false,
-                states: {
-                    hover: {
-                        lineWidth: 1
-                    }
-                },
-                marker: {
-                    enabled: false
-                }
-            }
-        }
-    });
 
     // DEVIATION: Render power curves in the original NToolbox grid layout with
     // fixed display names: Soft, Boost 1s, Boost 2s, Sine 1, Sine 2, Cooldown,
@@ -462,12 +421,47 @@ function uiUpdate() {
         pc.Points.forEach(p => {
             data.push({ x: p.Time, y: p.Percent });
         });
-        new Highcharts.Chart({
+        window.curveCharts = window.curveCharts || {};
+        window.curveCharts['pc' + index] = new Highcharts.Chart({
             chart: {
                 renderTo: 'pc' + index,
+                width: 100,
+                height: 48,
+                margin: [0, 0, 0, 0],
+                style: { overflow: 'visible' }
+            },
+            title: { text: '' },
+            credits: { enabled: false },
+            legend: { enabled: false },
+            xAxis: {
+                labels: { enabled: false },
+                tickLength: 0,
+                lineWidth: 0,
+                min: 0,
+                max: 8
+            },
+            yAxis: {
+                title: { text: null },
+                maxPadding: 0,
+                minPadding: 0,
+                gridLineWidth: 0,
+                endOnTick: false,
+                labels: { enabled: false },
+                min: 0,
+                max: 250
+            },
+            tooltip: { enabled: false },
+            plotOptions: {
+                series: {
+                    enableMouseTracking: false,
+                    lineWidth: 1,
+                    shadow: false,
+                    marker: { enabled: false }
+                }
             },
             series: [{
-                fillColor: 'rgba(124, 181, 236, 0.3)',
+                fillColor: 'rgba(154, 205, 50, 0.25)',
+                lineColor: '#9acd32',
                 type: 'area',
                 name: displayName,
                 data
@@ -483,7 +477,8 @@ function uiUpdate() {
     const $SelectedCurve = $('#SelectedCurve');
     $SelectedCurve.html('');
     config.PowerCurves.forEach((pc, index) => {
-        $SelectedCurve.append('<option value="' + index + '">' + pc.Name + '</option>');
+        const displayName = powerCurveDisplayNames[index] || pc.Name;
+        $SelectedCurve.append('<option value="' + index + '">' + displayName + '</option>');
     });
 
     $('.fox-val').each(function () {
