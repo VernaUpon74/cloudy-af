@@ -12,3 +12,4 @@ flatpak/.cargo-cache
 builds/
 src-tauri/binaries/
 *.log
+repo/
