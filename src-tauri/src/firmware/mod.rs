@@ -18,6 +18,8 @@ pub enum FirmwareError {
     Xml(String),
     #[error("Unknown encryption")]
     UnknownEncryption,
+    #[error("Unsupported encryption: {0}")]
+    UnsupportedEncryption(String),
     #[error("Definition not found")]
     DefinitionNotFound,
     #[error("Incompatible patch at offset {offset}: expected {expected:?}, found {found:?}")]

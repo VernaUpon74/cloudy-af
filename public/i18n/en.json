@@ -264,5 +264,9 @@
   "UpDownButtons.Normal": "Normal",
   "UpDownButtons.Swapped": "Swapped",
   "ClickActions.Edit Profile": "Edit Profile",
-  "DeepSleepMode.Lock Device": "Lock Device"
+  "Screen.Appearance.ClockAnimationLabel": "Clock Animation:",
+  "Animation.Off": "Off",
+  "Animation.Swirl": "Swirl",
+  "Animation.GradientFade": "Gradient Fade",
+  "Animation.RipplingWave": "Rippling Wave"
 }

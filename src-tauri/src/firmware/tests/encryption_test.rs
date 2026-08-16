@@ -2,7 +2,11 @@ use crate::firmware::encryption::{decrypt, encrypt, EncryptionType};
 
 #[test]
 fn test_none_roundtrip() {
-    let data = vec![0, 1, 2, 3, 255];
+    // Plaintext firmware is recognised by the embedded `Joyetech APROM` marker.
+    let marker = b"Joyetech APROM";
+    let mut data = vec![0u8; 32];
+    data[..5].copy_from_slice(&[0, 1, 2, 3, 255]);
+    data[16..16 + marker.len()].copy_from_slice(marker);
     let (plain, enc) = decrypt(&data).unwrap();
     assert_eq!(plain, data);
     assert!(matches!(enc, EncryptionType::None));
@@ -12,7 +16,9 @@ fn test_none_roundtrip() {
 
 #[test]
 fn test_joyetech_roundtrip() {
-    let data = vec![0x55; 64];
+    let marker = b"Joyetech APROM";
+    let mut data = vec![0x55; 64];
+    data[32..32 + marker.len()].copy_from_slice(marker);
     let cipher = encrypt(&data, EncryptionType::Joyetech).unwrap();
     let (plain, enc) = decrypt(&cipher).unwrap();
     assert_eq!(plain, data);

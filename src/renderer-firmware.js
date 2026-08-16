@@ -17,7 +17,10 @@ import {
     closeFirmware,
     readDeviceProductId,
     flashFirmwareToDevice,
-    undoFirmwareChanges
+    undoFirmwareChanges,
+    listHidDevices,
+    recoveryFlash,
+    onRecoveryProgress
 } from './lib/tauri-bridge.js';
 
 let currentHandle = null;
@@ -226,10 +229,85 @@ function initTabs() {
         $('.tab-item').removeClass('active');
         $(this).addClass('active');
         const tab = $(this).data('tab');
-        $('#tab-patches, #tab-images, #tab-strings, #tab-resourcepacks').hide();
+        $('#tab-patches, #tab-images, #tab-strings, #tab-resourcepacks, #tab-recovery').hide();
         $('#tab-' + tab).show();
     });
 }
+
+// ---------------------------------------------------------------------------
+// Emergency Recovery tab
+// ---------------------------------------------------------------------------
+
+let recoveryPath = null;
+let recoveryBusy = false;
+
+function recoveryLog(msg) {
+    const $log = $('#recovery-log');
+    $log.append(document.createTextNode(new Date().toLocaleTimeString() + '  ' + msg + '\n'));
+    $log.scrollTop($log[0].scrollHeight);
+}
+
+async function refreshRecoveryDevices() {
+    try {
+        const devices = await listHidDevices();
+        const $list = $('#recovery-devices');
+        $list.html('');
+        if (devices.length === 0) {
+            $list.append('<li>none</li>');
+        } else {
+            devices.forEach(d => {
+                $list.append($('<li>').text(`${d.path} — ${d.product || 'HID Transfer'}${d.serial ? ' (S/N ' + d.serial + ')' : ''}`));
+            });
+        }
+    } catch (err) {
+        // hidapi unavailable; leave list as-is
+    }
+}
+
+$('#recovery-choose').click(async () => {
+    try {
+        const path = await openFileDialog([{ name: 'Firmware', extensions: ['bin'] }]);
+        if (path) {
+            recoveryPath = path;
+            $('#recovery-path').text(path);
+            $('#recovery-start').prop('disabled', recoveryBusy);
+        }
+    } catch (err) {
+        console.error('openFileDialog failed', err);
+    }
+});
+
+$('#recovery-start').click(async () => {
+    if (!recoveryPath || recoveryBusy) {
+        return;
+    }
+    const pid = ($('#recovery-pid').val() || '').trim();
+    const confirmed = confirm(
+        'Start emergency recovery flash?\n\n' +
+        'Image: ' + recoveryPath + '\n' +
+        (pid ? 'Only a device with Product ID ' + pid + ' will be flashed.\n' : 'WARNING: no Product ID guard — ANY connected device will be flashed!\n') +
+        '\nThe flasher waits for the device; unplug and replug it now.'
+    );
+    if (!confirmed) {
+        return;
+    }
+    recoveryBusy = true;
+    $('#recovery-start').prop('disabled', true);
+    recoveryLog('recovery started');
+    try {
+        await recoveryFlash(recoveryPath, pid || null);
+        recoveryLog('SUCCESS — device rebooted into the flashed firmware');
+    } catch (err) {
+        recoveryLog('FAILED: ' + err.toString());
+    } finally {
+        recoveryBusy = false;
+        $('#recovery-start').prop('disabled', !recoveryPath);
+    }
+});
+
+onRecoveryProgress(msg => recoveryLog(msg));
+setInterval(refreshRecoveryDevices, 2000);
+refreshRecoveryDevices();
 
 $('#open-firmware').click(doOpenFirmware);
 $('#save-firmware').click(doSaveFirmware);

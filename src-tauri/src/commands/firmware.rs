@@ -313,3 +313,29 @@ pub async fn undo_firmware_changes(
     let bytes = std::fs::read(&backup).map_err(|e| e.to_string())?;
     flash_to_device(&bytes).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub async fn list_hid_devices() -> Result<Vec<crate::firmware::flasher::DeviceInfo>, String> {
+    crate::firmware::flasher::list_devices().map_err(|e| e.to_string())
+}
+
+/// Emergency recovery: wait for the device, flash the given image file,
+/// restart, and verify. Progress is reported via `recovery-progress` events.
+#[tauri::command]
+pub async fn recovery_flash(
+    app: AppHandle,
+    path: String,
+    expected_product_id: Option<String>,
+) -> Result<(), String> {
+    use tauri::Emitter;
+    let bytes = std::fs::read(&path).map_err(|e| format!("cannot read {path}: {e}"))?;
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::firmware::flasher::recovery_flash(&bytes, expected_product_id.as_deref(), |msg| {
+            let _ = app2.emit("recovery-progress", msg);
+        })
+        .map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}

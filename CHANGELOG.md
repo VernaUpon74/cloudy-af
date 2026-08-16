@@ -1,9 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Firmware Editor → Recovery tab**: emergency recovery flasher that waits for a bricked device to enumerate (handles USB flapping), optionally guards on Product ID (e.g. `M041`), streams the image with retry/backoff, restarts the device, and verifies it boots the flashed firmware. Includes a live connected-devices list.
+- **Appearance → Clock Type → Clock Animation** dropdown (Off / Swirl / Gradient Fade / Rippling Wave), persisted in `.afc` configs as `ClockAnimation`. Disabled until firmware patch support lands.
+- Default TFR/power-curve plot data: zeroed tables fall back to the built-in default curves so plots never render a flat zero line.
+- Hardware-in-the-loop tests (`cargo test -- --ignored`) covering dataflash reads, multi-device enumeration, screenshots, logo writes, and recovery flashing.
+
+### Fixed
+- HID protocol correctness in the firmware flasher, verified on real devices:
+  - Command packets are 18 bytes with a 4-byte little-endian checksum (was 15 bytes/1 byte).
+  - `ReadDataflash`/`WriteDataflash` send the length argument (was 0).
+  - HID reads no longer skip a report-ID byte (report ID 0 devices return pure payload).
+  - LDROM boot-flag reads use the correct dataflash offset (raw 13, was 9).
+  - Firmware streaming retries with backoff while the LDROM programs flash (was a hard failure mid-flash).
+- Product ID read offset corrected for the 4-byte dataflash checksum prefix.
+- Flashing now restarts the device afterwards and waits for it to return in APROM mode.
+
+### Changed
+- Firmware with no recognised encryption marker (e.g. VandalProof-encrypted update packages) now fails with a clear "unsupported encryption" error instead of silently producing garbage. Note: VandalProof decryption happens on-device (LDROM); encrypted `.bin` files can still be flashed directly.
+
 ## 1.15.3 — 2026-08-15
 
 ### Fixed
-- Curve preview charts on **Advanced → Materials** and **Advanced → Power Curves** now render correctly when those tabs are first opened (explicit chart dimensions + reflow on tab switch).
 - **Advanced → Materials** labels now use the fixed NFE default names `[TFR] Ni`, `[TFR] Ti`, `[TFR] 304`, `[TFR] 316`, `[TFR] 316L`, `[TFR] 321`, `[TFR] NF30`, `[TFR] NiFe` regardless of stored table names.
 - **Advanced → Power Curves** labels and the profile **Power Curve** dropdown now use fixed NFE names: `Soft`, `Boost 1s`, `Boost 2s`, `Sine 1`, `Sine 2`, `Cooldown`, `Triangle`, `Linear`.
 
@@ -26,31 +46,13 @@
 - Flash modified firmware directly to a connected HID device from the Firmware Editor toolbar.
 - **Undo Changes** button reflashes the originally-opened firmware backup stored in `~/.config/cloudy-af/firmware-backups/`.
 - Bundled ArcticFox firmware definition and patch directory.
-
-## 1.2.1 — 2026-08-15
-
-### Fixed
-- Advanced Materials list now renders each user-editable TFR table as `[TFR] <name>` (e.g. `[TFR] Ni`) instead of generic `TFR1`..`TFR8`, matching the original NToolbox Advanced → Materials UI.
-- TFR curve editor chart updated to match the original NToolbox TFR Profile dialog:
-  - Spline curve with yellow-green line (`#9acd32`) and 2 px width.
-  - X-axis 0–800 °F with light-gray grid lines every 100 °F.
-  - Y-axis 1.0–4.0 with light-gray grid lines every 0.5.
-  - Circle markers and live data labels showing the factor value.
-
-## 1.2.0 — 2026-08-15
-
-### Changed
-- Renamed all runtime and packaging references from `arcticfox-config` to `cloudy-af` (binary name, Flatpak resources, desktop entry, Rust crate, and Cargo package).
-- Synced version to 1.2.0 across Tauri, frontend, sidecar, and Flatpak metadata.
-- Fixed window scaling: the window is locked to the base 536×621 aspect ratio, so every resize is diagonal and the UI stays proportional without dead space.
-- Restored the original ArcticFox coil material labels in the Profiles dropdown: `Nickel 200`, `Titanium 1`, `SS 316`, `TCR`, and `TFR1`..`TFR8`.
-- Improved AppImage build script: it now repackages Tauri's AppDir with the FUSE3 type2 runtime, bundles the Node sidecar, and prefers the smaller Flatpak-built binary/runtime when available.
-- AppImage/.deb/.rpm builds now run inside the org.gnome.Sdk Flatpak runtime so the host no longer needs GTK/WebKit development headers; the bundled libraries come from the GNOME SDK.
-
-### Added
 - Runtime escape hatches for WebKit/NVIDIA rendering issues that keep the WebKit sandbox enabled by default:
   - `--software-rendering` forces WebKit software rendering (`WEBKIT_FORCE_SOFTWARE_RENDERING=1`).
   - `--disable-webkit-sandbox` disables the WebKit sandbox only when explicitly requested (`WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`).
+### Changed
+- Renamed all runtime and packaging references from `arcticfox-config` to `cloudy-af` (binary name, Flatpak resources, desktop entry, Rust crate, and Cargo package).
+- Improved AppImage build script: it now repackages Tauri's AppDir with the FUSE3 type2 runtime, bundles the Node sidecar, and prefers the smaller Flatpak-built binary/runtime when available.
+- AppImage/.deb/.rpm builds now run inside the org.gnome.Sdk Flatpak runtime so the host no longer needs GTK/WebKit development headers; the bundled libraries come from the GNOME SDK.
 
 ## 1.14.1 — 2026-08-14
 

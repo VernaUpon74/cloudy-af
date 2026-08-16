@@ -37,11 +37,17 @@ const FIRMWARE_MARKER: &[u8] = b"Joyetech APROM";
 /// plausible candidate.
 ///
 /// Detection is heuristic because Joyetech has no header. We validate each
-/// candidate by looking for the common `Joyetech APROM` firmware marker. If
-/// no candidate contains the marker we fall back to Joyetech for long buffers
-/// (on the assumption that the buffer is too small or unusual to contain the
-/// marker) and to `None` for very short buffers.
+/// candidate by looking for the common `Joyetech APROM` firmware marker,
+/// which is present both in plaintext and in images that are still encrypted.
+/// If no candidate contains the marker the file is most likely a
+/// VandalProof-encrypted update package, so we surface a clear error instead
+/// of silently returning garbage.
 pub fn decrypt(data: &[u8]) -> Result<(Vec<u8>, EncryptionType)> {
+    // Unencrypted firmware already contains the marker.
+    if contains_marker(data) {
+        return Ok((data.to_vec(), EncryptionType::None));
+    }
+
     if data.len() >= JOYETECH_MIN_LEN {
         let plain = decrypt_joyetech(data);
         if contains_marker(&plain) {
@@ -65,13 +71,16 @@ pub fn decrypt(data: &[u8]) -> Result<(Vec<u8>, EncryptionType)> {
         }
     }
 
-    // No marker found. For buffers large enough to plausibly be firmware,
-    // assume Joyetech; otherwise treat as plaintext.
-    if data.len() >= JOYETECH_MIN_LEN {
-        return Ok((decrypt_joyetech(data), EncryptionType::Joyetech));
-    }
-
-    Ok((data.to_vec(), EncryptionType::None))
+    // No marker found. Joyetech/ArcticFox firmware images always contain the
+    // "Joyetech APROM" marker once decrypted. Files that do not contain it
+    // after any supported scheme are usually VandalProof-encrypted update
+    // packages (or another unsupported format), so surface a clear error
+    // instead of silently returning garbage.
+    Err(super::FirmwareError::UnsupportedEncryption(
+        "This firmware uses an unsupported encryption (likely VandalProof). \
+         Cloudy AF can only open firmware images saved by NFirmwareEditor."
+            .into(),
+    ))
 }
 
 fn contains_marker(data: &[u8]) -> bool {

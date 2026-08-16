@@ -659,6 +659,8 @@ pub fn run() {
             commands::firmware::flash_firmware_to_device,
             commands::firmware::restart_device_cmd,
             commands::firmware::undo_firmware_changes,
+            commands::firmware::list_hid_devices,
+            commands::firmware::recovery_flash,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

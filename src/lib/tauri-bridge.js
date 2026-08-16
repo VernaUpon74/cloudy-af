@@ -148,3 +148,15 @@ export async function restartDeviceCmd() {
 export async function undoFirmwareChanges(handle) {
     return invoke('undo_firmware_changes', { handle });
 }
+
+export async function listHidDevices() {
+    return invoke('list_hid_devices');
+}
+
+export async function recoveryFlash(path, expectedProductId) {
+    return invoke('recovery_flash', { path, expectedProductId });
+}
+
+export function onRecoveryProgress(callback) {
+    return listen('recovery-progress', (event) => callback(event.payload));
+}

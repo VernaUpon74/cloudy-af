@@ -5,6 +5,7 @@ import Highcharts from 'highcharts';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { PhysicalSize } from '@tauri-apps/api/dpi';
 import { ipc, getLocale, getAppVersion, readTextFile, resolveResourcePath, showError, openConfig, saveConfig } from './lib/tauri-bridge.js';
+import { DEFAULT_TFR_TABLES, DEFAULT_POWER_CURVES } from './lib/default-curves.js';
 
 let config;
 let lang;
@@ -47,6 +48,28 @@ let foxfirmware = '170909';
 // works for configs loaded from the device or from older .afc files.
 function normalizeConfig(cfg) {
     if (!cfg || !Array.isArray(cfg.profiles)) return cfg;
+    // Local-only fields (not sent to the device) default to 0 when missing
+    // from older .afc files.
+    if (typeof cfg.ClockAnimation !== 'number') cfg.ClockAnimation = 0;
+    // Fall back to the built-in default curves when a TFR table or power
+    // curve is entirely zeroed (e.g. fresh/never-customized device tables),
+    // so the plots show meaningful data instead of a flat zero line.
+    if (Array.isArray(cfg.TFRTables)) {
+        cfg.TFRTables.forEach((tfr, i) => {
+            const zeroed = !tfr.Points || tfr.Points.every(p => !p.Temperature && !p.Factor);
+            if (zeroed && DEFAULT_TFR_TABLES[i]) {
+                cfg.TFRTables[i] = JSON.parse(JSON.stringify(DEFAULT_TFR_TABLES[i]));
+            }
+        });
+    }
+    if (Array.isArray(cfg.PowerCurves)) {
+        cfg.PowerCurves.forEach((pc, i) => {
+            const zeroed = !pc.Points || pc.Points.every(p => !p.Time && !p.Percent);
+            if (zeroed && DEFAULT_POWER_CURVES[i]) {
+                cfg.PowerCurves[i] = JSON.parse(JSON.stringify(DEFAULT_POWER_CURVES[i]));
+            }
+        });
+    }
     cfg.profiles.forEach(profile => {
         if (typeof profile.IsCelcius !== 'boolean') {
             if (typeof profile.Flags === 'number') {
