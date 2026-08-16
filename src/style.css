@@ -45,6 +45,8 @@ tr td {
     position: absolute;
     top: 26px;
     left: 0;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
 }
 
 #SelectedProfile {
@@ -101,13 +103,56 @@ tr:active {
     padding-top: 28px;
 }
 
-#table-material {
-    width: 240px;
-}
+
 
 .sparkline {
     height: 24px;
     width: 160px;
+}
+
+.tfr-sparkline {
+    height: 32px;
+    width: 100px;
+}
+
+/* Grid layout for Power Curves and Materials (matches original NToolbox). */
+.curve-grid {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 12px !important;
+    padding: 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+.curve-card {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 120px !important;
+    padding: 6px !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 4px !important;
+    background-color: var(--panel-color) !important;
+    cursor: pointer !important;
+}
+
+.curve-card:hover {
+    background-color: var(--hover-bg) !important;
+}
+
+.curve-preview {
+    width: 100px !important;
+    height: 48px !important;
+}
+
+.curve-label {
+    margin-top: 4px !important;
+    font-size: 11px !important;
+    text-align: center !important;
+    color: var(--fg-color) !important;
+    white-space: nowrap !important;
 }
 
 #startscreen {

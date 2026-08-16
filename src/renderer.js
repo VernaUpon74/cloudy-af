@@ -227,6 +227,14 @@ function uiProfile(p) {
         }
     });
 
+    // DEVIATION: Show the profile temperature unit as plain text derived from the
+    // global TemperatureUnits regional setting. Keep the per-profile IsCelcius
+    // flag in sync so uploads reflect the same choice.
+    const isCelsius = Number(config.TemperatureUnits) === 1;
+    config.profiles[p].IsCelcius = isCelsius;
+    $('#IsCelcius').text(isCelsius ? '°C' : '°F');
+    $('#Temperature').attr('step', isCelsius ? '5' : '10');
+
     uiPreheat($('#PreheatType').val());
     uiTcr(config.profiles[p].Material);
     uiTempControl(config.profiles[p].Material !== 0);
@@ -314,15 +322,64 @@ function uiUpdate() {
     $Material.append('<option value="3">SS 316</option>');
     $Material.append('<option value="4">TCR</option>');
 
+    // DEVIATION: Render the user-editable TFR tables in the same grid layout the
+    // original NToolbox/NFirmwareEditor Advanced Materials list used: each item
+    // shows a curve preview above the [TFR] name, and clicking the card opens the
+    // TFR plot editor. The eight default tables are Ni, Ti, 304, 316, 316L, 321,
+    // NF30 and NiFe.
+    $MaterialTable.addClass('curve-grid');
     config.TFRTables.forEach((tfr, index) => {
         $Material.append('<option value="' + (index + 5) + '">TFR' + (index + 1) + '</option>');
-        // DEVIATION: The original NToolbox Advanced Materials list shows each
-        // user-editable TFR table as "[TFR] <name>" (e.g. "[TFR] Ni"), not a
-        // generic TFR1..TFR8 label. Render the stored table name here.
-        $MaterialTable.append('<tr><td>[TFR] ' + tfr.Name.replace(/\u0000/g, '') + '</td><td><button class="tfr-button btn btn-default" data-tfr="' + index + '">Edit</button></td></tr>');
+        const name = tfr.Name.replace(/\u0000/g, '');
+        $MaterialTable.append(
+            '<div class="curve-card tfr-card" data-tfr="' + index + '">' +
+            '<div class="curve-preview tfr-preview" id="tfr' + index + '"></div>' +
+            '<div class="curve-label">[TFR] ' + name + '</div>' +
+            '</div>'
+        );
+        new Highcharts.Chart({
+            chart: {
+                renderTo: 'tfr' + index,
+                margin: [0, 0, 0, 0],
+                style: { overflow: 'visible' }
+            },
+            title: { text: '' },
+            credits: { enabled: false },
+            legend: { enabled: false },
+            xAxis: {
+                labels: { enabled: false },
+                tickLength: 0,
+                min: 0,
+                max: 800
+            },
+            yAxis: {
+                title: { text: null },
+                maxPadding: 0,
+                minPadding: 0,
+                gridLineWidth: 0,
+                endOnTick: false,
+                labels: { enabled: false },
+                min: 1,
+                max: 4
+            },
+            tooltip: { enabled: false },
+            plotOptions: {
+                series: {
+                    enableMouseTracking: false,
+                    lineWidth: 1,
+                    shadow: false,
+                    marker: { enabled: false }
+                }
+            },
+            series: [{
+                type: 'spline',
+                color: '#9acd32',
+                data: tfr.Points.map(p => [p.Temperature, p.Factor])
+            }]
+        });
     });
 
-    $('.tfr-button').click(function () {
+    $(document).on('click', '.tfr-card', function () {
         const index = $(this).data('tfr');
         ipc.send('tfr', { index, table: config.TFRTables[index] });
     });
@@ -388,8 +445,19 @@ function uiUpdate() {
         }
     });
 
+    // DEVIATION: Render power curves in the original NToolbox grid layout with
+    // fixed display names: Soft, Boost 1s, Boost 2s, Sine 1, Sine 2, Cooldown,
+    // Triangle, Linear. Clicking a card opens the Power Curve plot editor.
+    const powerCurveDisplayNames = ['Soft', 'Boost 1s', 'Boost 2s', 'Sine 1', 'Sine 2', 'Cooldown', 'Triangle', 'Linear'];
+    $PowerTable.addClass('curve-grid');
     config.PowerCurves.forEach((pc, index) => {
-        $PowerTable.append('<tr><td style="width: 80px;">' + pc.Name + '</td><td style="width: 160px;"><div class="sparkline" id="pc' + index + '"></div></td><td><button class="power-button btn btn-default" data-pc="' + index + '">Edit</button></td></tr>');
+        const displayName = powerCurveDisplayNames[index] || pc.Name;
+        $PowerTable.append(
+            '<div class="curve-card pc-card" data-pc="' + index + '">' +
+            '<div class="curve-preview pc-preview" id="pc' + index + '"></div>' +
+            '<div class="curve-label">' + displayName + '</div>' +
+            '</div>'
+        );
         const data = [];
         pc.Points.forEach(p => {
             data.push({ x: p.Time, y: p.Percent });
@@ -401,13 +469,13 @@ function uiUpdate() {
             series: [{
                 fillColor: 'rgba(124, 181, 236, 0.3)',
                 type: 'area',
-                name: pc.Name,
+                name: displayName,
                 data
             }]
         });
     });
 
-    $('.power-button').click(function () {
+    $(document).on('click', '.pc-card', function () {
         const index = $(this).data('pc');
         ipc.send('pc', { index, table: config.PowerCurves[index] });
     });
@@ -627,6 +695,11 @@ async function uiInit() {
 
     $(document).on('change', '.fox-pval', function () {
         const id = $(this).attr('id');
+        // DEVIATION: IsCelcius is now a read-only label driven by TemperatureUnits;
+        // ignore change events from it.
+        if (id === 'IsCelcius') {
+            return;
+        }
         const currentVal = config.profiles[activeProfile][id];
         let newVal;
         if ($(this).attr('type') === 'checkbox') {
@@ -647,11 +720,6 @@ async function uiInit() {
                 }
                 break;
             default:
-        }
-        // DEVIATION: IsCelcius comes from a <select> with string values, so coerce it
-        // to a boolean explicitly before storing it on the profile.
-        if (id === 'IsCelcius') {
-            newVal = (newVal === true || newVal === 'true');
         }
         config.profiles[activeProfile][id] = newVal;
     });
@@ -688,7 +756,8 @@ function syncConfigFromUi() {
 
     $('.fox-pval').each(function () {
         const id = $(this).attr('id');
-        if (!id || !config.profiles[activeProfile]) return;
+        // DEVIATION: IsCelcius is a read-only label driven by TemperatureUnits.
+        if (!id || !config.profiles[activeProfile] || id === 'IsCelcius') return;
         const currentVal = config.profiles[activeProfile][id];
         let newVal;
         if ($(this).attr('type') === 'checkbox') {
@@ -704,11 +773,6 @@ function syncConfigFromUi() {
                 newVal = (newVal === 'false') ? false : Boolean(newVal);
                 break;
             default:
-        }
-        // DEVIATION: IsCelcius is stored as a boolean but rendered as a <select>;
-        // normalize the string value before upload.
-        if (id === 'IsCelcius') {
-            newVal = (newVal === true || newVal === 'true');
         }
         config.profiles[activeProfile][id] = newVal;
     });

@@ -126,7 +126,7 @@ async fn ipc_send(
     request: IpcSendRequest,
 ) -> Result<(), String> {
     match request.channel.as_str() {
-        "bat" | "tfr" | "pc" | "pireg" => {
+        "bat" | "tfr" | "pc" | "pireg" | "firmware" => {
             open_sub_window(&app, &request.channel, request.data).await
         }
         "piregchange" | "batchange" | "tfrchange" | "pcchange" => {

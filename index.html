@@ -234,19 +234,16 @@
                 </td>
                 <td class="c4"></td>
               </tr>
-              <!-- DEVIATION: The IsCelcius selector is not present in the original fork.
-                   It controls bit 0x20 of the profile Flags field, supported by current
-                   ArcticFox firmware builds. -->
+              <!-- DEVIATION: The per-profile IsCelcius selector is replaced with a
+                   read-only unit label derived from the global TemperatureUnits
+                   regional setting (0 = °F, 1 = °C). -->
               <tr class="fox-tconly">
                 <td class="c1" data-lang="Profile.TemperatureLabel">Temperature</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="Temperature">
                 </td>
                 <td class="c3">
-                  <select class="fox-pval" id="IsCelcius">
-                    <option value="true">°C</option>
-                    <option value="false" selected="selected">°F</option>
-                  </select>
+                  <span class="fox-pval" id="IsCelcius" style="font-weight: bold;"></span>
                 </td>
                 <td class="c4"></td>
               </tr>
@@ -2280,7 +2277,7 @@
                   <td class="c2">
                     <select class="fox-val" id="DeepSleepMode">
                       <option value="0" data-lang="DeepSleepMode.Standart">Just Sleep</option>
-                      <option value="2" data-lang="">Lock Device</option>
+                      <option value="2" data-lang="DeepSleepMode.Lock Device">Lock Device</option>
                       <option value="1" data-lang="DeepSleepMode.TurnOffDevice">Turn Off Device</option>
                     </select>
                   </td>
@@ -2342,12 +2339,11 @@
             </div>
 
             <div class="subview" id="view-advanced-powercurves" style="display:none">
-              <div style="height: 28px"></div>
-              <table id="table-power"></table>
+              <div id="table-power" class="curve-grid"></div>
             </div>
 
             <div class="subview" id="view-advanced-materials" style="display:none">
-              <table id="table-material" style="width: 260px; padding-top: 28px"></table>
+              <div id="table-material" class="curve-grid"></div>
             </div>
 
             <div class="subview" id="view-advanced-bvo" style="display:none">

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.15.2 — 2026-08-15
+
+### Fixed
+- Firmware Editor button in **Advanced → Settings** now opens the Firmware Editor window (the `firmware` IPC channel was not routed to the sub-window opener).
+- **Advanced → Materials** now renders the eight TFR tables as a grid of curve previews with `[TFR] Ni`, `[TFR] Ti`, `[TFR] 304`, `[TFR] 316`, `[TFR] 316L`, `[TFR] 321`, `[TFR] NF30`, `[TFR] NiFe` labels, matching the original NToolbox layout. Clicking a card opens the TFR plot editor.
+- **Advanced → Power Curves** now renders as a grid of area charts with the original NToolbox names: `Soft`, `Boost 1s`, `Boost 2s`, `Sine 1`, `Sine 2`, `Cooldown`, `Triangle`, `Linear`. Clicking a card opens the Power Curve editor.
+- Profile page temperature unit is now shown as plain text (`°F` / `°C`) derived from the global **Screen → Regional → Temperature Units** setting, and the temperature input step is `10` for Fahrenheit and `5` for Celsius.
+- Synced dropdown/combobox labels and button text with the original `NFirmwareEditor` English language pack (`NFE-Tools-v7.1.1/Languages/EN.lpack.txt`), including `Lock Device` deep-sleep mode.
+
 ## 1.15.1 — 2026-08-15
 
 ### Added

@@ -34,7 +34,7 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
-    <release version="1.15.1" date="2026-08-15">
+    <release version="1.15.2" date="2026-08-15">
       <description>
         <p>Added Firmware Editor window with Patches tab for opening, patching, saving, and flashing ArcticFox firmware binaries. Added Undo Changes backup restore.</p>
       </description>
