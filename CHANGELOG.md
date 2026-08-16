@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.3.0 — 2026-08-15
+## 1.15.1 — 2026-08-15
 
 ### Added
 - Firmware Editor window accessible from **Advanced → Settings → Firmware Editor**.
