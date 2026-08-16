@@ -29,3 +29,4 @@ base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
 thiserror = "2.0.20"
 quick-xml = "0.37"
+hidapi = "2.6.6"

@@ -14,7 +14,10 @@ import {
     applyPatchCmd,
     rollbackPatchCmd,
     saveFirmware,
-    closeFirmware
+    closeFirmware,
+    readDeviceProductId,
+    flashFirmwareToDevice,
+    undoFirmwareChanges
 } from './lib/tauri-bridge.js';
 
 let currentHandle = null;
@@ -121,6 +124,7 @@ async function doOpenFirmware() {
         const info = await openFirmware(path);
         currentHandle = info.handle;
         setStatus(`${info.name} (${info.encryption})`);
+        updateButtonStates();
         await refreshPatches();
     } catch (err) {
         console.error('openFirmware failed', err);
@@ -164,6 +168,59 @@ async function doSaveAsFirmware() {
     }
 }
 
+async function doFlashFirmware() {
+    if (!currentHandle) {
+        return;
+    }
+    let productId = 'unknown';
+    try {
+        productId = await readDeviceProductId();
+    } catch (err) {
+        console.warn('Could not read device Product ID', err);
+    }
+    const confirmed = confirm(`Flash modified firmware to device?\nProduct ID: ${productId}\nThis will overwrite the device firmware.`);
+    if (!confirmed) {
+        return;
+    }
+    setStatus('Flashing firmware to device…');
+    try {
+        await flashFirmwareToDevice(currentHandle);
+        setStatus($('#fw-status').text() + ' — flashed');
+        $('#undo-changes').prop('disabled', false);
+    } catch (err) {
+        console.error('flashFirmware failed', err);
+        alert(err.toString());
+        setStatus('Flash failed');
+    }
+}
+
+async function doUndoChanges() {
+    if (!currentHandle) {
+        return;
+    }
+    const confirmed = confirm('Restore original firmware backup to device?');
+    if (!confirmed) {
+        return;
+    }
+    setStatus('Restoring original firmware…');
+    try {
+        await undoFirmwareChanges(currentHandle);
+        setStatus('Original firmware restored');
+    } catch (err) {
+        console.error('undoFirmwareChanges failed', err);
+        alert(err.toString());
+        setStatus('Restore failed');
+    }
+}
+
+function updateButtonStates() {
+    const hasHandle = !!currentHandle;
+    $('#save-firmware').prop('disabled', !hasHandle);
+    $('#save-as-firmware').prop('disabled', !hasHandle);
+    $('#flash-firmware').prop('disabled', !hasHandle);
+    // Undo stays disabled until a flash has happened.
+}
+
 function initTabs() {
     $('.tab-item').click(function () {
         $('.tab-item').removeClass('active');
@@ -177,6 +234,10 @@ function initTabs() {
 $('#open-firmware').click(doOpenFirmware);
 $('#save-firmware').click(doSaveFirmware);
 $('#save-as-firmware').click(doSaveAsFirmware);
+$('#flash-firmware').click(doFlashFirmware);
+$('#undo-changes').click(doUndoChanges);
+
+updateButtonStates();
 
 ipc.on('data', (event, data) => {
     // Received when the window is opened via ipc.send('firmware', data).

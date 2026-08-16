@@ -10,6 +10,8 @@ pub struct OpenFirmware {
     pub image: FirmwareImage,
     pub rollback_log: HashMap<usize, u8>,
     pub patches: Vec<Patch>,
+    /// Path to a backup of the original unpatched firmware, used by Undo Changes.
+    pub original_backup_path: Option<String>,
 }
 
 /// Shared, thread-safe map of open firmware images keyed by handle.

@@ -128,3 +128,23 @@ export async function saveFirmware(handle, path) {
 export async function closeFirmware(handle) {
     return invoke('close_firmware', { handle });
 }
+
+export async function readDeviceDataflash() {
+    return invoke('read_device_dataflash');
+}
+
+export async function readDeviceProductId() {
+    return invoke('read_device_product_id');
+}
+
+export async function flashFirmwareToDevice(handle) {
+    return invoke('flash_firmware_to_device', { handle });
+}
+
+export async function restartDeviceCmd() {
+    return invoke('restart_device_cmd');
+}
+
+export async function undoFirmwareChanges(handle) {
+    return invoke('undo_firmware_changes', { handle });
+}

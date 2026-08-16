@@ -2,6 +2,7 @@ use thiserror::Error;
 
 pub mod definition;
 pub mod encryption;
+pub mod flasher;
 pub mod loader;
 pub mod patch;
 pub mod state;

@@ -7,9 +7,14 @@ use uuid::Uuid;
 
 use crate::firmware::definition::{parse_definition, FirmwareDefinition};
 use crate::firmware::encryption::{encrypt, EncryptionType};
+use crate::firmware::flasher::{flash_firmware as flash_to_device, read_dataflash, read_product_id, restart_device};
 use crate::firmware::loader::load_firmware;
 use crate::firmware::patch::{apply_patch, parse_patch, rollback_patch};
 use crate::firmware::state::{FirmwareState, OpenFirmware};
+
+fn backup_path(app: &AppHandle, handle: &str) -> Option<PathBuf> {
+    app.path().config_dir().ok().map(|d| d.join(format!("cloudy-af/firmware-backups/{}.bin", handle)))
+}
 
 /// Read all `.xml` firmware definitions from the bundled definitions directory.
 fn load_definitions(app: &AppHandle) -> Vec<FirmwareDefinition> {
@@ -119,6 +124,16 @@ pub async fn open_firmware(
         "encryption": format!("{:?}", image.encryption),
     });
 
+    // Save a backup of the original firmware bytes for the Undo Changes feature.
+    let original_path = backup_path(&app, &handle);
+    if let Some(ref path) = original_path {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let original_encrypted = encrypt(&image.bytes, image.encryption).map_err(|e| e.to_string())?;
+        let _ = std::fs::write(path, original_encrypted);
+    }
+
     let patches = load_available_patches(&app, &image.definition);
     let parsed_patches: Vec<_> = patches
         .into_iter()
@@ -139,6 +154,7 @@ pub async fn open_firmware(
             image,
             rollback_log: HashMap::new(),
             patches: parsed_patches,
+            original_backup_path: original_path.map(|p| p.to_string_lossy().to_string()),
         },
     );
 
@@ -252,4 +268,48 @@ pub async fn close_firmware(
 ) -> Result<(), String> {
     state.remove(&handle);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn read_device_dataflash() -> Result<Vec<u8>, String> {
+    read_dataflash().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn read_device_product_id() -> Result<String, String> {
+    read_product_id().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn flash_firmware_to_device(
+    state: State<'_, FirmwareState>,
+    handle: String,
+) -> Result<(), String> {
+    let (bytes, enc) = state
+        .with(&handle, |fw| {
+            (fw.image.bytes.clone(), fw.image.encryption)
+        })
+        .ok_or_else(|| "Firmware handle not found".to_string())?;
+
+    let encrypted = encrypt(&bytes, enc).map_err(|e| e.to_string())?;
+    flash_to_device(&encrypted).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn restart_device_cmd() -> Result<(), String> {
+    restart_device().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn undo_firmware_changes(
+    state: State<'_, FirmwareState>,
+    handle: String,
+) -> Result<(), String> {
+    let backup = state
+        .with(&handle, |fw| fw.original_backup_path.clone())
+        .ok_or_else(|| "Firmware handle not found".to_string())?;
+
+    let backup = backup.ok_or_else(|| "No original firmware backup available".to_string())?;
+    let bytes = std::fs::read(&backup).map_err(|e| e.to_string())?;
+    flash_to_device(&bytes).map_err(|e| e.to_string())
 }
