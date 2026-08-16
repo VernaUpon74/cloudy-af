@@ -7,6 +7,8 @@
 - Open encrypted ArcticFox/Joyetech `.bin` firmware files, detect the device definition, and list compatible XML patches.
 - Apply and rollback binary patches with wildcard support and rollback logging.
 - Save modified firmware back to disk with the original encryption.
+- Flash modified firmware directly to a connected HID device from the Firmware Editor toolbar.
+- **Undo Changes** button reflashes the originally-opened firmware backup stored in `~/.config/cloudy-af/firmware-backups/`.
 - Bundled ArcticFox firmware definition and patch directory.
 
 ## 1.2.1 — 2026-08-15
