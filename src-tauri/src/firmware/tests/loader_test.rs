@@ -38,3 +38,20 @@ fn test_load_af_190624_bin() {
         "expected unsupported encryption error, got: {err}"
     );
 }
+
+#[test]
+fn test_load_af_170222_real_build() {
+    // Full pipeline on a real AF2-era build: decrypt (with table correction)
+    // then detect the ArcticFox definition via the AFOX marker at 0x140.
+    let xml = r#"<FirmwareDefinition Name="ArcticFox">
+        <Marker Offset="0x140" Bytes="0x41 0x46 0x4F 0x58" />
+        <ImageTable1 PtrFrom="0x144" PtrTo="0x148" />
+        <ImageTable2 PtrFrom="0x14C" PtrTo="0x150" />
+        <StringTable1 PtrFrom="0x154" PtrTo="0x158" TwoBytesPerChar="false" />
+    </FirmwareDefinition>"#;
+    let defs = parse_definition(xml).unwrap();
+    let bytes = std::fs::read("/var/home/j/Desktop/NFE-Tools-v7.1.1/af_170222.bin")
+        .expect("read af_170222.bin");
+    let fw = load_firmware_from_bytes(&bytes, &defs).expect("should load af_170222");
+    assert_eq!(fw.definition.name, "ArcticFox");
+}
