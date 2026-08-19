@@ -1,6 +1,62 @@
 use super::{FirmwareError, Result};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Minimal CBC mode on top of the `aes` crate's raw AES-128 block cipher.
+/// (The `cbc` crate is not available offline; CBC itself is trivial.)
+mod cbc_mode {
+    use aes::cipher::generic_array::GenericArray;
+    use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+    use aes::Aes128;
+
+    const BLOCK: usize = 16;
+
+    pub struct Decryptor {
+        cipher: Aes128,
+        iv: [u8; BLOCK],
+    }
+
+    pub struct Encryptor {
+        cipher: Aes128,
+        iv: [u8; BLOCK],
+    }
+
+    impl Decryptor {
+        pub fn new(key: &[u8; BLOCK], iv: &[u8; BLOCK]) -> Self {
+            Self { cipher: Aes128::new(GenericArray::from_slice(key)), iv: *iv }
+        }
+
+        /// Decrypt `data` in place; length must be a multiple of 16.
+        pub fn decrypt(&mut self, data: &mut [u8]) {
+            for block in data.chunks_exact_mut(BLOCK) {
+                let mut saved = [0u8; BLOCK];
+                saved.copy_from_slice(block);
+                self.cipher.decrypt_block(GenericArray::from_mut_slice(block));
+                for (b, iv) in block.iter_mut().zip(self.iv.iter()) {
+                    *b ^= iv;
+                }
+                self.iv = saved;
+            }
+        }
+    }
+
+    impl Encryptor {
+        pub fn new(key: &[u8; BLOCK], iv: &[u8; BLOCK]) -> Self {
+            Self { cipher: Aes128::new(GenericArray::from_slice(key)), iv: *iv }
+        }
+
+        /// Encrypt `data` in place; length must be a multiple of 16.
+        pub fn encrypt(&mut self, data: &mut [u8]) {
+            for block in data.chunks_exact_mut(BLOCK) {
+                for (b, iv) in block.iter_mut().zip(self.iv.iter()) {
+                    *b ^= iv;
+                }
+                self.cipher.encrypt_block(GenericArray::from_mut_slice(block));
+                self.iv.copy_from_slice(block);
+            }
+        }
+    }
+}
+
 /// Recognised firmware encryption schemes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EncryptionType {
@@ -12,7 +68,7 @@ pub enum EncryptionType {
     ArcticFox,
     /// ArcticFox encryption variant (key key 0x19, table length 11).
     ArcticFox2,
-    /// VandalProof is not yet supported.
+    /// VandalProof encryption (AES-128-CBC, fixed key, IV prefix).
     VandalProof,
 }
 
@@ -29,19 +85,30 @@ const ARCTICFOX_TABLE_LEN: usize = 9;
 const ARCTICFOX2_KEY_KEY: u8 = 0x19;
 const ARCTICFOX2_TABLE_LEN: usize = 11;
 
+/// VandalProof packages are AES-128-CBC with a fixed key; the first 16 bytes
+/// are the IV and the payload is PKCS7-padded. Key matches the one used by
+/// NFirmwareEditor's obfuscated loader (see vp-crypt).
+const VP_KEY: &[u8; 16] = b"FA89412D87B0EFD9";
+const VP_BLOCK: usize = 16;
+
 /// Marker present in decrypted Joyetech-derived firmware images. NFirmwareEditor
 /// uses this to decide whether a candidate decryption actually produced plaintext.
 const FIRMWARE_MARKER: &[u8] = b"Joyetech APROM";
 
+/// Additional marker used by STM32-based ArcticFox builds. The classic Nuvoton
+/// images carry `Joyetech APROM`; the STM32 line shortened it to
+/// `Joyetech APP`. Both mark a valid decrypted firmware.
+const FIRMWARE_MARKER_STM32: &[u8] = b"Joyetech APP";
+
 /// Try to decrypt `data` using each supported scheme and return the first
 /// plausible candidate.
 ///
-/// Detection is heuristic because Joyetech has no header. We validate each
-/// candidate by looking for the common `Joyetech APROM` firmware marker,
-/// which is present both in plaintext and in images that are still encrypted.
-/// If no candidate contains the marker the file is most likely a
-/// VandalProof-encrypted update package, so we surface a clear error instead
-/// of silently returning garbage.
+/// Detection is heuristic because none of the schemes have a header. We
+/// validate each candidate by looking for the common firmware marker
+/// (`Joyetech APROM`, or `Joyetech APP` on STM32 builds), which is present
+/// both in plaintext and in images that are still encrypted. If no candidate
+/// contains the marker, the file is in an unknown format, so we surface a
+/// clear error instead of silently returning garbage.
 pub fn decrypt(data: &[u8]) -> Result<(Vec<u8>, EncryptionType)> {
     // Unencrypted firmware already contains the marker.
     if contains_marker(data) {
@@ -71,20 +138,29 @@ pub fn decrypt(data: &[u8]) -> Result<(Vec<u8>, EncryptionType)> {
         }
     }
 
+    if let Ok(plain) = decrypt_vandalproof(data) {
+        if contains_marker(&plain) {
+            return Ok((plain, EncryptionType::VandalProof));
+        }
+    }
+
     // No marker found. Joyetech/ArcticFox firmware images always contain the
     // "Joyetech APROM" marker once decrypted. Files that do not contain it
-    // after any supported scheme are usually VandalProof-encrypted update
-    // packages (or another unsupported format), so surface a clear error
-    // instead of silently returning garbage.
+    // after any supported scheme are in an unknown format, so surface a clear
+    // error instead of silently returning garbage.
     Err(super::FirmwareError::UnsupportedEncryption(
-        "This firmware uses an unsupported encryption (likely VandalProof). \
-         Cloudy AF can only open firmware images saved by NFirmwareEditor."
+        "This firmware uses an unknown or corrupt encryption. \
+         Cloudy AF supports plaintext, Joyetech, ArcticFox, ArcticFox2 and \
+         VandalProof firmware images."
             .into(),
     ))
 }
 
 fn contains_marker(data: &[u8]) -> bool {
     data.windows(FIRMWARE_MARKER.len()).any(|w| w == FIRMWARE_MARKER)
+        || data
+            .windows(FIRMWARE_MARKER_STM32.len())
+            .any(|w| w == FIRMWARE_MARKER_STM32)
 }
 
 /// Encrypt `data` using the requested scheme.
@@ -94,7 +170,7 @@ pub fn encrypt(data: &[u8], enc: EncryptionType) -> Result<Vec<u8>> {
         EncryptionType::Joyetech => Ok(encrypt_joyetech(data)),
         EncryptionType::ArcticFox => Ok(encrypt_arcticfox(data, ARCTICFOX_KEY_KEY, ARCTICFOX_TABLE_LEN)),
         EncryptionType::ArcticFox2 => Ok(encrypt_arcticfox(data, ARCTICFOX2_KEY_KEY, ARCTICFOX2_TABLE_LEN)),
-        EncryptionType::VandalProof => Err(FirmwareError::UnknownEncryption),
+        EncryptionType::VandalProof => Ok(encrypt_vandalproof(data)),
     }
 }
 
@@ -219,6 +295,57 @@ fn create_arcticfox_table(seed: i32, len: usize) -> Vec<u8> {
     let mut table = vec![0u8; len];
     rng.next_bytes(&mut table);
     table
+}
+
+// ---------------------------------------------------------------------------
+// VandalProof (AES-128-CBC)
+// ---------------------------------------------------------------------------
+
+fn decrypt_vandalproof(data: &[u8]) -> Result<Vec<u8>> {
+    if data.len() <= VP_BLOCK || data.len() % VP_BLOCK != 0 {
+        return Err(FirmwareError::UnknownEncryption);
+    }
+    let (iv, payload) = data.split_at(VP_BLOCK);
+    let mut buf = payload.to_vec();
+    let mut dec = cbc_mode::Decryptor::new(VP_KEY, iv.try_into().unwrap());
+    dec.decrypt(&mut buf);
+    // Strip PKCS7 padding.
+    let pad = *buf.last().ok_or(FirmwareError::UnknownEncryption)? as usize;
+    if pad == 0 || pad > VP_BLOCK || pad > buf.len() {
+        return Err(FirmwareError::UnknownEncryption);
+    }
+    if buf.iter().skip(buf.len() - pad).any(|b| *b as usize != pad) {
+        return Err(FirmwareError::UnknownEncryption);
+    }
+    buf.truncate(buf.len() - pad);
+    Ok(buf)
+}
+
+fn encrypt_vandalproof(data: &[u8]) -> Vec<u8> {
+    let mut iv = [0u8; VP_BLOCK];
+    getrandom::getrandom(&mut iv).unwrap_or_else(|_| {
+        // Fall back to a time-derived IV if the OS RNG is unavailable.
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0x9e37_79b9_7f4a_7c15);
+        for (i, b) in iv.iter_mut().enumerate() {
+            *b = (seed.rotate_left((i * 7) as u32) & 0xFF) as u8;
+        }
+    });
+
+    // PKCS7 pad to a full block (always adds 1..=16 bytes).
+    let pad = VP_BLOCK - (data.len() % VP_BLOCK);
+    let mut buf = data.to_vec();
+    buf.resize(data.len() + pad, pad as u8);
+
+    let mut enc = cbc_mode::Encryptor::new(VP_KEY, &iv);
+    enc.encrypt(&mut buf);
+
+    let mut result = Vec::with_capacity(VP_BLOCK + buf.len());
+    result.extend_from_slice(&iv);
+    result.extend_from_slice(&buf);
+    result
 }
 
 // ---------------------------------------------------------------------------

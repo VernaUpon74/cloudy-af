@@ -23,6 +23,8 @@ fn test_detect_definition_by_marker() {
 
 #[test]
 fn test_load_af_190624_bin() {
+    // VandalProof-era build: decrypts via AES-128-CBC, then the same
+    // ArcticFox definition is detected via the AFOX marker at 0x140.
     let xml = r#"<FirmwareDefinition Name="ArcticFox">
         <Marker Offset="0x140" Bytes="0x41 0x46 0x4F 0x58" />
         <ImageTable1 PtrFrom="0x144" PtrTo="0x148" />
@@ -30,13 +32,10 @@ fn test_load_af_190624_bin() {
         <StringTable1 PtrFrom="0x154" PtrTo="0x158" TwoBytesPerChar="false" />
     </FirmwareDefinition>"#;
     let defs = parse_definition(xml).unwrap();
-    let path = "/var/home/j/Downloads/DH-Discord-BKUP/ArcticFox/af_190624.bin";
+    let path = "/var/home/j/cloudy-af/AF_fw/nfeteam/stable/af_190624.bin";
     let bytes = std::fs::read(path).expect("read firmware file");
-    let err = load_firmware_from_bytes(&bytes, &defs).expect_err("should fail for VandalProof");
-    assert!(
-        err.to_string().contains("Unsupported encryption"),
-        "expected unsupported encryption error, got: {err}"
-    );
+    let fw = load_firmware_from_bytes(&bytes, &defs).expect("should load af_190624");
+    assert_eq!(fw.definition.name, "ArcticFox");
 }
 
 #[test]
