@@ -331,46 +331,60 @@ fn test_check_state_hardware() {
 #[test]
 #[ignore]
 fn test_flash_recovery_loop_hardware() {
-    // Recovery flasher: waits for the iStick Pico (M041) to enumerate, then
-    // immediately streams the firmware as fast as the device accepts.
-    // Guards on Product ID so other mods on the bus are never touched.
+    // Recovery flasher v3: waits for the Pico, streams immediately, and on
+    // any failure goes back to waiting — the LDROM erases and restarts an
+    // interrupted update cleanly on the next attempt.
     use crate::firmware::flasher as f;
     let bytes = std::fs::read("/var/home/j/pico_v100_patched.bin").expect("read probe bin");
-    println!("waiting for Pico (M041)... (replug it now)");
-    let mut dev = loop {
-        match f::open_device() {
-            Ok(mut d) => {
-                match f::read_dataflash_from(&mut d) {
-                    Ok(df) if &df[316..320] == b"M041" => break d,
-                    Ok(df) => {
-                        println!("  skipping device {}", String::from_utf8_lossy(&df[316..320]));
-                        std::thread::sleep(std::time::Duration::from_secs(2));
+    'outer: loop {
+        println!("waiting for Pico (M041)...");
+        let mut dev = loop {
+            match f::open_device() {
+                Ok(mut d) => {
+                    match f::read_dataflash_from(&mut d) {
+                        Ok(df) => {
+                            let pid = &df[316..320];
+                            let printable = pid.iter().all(|b| (0x20..0x7f).contains(b));
+                            if pid == b"M041" || !printable { break d; }
+                            println!("  skipping {}", String::from_utf8_lossy(pid));
+                            std::thread::sleep(std::time::Duration::from_secs(2));
+                        }
+                        Err(_) => std::thread::sleep(std::time::Duration::from_millis(300)),
                     }
-                    Err(_) => std::thread::sleep(std::time::Duration::from_millis(500)),
+                }
+                Err(_) => std::thread::sleep(std::time::Duration::from_millis(300)),
+            }
+        };
+        println!("Pico open, sending WriteData(0, {})", bytes.len());
+        if f::send_command_pub(&mut dev, 0xC3, 0, bytes.len() as i32).is_err() {
+            println!("  command failed, re-waiting");
+            continue 'outer;
+        }
+        let mut failed = false;
+        for (i, chunk) in bytes.chunks(64).enumerate() {
+            let mut report = vec![0u8; 65];
+            report[1..1 + chunk.len()].copy_from_slice(chunk);
+            let mut tries = 0;
+            loop {
+                match dev.write(&report) {
+                    Ok(_) => break,
+                    Err(e) => {
+                        tries += 1;
+                        if tries > 10 {
+                            println!("  write failed at chunk {i}: {e} — re-waiting");
+                            failed = true;
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                    }
                 }
             }
-            Err(_) => std::thread::sleep(std::time::Duration::from_millis(500)),
+            if failed { break; }
         }
-    };
-    println!("Pico open, sending WriteData(0, {})", bytes.len());
-    f::send_command_pub(&mut dev, 0xC3, 0, bytes.len() as i32).expect("WriteData cmd failed");
-    for (i, chunk) in bytes.chunks(64).enumerate() {
-        let mut report = vec![0u8; 65];
-        report[1..1 + chunk.len()].copy_from_slice(chunk);
-        let mut tries = 0;
-        loop {
-            match dev.write(&report) {
-                Ok(_) => break,
-                Err(e) => {
-                    tries += 1;
-                    if tries > 20 { panic!("write failed at chunk {i}: {e}"); }
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                }
-            }
-        }
-        if i % 100 == 0 { println!("  chunk {i}"); }
+        if failed { continue 'outer; }
+        println!("stream complete");
+        break;
     }
-    println!("stream complete");
 }
 
 #[test]
@@ -387,4 +401,167 @@ fn test_restart_and_verify_hardware() {
     let fwver = i32::from_le_bytes(df[4 + 256..4 + 260].try_into().unwrap());
     println!("fw version raw: {}", fwver);
     println!("product id: {}", String::from_utf8_lossy(&df[316..320]));
+}
+
+#[test]
+#[ignore]
+fn test_ldrom_dump_hardware() {
+    //! Dumps the device LDROM (which contains the VandalProof decryptor).
+    //! Flow: flash the dump payload once; then per chunk: set chunk index in
+    //! dataflash, boot APROM (payload copies LDROM chunk -> dataflash, sets
+    //! boot flag, resets), read the chunk back from dataflash in LDROM mode.
+    use crate::firmware::flasher as f;
+    const CHUNK: usize = 2028; // bytes per chunk (dataflash data[16..2044])
+    const NCHUNKS: usize = 8;  // 16 KB LDROM
+    let payload = std::fs::read("/var/home/j/ldrom_dump_payload.bin").expect("read payload");
+
+    println!("waiting for the Pico (M041)…");
+    loop {
+        match f::open_device() {
+            Ok(mut d) => {
+                if let Ok(df) = f::read_dataflash_from(&mut d) {
+                    if df.len() >= 320 && &df[316..320] == b"M041" { break; }
+                    println!("  skipping {}", String::from_utf8_lossy(&df[316..320]));
+                }
+            }
+            Err(_) => {}
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+
+    println!("flashing payload ({} bytes)", payload.len());
+    let mut attempt = 0;
+    'flash_retry: loop {
+        attempt += 1;
+        if attempt > 1 {
+            // device likely dropped; go back to waiting for the Pico
+            println!("  re-waiting for Pico…");
+            loop {
+                match f::open_device() {
+                    Ok(mut d) => {
+                        if let Ok(df) = f::read_dataflash_from(&mut d) {
+                            if df.len() >= 320 {
+                                let pid = &df[316..320];
+                                let printable = pid.iter().all(|b| (0x20..0x7f).contains(b));
+                                if pid == b"M041" || !printable { break; }
+                            }
+                        }
+                    }
+                    Err(_) => {}
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+        }
+        // Fast path for a flapping device: if it is already in LDROM, stream
+        // immediately without the multi-step ensure_ldrom_mode dance.
+        let fast = f::open_device().ok().and_then(|mut d| {
+            f::read_dataflash_from(&mut d).ok().map(|df| (d, df))
+        });
+        let r = match fast {
+            Some((mut d, df)) if df[4 + 9] == 1 => {
+                println!("  device already in LDROM, streaming now");
+                (|| -> Result<(), String> {
+                    f::send_command_pub(&mut d, 0xC3, 0, payload.len() as i32).map_err(|e| e.to_string())?;
+                    for chunk in payload.chunks(64) {
+                        let mut report = vec![0u8; 65];
+                        report[1..1 + chunk.len()].copy_from_slice(chunk);
+                        let mut tries = 0;
+                        while let Err(e) = d.write(&report) {
+                            tries += 1;
+                            if tries > 50 { return Err(e.to_string()); }
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        }
+                    }
+                    Ok(())
+                })().map_err(|e| crate::firmware::FirmwareError::Other(e))
+            }
+            _ => f::flash_firmware(&payload),
+        };
+        match r {
+            Ok(()) => break,
+            Err(e) => {
+                println!("  flash attempt {attempt} failed: {e}");
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        }
+    }
+    println!("payload flashed and device rebooted into APROM");
+
+    let mut collected: std::collections::HashMap<usize, (Vec<u8>, bool)> = std::collections::HashMap::new();
+    fn confirmed_map(m: &std::collections::HashMap<usize, (Vec<u8>, bool)>) -> std::collections::HashMap<usize, Vec<u8>> {
+        m.iter().filter(|(_, (_, c))| *c).map(|(i, (c, _))| (*i, c.clone())).collect()
+    }
+    let save = |collected: &std::collections::HashMap<usize, Vec<u8>>| {
+        let mut dump = vec![0xAAu8; NCHUNKS * CHUNK];
+        for (i, c) in collected {
+            dump[i * CHUNK..(i + 1) * CHUNK].copy_from_slice(c);
+        }
+        std::fs::write("/var/home/j/ldrom_dump.bin", &dump).unwrap();
+        println!("  (saved {} chunks)", collected.len());
+    };
+    let start = std::time::Instant::now();
+    while confirmed_map(&collected).len() < NCHUNKS && start.elapsed() < std::time::Duration::from_secs(900) {
+        let dev = loop {
+            match f::open_device() {
+                Ok(d) => break d,
+                Err(_) => {
+                    if start.elapsed() > std::time::Duration::from_secs(900) { panic!("timeout waiting for device"); }
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                }
+            }
+        };
+        let mut dev = dev;
+        let df = match f::read_dataflash_from(&mut dev) {
+            Ok(d) => d,
+            Err(e) => { println!("read failed: {e} — retrying"); drop(dev); std::thread::sleep(std::time::Duration::from_millis(500)); continue; }
+        };
+        let flag = df[4 + 9];
+        let idx = df[4 + 8] as usize;
+        if flag == 1 && idx < NCHUNKS {
+            let chunk = df[4 + 16..4 + 16 + CHUNK].to_vec();
+            // integrity: reject blank chunks, require two identical reads
+            let blank = chunk.iter().all(|b| *b == 0xFF) || chunk.iter().all(|b| *b == 0);
+            let crc = chunk.iter().fold(0u32, |a, b| a.wrapping_mul(31).wrapping_add(*b as u32));
+            if blank {
+                println!("chunk {idx} blank — possible end of LDROM, still verifying");
+            }
+            match collected.get(&idx) {
+                None => {
+                    println!("collected chunk {idx} (crc {crc:08x}), awaiting confirmation read");
+                    collected.insert(idx, (chunk, false));
+                }
+                Some((prev, confirmed)) if !*confirmed => {
+                    if *prev == chunk {
+                        println!("chunk {idx} CONFIRMED (crc {crc:08x})");
+                        collected.insert(idx, (chunk, true));
+                        save(&confirmed_map(&collected));
+                    } else {
+                        println!("chunk {idx} MISMATCH (crc {crc:08x} vs previous) — re-reading");
+                        collected.insert(idx, (chunk, false));
+                    }
+                }
+                _ => {}
+            }
+        }
+        // choose next missing chunk index
+        let next = (0..NCHUNKS).find(|i| !confirmed_map(&collected).contains_key(i)).unwrap();
+        let mut data = [0xFFu8; 2044];
+        data[8] = next as u8;
+        data[9] = 0; // run APROM payload
+        if f::write_dataflash(&data).is_err() { drop(dev); std::thread::sleep(std::time::Duration::from_millis(500)); continue; }
+        let _ = f::restart_device();
+        std::thread::sleep(std::time::Duration::from_secs(2));
+    }
+    let confirmed = confirmed_map(&collected);
+    println!("done: {} / {} chunks confirmed", confirmed.len(), NCHUNKS);
+    assert_eq!(confirmed.len(), NCHUNKS, "incomplete dump");
+    // final integrity: LDROM vector table sanity
+    let dump = std::fs::read("/var/home/j/ldrom_dump.bin").unwrap();
+    let sp = u32::from_le_bytes(dump[0..4].try_into().unwrap());
+    let rst = u32::from_le_bytes(dump[4..8].try_into().unwrap());
+    println!("LDROM vector table: SP={sp:08x} reset={rst:08x}");
+    assert!(sp >= 0x20000000 && sp < 0x20010000, "bad SP — dump corrupt");
+    assert!(rst & 1 == 1 && (rst as usize) < dump.len() + 0x00100000, "bad reset vector");
+    assert!(dump.windows(4).any(|w| w == b"HIDC"), "HIDC signature missing — dump corrupt");
+    println!("integrity checks passed");
 }
