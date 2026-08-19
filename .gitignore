@@ -13,3 +13,6 @@ builds/
 src-tauri/binaries/
 *.log
 repo/
+# Local firmware RE scratch (optional tooling, see scripts/fetch-ghidra.sh)
+DecryptProject/
+AF_fw/
