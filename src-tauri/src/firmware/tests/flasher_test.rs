@@ -173,7 +173,7 @@ fn test_logo_visibility_hardware() {
 fn test_flash_plaintext_probe_hardware() {
     // DANGER: flashes a decrypted stock iStick Pico V1.00 image to the first
     // device, then restarts it. Watch whether the device boots stock.
-    let bytes = std::fs::read("/var/home/j/pico_v100_patched.bin").expect("read probe bin");
+    let bytes = std::fs::read("/var/home/j/pico_v100_plain.bin").expect("read probe bin");
     println!("flashing {} bytes (plaintext stock Pico V1.00)", bytes.len());
     flasher::flash_firmware(&bytes).expect("flash failed");
     flasher::restart_device().expect("restart failed");
@@ -244,7 +244,7 @@ fn test_monitoring_wake_hardware() {
 #[ignore]
 fn test_flash_verbose_hardware() {
     use crate::firmware::flasher as f;
-    let bytes = std::fs::read("/var/home/j/pico_v100_patched.bin").expect("read probe bin");
+    let bytes = std::fs::read("/var/home/j/pico_v100_plain.bin").expect("read probe bin");
     println!("step 1: ensure_ldrom_mode");
     f::ensure_ldrom_mode().expect("ensure_ldrom_mode failed");
     println!("step 2: open device in LDROM");
@@ -291,7 +291,7 @@ fn test_flash_hidraw_direct_hardware() {
     println!("using {:?}", node);
     let mut fdev = std::fs::OpenOptions::new().read(true).write(true).open(&node).expect("open hidraw");
 
-    let bytes = std::fs::read("/var/home/j/pico_v100_patched.bin").expect("read probe bin");
+    let bytes = std::fs::read("/var/home/j/pico_v100_plain.bin").expect("read probe bin");
     // WriteData(0, len) command: [cmd, 14, arg1 LE, arg2 LE, "HIDC", sum LE i32]
     let mut cmd = [0u8; 18];
     cmd[0] = 0xC3; cmd[1] = 14;
@@ -335,7 +335,7 @@ fn test_flash_recovery_loop_hardware() {
     // any failure goes back to waiting — the LDROM erases and restarts an
     // interrupted update cleanly on the next attempt.
     use crate::firmware::flasher as f;
-    let bytes = std::fs::read("/var/home/j/pico_v100_patched.bin").expect("read probe bin");
+    let bytes = std::fs::read("/var/home/j/pico_v100_plain.bin").expect("read probe bin");
     'outer: loop {
         println!("waiting for Pico (M041)...");
         let mut dev = loop {
@@ -564,4 +564,56 @@ fn test_ldrom_dump_hardware() {
     assert!(rst & 1 == 1 && (rst as usize) < dump.len() + 0x00100000, "bad reset vector");
     assert!(dump.windows(4).any(|w| w == b"HIDC"), "HIDC signature missing — dump corrupt");
     println!("integrity checks passed");
+}
+
+#[test]
+#[ignore]
+fn test_stm32_identify_hardware() {
+    //! READ-ONLY probe for STM32-line ArcticFox devices (VID 0483 / PID 5750,
+    //! "Joyetech APP"). Sends ReadDataflash and a screenshot request; never
+    //! writes, so there is no brick risk.
+    const STM32_VID: u16 = 0x0483;
+    const STM32_PID: u16 = 0x5750;
+    use crate::firmware::flasher as f;
+
+    let api = hidapi::HidApi::new().expect("hidapi init");
+    let mut path = None;
+    for d in api.device_list() {
+        if d.vendor_id() == STM32_VID && d.product_id() == STM32_PID {
+            println!("found STM32 device: {:?} iface {}", d.path(), d.interface_number());
+            path = Some(d.path().to_owned());
+        }
+    }
+    let path = path.expect("no STM32 device plugged in");
+    let mut dev = api.open_path(&path).expect("open STM32 device");
+
+    // ReadDataflash (0x35): 4-byte checksum + 2044 data bytes if the STM32
+    // line speaks the same HID protocol as the Nuvoton line.
+    match f::send_command_pub(&mut dev, 0x35, 0, 2048)
+        .and_then(|_| f::read_exact_pub(&mut dev, 2048))
+    {
+        Ok(df) => {
+            let cks = u32::from_le_bytes(df[0..4].try_into().unwrap());
+            let sum: u32 = df[4..].iter().map(|b| *b as u32).sum();
+            println!("dataflash: 2048 bytes, checksum {}", if cks == sum { "OK" } else { "MISMATCH" });
+            println!("boot flag data[9]={}", df[4 + 9]);
+            let fwver = i32::from_le_bytes(df[4 + 256..4 + 260].try_into().unwrap());
+            println!("fw version raw: {fwver}");
+            println!("product id: {}", String::from_utf8_lossy(&df[316..320]));
+            println!("data[300..340]: {:02x?}", &df[4 + 300..4 + 340]);
+        }
+        Err(e) => println!("dataflash read failed (protocol may differ): {e}"),
+    }
+
+    // Screenshot (0xC1): 1024 bytes, 64x128 vertical packing.
+    match f::send_command_pub(&mut dev, 0xC1, 0, 1024)
+        .and_then(|_| f::read_exact_pub(&mut dev, 1024))
+    {
+        Ok(shot) => {
+            let on = shot.iter().filter(|b| **b != 0).count();
+            println!("screenshot: 1024 bytes, {on} non-zero");
+            std::fs::write("/var/home/j/stm32_shot.bin", &shot).unwrap();
+        }
+        Err(e) => println!("screenshot failed: {e}"),
+    }
 }
