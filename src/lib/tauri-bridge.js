@@ -109,6 +109,9 @@ export async function openFirmware(path) {
     return invoke('open_firmware', { path });
 }
 
+export async function downloadStock() { return invoke('download_stock'); }
+export async function openStockBuild(buildId) { return invoke('open_stock_build', { buildId }); }
+
 export async function listPatches(handle) {
     return invoke('list_patches', { handle });
 }

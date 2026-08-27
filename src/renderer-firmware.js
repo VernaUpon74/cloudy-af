@@ -10,6 +10,8 @@ import {
     openFileDialog,
     saveFileDialog,
     openFirmware,
+    downloadStock,
+    openStockBuild,
     listPatches,
     applyPatchCmd,
     rollbackPatchCmd,
@@ -125,13 +127,64 @@ async function doOpenFirmware() {
         }
         currentPath = path;
         const info = await openFirmware(path);
-        currentHandle = info.handle;
-        setStatus(`${info.name} (${info.encryption})`);
-        updateButtonStates();
-        await refreshPatches();
+        await finishOpenFirmware(info);
     } catch (err) {
         console.error('openFirmware failed', err);
         alert(err.toString());
+    }
+}
+
+// Shared post-open path: handle storage, status, buttons, patch list.
+async function finishOpenFirmware(info) {
+    currentHandle = info.handle;
+    setStatus(`${info.name} (${info.encryption})`);
+    updateButtonStates();
+    await refreshPatches();
+}
+
+async function doDownloadStock() {
+    try {
+        const info = await downloadStock();
+        await finishOpenStock(info);
+    } catch (err) {
+        // Unknown product id: the error lists the known lines; let the
+        // user pick a build explicitly instead.
+        console.error('downloadStock failed', err);
+        await promptStockBuild(err);
+    }
+}
+
+async function finishOpenStock(info) {
+    currentPath = null; // no user file behind a stock build; Save -> Save As
+    await finishOpenFirmware(info);
+    if (info.match_kind === 'line_only') {
+        alert('Device firmware version not in the bundled library — the current image cannot be preserved; Undo will restore this stock build, not your current firmware.');
+    }
+}
+
+async function promptStockBuild(err) {
+    let buildList = '';
+    try {
+        const libPath = await resolveResourcePath('firmware/devices.json');
+        const lib = JSON.parse(await readTextFile(libPath));
+        buildList = lib.builds.map(b => `${b.id} (${b.line})`).join('\n');
+    } catch (e) {
+        console.error('could not read devices.json', e);
+    }
+    const buildId = prompt(
+        err.toString() +
+        (buildList ? '\n\nAvailable stock builds:\n' + buildList : '') +
+        '\n\nEnter a build id to open, or leave empty to cancel:'
+    );
+    if (!buildId || !buildId.trim()) {
+        return;
+    }
+    try {
+        const info = await openStockBuild(buildId.trim());
+        await finishOpenStock(info);
+    } catch (err2) {
+        console.error('openStockBuild failed', err2);
+        alert(err2.toString());
     }
 }
 
@@ -310,6 +363,7 @@ setInterval(refreshRecoveryDevices, 2000);
 refreshRecoveryDevices();
 
 $('#open-firmware').click(doOpenFirmware);
+$('#download-stock').click(doDownloadStock);
 $('#save-firmware').click(doSaveFirmware);
 $('#save-as-firmware').click(doSaveAsFirmware);
 $('#flash-firmware').click(doFlashFirmware);
