@@ -147,10 +147,16 @@ async function doDownloadStock() {
         const info = await downloadStock();
         await finishOpenStock(info);
     } catch (err) {
-        // Unknown product id: the error lists the known lines; let the
-        // user pick a build explicitly instead.
         console.error('downloadStock failed', err);
-        await promptStockBuild(err);
+        // Only the unknown-product-id error ("unknown product id ...; known
+        // lines: ...", see download_stock in commands/firmware.rs) offers the
+        // explicit build picker; hardware/communication failures surface
+        // the real error like doOpenFirmware does.
+        if (err.toString().includes('known lines:')) {
+            await promptStockBuild(err);
+        } else {
+            alert(err.toString());
+        }
     }
 }
 
