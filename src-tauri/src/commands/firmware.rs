@@ -304,7 +304,16 @@ pub async fn open_stock_build(
         .iter()
         .find(|b| b.id == build_id)
         .ok_or_else(|| format!("unknown stock build {build_id:?}"))?;
-    open_stock_file(&app, &state, &dir, build, "manual", &[])
+    // Null-fill the device provenance keys so the response has the same
+    // 7-key shape as `download_stock` (UI reads them unconditionally).
+    open_stock_file(
+        &app,
+        &state,
+        &dir,
+        build,
+        "manual",
+        &[("product_id", Value::Null), ("fw_version", Value::Null)],
+    )
 }
 
 #[derive(serde::Serialize)]
