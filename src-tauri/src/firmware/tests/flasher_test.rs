@@ -4,6 +4,13 @@
 use crate::firmware::flasher;
 
 #[test]
+fn test_parse_fw_version() {
+    let mut df = vec![0u8; 2048];
+    df[4 + 256..4 + 260].copy_from_slice(&210103i32.to_le_bytes());
+    assert_eq!(flasher::parse_fw_version(&df).unwrap(), 210103);
+}
+
+#[test]
 #[ignore]
 fn test_read_dataflash_hardware() {
     let data = flasher::read_dataflash().expect("read_dataflash failed");

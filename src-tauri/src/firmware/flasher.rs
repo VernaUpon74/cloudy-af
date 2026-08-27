@@ -133,6 +133,21 @@ pub fn read_dataflash_from(device: &mut hidapi::HidDevice) -> Result<Vec<u8>> {
     read_exact(device, DATAFLASH_SIZE)
 }
 
+/// Firmware version from a raw dataflash buffer (4-byte checksum prefix +
+/// 2044 bytes data; version is a little-endian i32 at data offset 256).
+pub fn parse_fw_version(dataflash: &[u8]) -> Result<i32> {
+    if dataflash.len() < 4 + 260 {
+        return Err(FirmwareError::Other("dataflash too short".into()));
+    }
+    Ok(i32::from_le_bytes(dataflash[4 + 256..4 + 260].try_into().unwrap()))
+}
+
+/// Read the device firmware version over HID.
+pub fn read_fw_version() -> Result<i32> {
+    parse_fw_version(&read_dataflash()?)
+}
+
+
 fn dataflash_checksum(data: &[u8]) -> u32 {
     data.iter().fold(0u32, |a, b| a.wrapping_add(*b as u32))
 }
