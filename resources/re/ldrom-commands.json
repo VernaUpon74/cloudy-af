@@ -1,0 +1,19 @@
+{
+  "device": "Pico (Product ID M041), Joyetech LDROM, 16 KB at 0x00100000",
+  "image": "DecryptProject/ldrom/ldrom_m041.bin (complete, 16384 bytes)",
+  "linked_base": "0x00000000",
+  "vectors": {
+    "sp": "0x200014a8",
+    "reset": "0x165"
+  },
+  "dispatcher": "0x290 (ldrb r0,[r6]; cmp 0x35/0xB4/0xC3 chain)",
+  "commands": {
+    "0x35": "0x1f2 ReadDataflash: arg1=offset, arg2=len, clamped to the 0x800-byte dataflash SRAM cache; streams 64-byte reports",
+    "0xB4": "0x6ba Restart (warm reset; boot target decided by boot flag)",
+    "0xC3": "0x34e WriteData: arg1=APROM offset, arg2=total length; 64-byte reports; ISP program cmd 0x21 at 0x2e6; post-write verify loop at 0x2ba (0x200 words)"
+  },
+  "read_command": null,
+  "gate": "B",
+  "notes": "Only three HID commands exist: 0x35/0xB4/0xC3 (no 0x53 in LDROM; dataflash writes go through the APROM 0x53 handler). The 0x35 handler reads ONLY the 0x800-byte dataflash cache (arg1 is an offset, clamped at 0x1f2-0x220) - it cannot read APROM or LDROM. No command reads APROM flash, so true read-back of unknown firmware is impossible. Boot decision at 0x808-0x816: integrity/config bits at [sb+0xd0] (top nibble), then boot flag = raw dataflash[0x0D] (data[9] after the 4-byte checksum prefix); !=1 boots APROM, ==1 stays in LDROM. LDROM is linked at 0x0 (vectors SP=0x200014a8 reset=0x165); the chip maps LDROM at 0x0 on LDROM boot. From APROM, CPU loads at 0x00100000 alias to APROM (proven); LDROM is only reachable from APROM context via FMC ISP reads with ISPCON ISPEN|LDUEN|CFGUEN set (how this dump was made). HIDC signature at 0x5c8. M041 string in image. Dump method: absread2 (stock + 0x35->absolute-ISP-read cave at 0x89a8) flashed via the normal LDROM update (1.5 s at ~1 ms/report); reads are one-command-behind (each 0x35 invocation streams the previous command's data), so the dump used 64-byte self-aligning reads and is shifted: ldrom_m041.bin = raw[0x40:]. Tail 0x1000-0x3BFF is 0xFF (unused); 0x3C00-0x3FC0 holds no code (scan found no compares/ldrb); final 64 bytes (0x3FC0-0x4000) = 16x 0x1b3 default-handler pointers for the high IRQ slots.",
+  "mcu": "NOT a Cortex-M0: code uses Thumb-2 (mov.w, add.w, str.w, strd, ldrb.w) and VFP (vmov/vcvt in APROM). Cortex-M4F-class Nuvoton (M451/M471 family). FMC base 0x4000C000, REGWRPROT 0x40000100, ISPCON bits: ISPEN=0, CFGUEN=4, LDUEN=5, ISPFF=6 (W1C)."
+}
