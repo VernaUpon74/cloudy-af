@@ -41,7 +41,8 @@
       "../public/default.afc.json": "default.afc.json",
       "../public/i18n": "i18n",
       "../resources/definitions": "definitions",
-      "../resources/patches": "patches"
+      "../resources/patches": "patches",
+      "../resources/firmware": "firmware"
     }
   }
 }
