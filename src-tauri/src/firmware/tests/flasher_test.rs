@@ -12,6 +12,16 @@ fn test_parse_fw_version() {
 
 #[test]
 #[ignore]
+fn test_download_stock_hardware() {
+    let df = crate::firmware::flasher::read_dataflash().unwrap();
+    let pid = String::from_utf8_lossy(&df[316..320]).trim_matches(char::from(0)).trim().to_string();
+    let ver = crate::firmware::flasher::parse_fw_version(&df).unwrap();
+    println!("pid={pid} ver={ver}");
+    assert_eq!(pid, "M041");
+}
+
+#[test]
+#[ignore]
 fn test_backup_dataflash_hardware() {
     //! Saves the raw dataflash (settings) to BACKUP_OUT (default
     //! DecryptProject/rescue/dataflash_backup.bin) before firmware surgery.

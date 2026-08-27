@@ -8,9 +8,10 @@ use uuid::Uuid;
 use crate::firmware::definition::{parse_definition, FirmwareDefinition};
 use crate::firmware::encryption::{encrypt, EncryptionType};
 use crate::firmware::flasher::{flash_firmware as flash_to_device, read_dataflash, read_product_id, restart_device};
-use crate::firmware::loader::load_firmware;
+use crate::firmware::loader::{load_firmware, FirmwareImage};
 use crate::firmware::patch::{apply_patch, parse_patch, rollback_patch};
 use crate::firmware::state::{FirmwareState, OpenFirmware};
+use crate::firmware::stock::{load_library, match_build, MatchKind};
 
 fn backup_path(app: &AppHandle, handle: &str) -> Option<PathBuf> {
     app.path().config_dir().ok().map(|d| d.join(format!("cloudy-af/firmware-backups/{}.bin", handle)))
@@ -108,15 +109,43 @@ fn load_available_patches(
     result
 }
 
-#[tauri::command]
-pub async fn open_firmware(
-    app: AppHandle,
-    state: State<'_, FirmwareState>,
-    path: String,
-) -> Result<Value, String> {
-    let defs = load_definitions(&app);
-    let image = load_firmware(Path::new(&path), &defs).map_err(|e| e.to_string())?;
+/// Locate the bundled `firmware` resource directory (stock builds +
+/// devices.json), mirroring the candidate-list pattern of `load_definitions`.
+fn firmware_resource_dir(app: &AppHandle) -> Option<PathBuf> {
+    let resource_dir = app.path().resource_dir().ok();
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()));
 
+    let candidates: Vec<PathBuf> = [
+        resource_dir.clone().map(|d| d.join("firmware")),
+        resource_dir.clone().map(|d| d.join("../firmware")),
+        exe_dir.clone().map(|d| d.join("../lib/cloudy-af/resources/firmware")),
+        exe_dir.clone().map(|d| d.join("resources/firmware")),
+        exe_dir.clone().map(|d| d.join("firmware")),
+        option_env!("CARGO_MANIFEST_DIR").map(|s| {
+            PathBuf::from(s)
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join("resources/firmware")
+        }),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+
+    candidates.into_iter().find(|d| d.is_dir())
+}
+
+/// Insert an already-loaded image into the firmware state: save a backup of
+/// the original bytes, collect the available patches, and return the info
+/// JSON (`handle`, `name`, `encryption`). Callers extend the JSON with
+/// provenance fields (`build_id`, `match_kind`, ...).
+fn insert_opened(
+    app: &AppHandle,
+    state: &FirmwareState,
+    image: FirmwareImage,
+) -> Result<Value, String> {
     let handle = Uuid::new_v4().to_string();
     let info = serde_json::json!({
         "handle": handle,
@@ -125,7 +154,7 @@ pub async fn open_firmware(
     });
 
     // Save a backup of the original firmware bytes for the Undo Changes feature.
-    let original_path = backup_path(&app, &handle);
+    let original_path = backup_path(app, &handle);
     if let Some(ref path) = original_path {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
@@ -134,7 +163,7 @@ pub async fn open_firmware(
         let _ = std::fs::write(path, original_encrypted);
     }
 
-    let patches = load_available_patches(&app, &image.definition);
+    let patches = load_available_patches(app, &image.definition);
     let parsed_patches: Vec<_> = patches
         .into_iter()
         .filter_map(|(id, path)| {
@@ -159,6 +188,123 @@ pub async fn open_firmware(
     );
 
     Ok(info)
+}
+
+#[tauri::command]
+pub async fn open_firmware(
+    app: AppHandle,
+    state: State<'_, FirmwareState>,
+    path: String,
+) -> Result<Value, String> {
+    let defs = load_definitions(&app);
+    let image = load_firmware(Path::new(&path), &defs).map_err(|e| e.to_string())?;
+
+    let mut info = insert_opened(&app, &state, image)?;
+    info["build_id"] = Value::Null;
+    info["match_kind"] = Value::from("file");
+    Ok(info)
+}
+
+/// Load the stock library (devices.json) from the firmware resource dir.
+fn load_stock_library(app: &AppHandle) -> Result<(crate::firmware::stock::StockLibrary, PathBuf), String> {
+    let dir = firmware_resource_dir(app)
+        .ok_or_else(|| "firmware resource directory not found".to_string())?;
+    let json = std::fs::read_to_string(dir.join("devices.json"))
+        .map_err(|e| format!("cannot read devices.json: {e}"))?;
+    let lib = load_library(&json).map_err(|e| e.to_string())?;
+    Ok((lib, dir))
+}
+
+/// Load a stock build file into the firmware state, exactly like
+/// `open_firmware` does for user-picked files.
+fn open_stock_file(
+    app: &AppHandle,
+    state: &FirmwareState,
+    dir: &Path,
+    build: &crate::firmware::stock::StockBuild,
+    match_kind: &str,
+    extra: &[(&str, Value)],
+) -> Result<Value, String> {
+    let path = dir.join(&build.file);
+    if !path.is_file() {
+        return Err(format!("stock build file missing: {}", path.display()));
+    }
+    let defs = load_definitions(app);
+    let image = load_firmware(&path, &defs).map_err(|e| e.to_string())?;
+
+    let mut info = insert_opened(app, state, image)?;
+    info["build_id"] = Value::from(build.id.clone());
+    info["match_kind"] = Value::from(match_kind);
+    for (key, value) in extra {
+        info[*key] = value.clone();
+    }
+    Ok(info)
+}
+
+/// Read the connected device's dataflash, pick the best matching bundled
+/// stock build, and open it like `open_firmware`. `NoLine` (unknown product
+/// id) returns an error listing the known lines; the UI can then fall back
+/// to `open_stock_build`.
+#[tauri::command]
+pub async fn download_stock(
+    app: AppHandle,
+    state: State<'_, FirmwareState>,
+) -> Result<Value, String> {
+    let df = read_dataflash().map_err(|e| e.to_string())?;
+    if df.len() < 320 {
+        return Err("dataflash too short for product id".to_string());
+    }
+    let product_id = String::from_utf8_lossy(&df[316..320])
+        .trim_matches(char::from(0))
+        .trim()
+        .to_string();
+    let fw_version = crate::firmware::flasher::parse_fw_version(&df).map_err(|e| e.to_string())?;
+
+    let (lib, dir) = load_stock_library(&app)?;
+    let (kind, build) = match_build(&lib, &product_id, fw_version);
+    let (kind, build) = match (kind, build) {
+        (MatchKind::NoLine, _) => {
+            let lines: Vec<&str> = lib.lines.iter().map(|l| l.name.as_str()).collect();
+            return Err(format!(
+                "unknown product id {product_id:?}; known lines: {}",
+                lines.join(", ")
+            ));
+        }
+        (_, Some(b)) => (kind, b),
+        (_, None) => return Err("no stock builds available".to_string()),
+    };
+    let match_kind = match kind {
+        MatchKind::ExactVersion => "exact_version",
+        MatchKind::LineOnly => "line_only",
+        MatchKind::NoLine => unreachable!(),
+    };
+    open_stock_file(
+        &app,
+        &state,
+        &dir,
+        build,
+        match_kind,
+        &[
+            ("product_id", Value::from(product_id)),
+            ("fw_version", Value::from(fw_version)),
+        ],
+    )
+}
+
+/// Explicitly open a bundled stock build by its id (see devices.json).
+#[tauri::command]
+pub async fn open_stock_build(
+    app: AppHandle,
+    state: State<'_, FirmwareState>,
+    build_id: String,
+) -> Result<Value, String> {
+    let (lib, dir) = load_stock_library(&app)?;
+    let build = lib
+        .builds
+        .iter()
+        .find(|b| b.id == build_id)
+        .ok_or_else(|| format!("unknown stock build {build_id:?}"))?;
+    open_stock_file(&app, &state, &dir, build, "manual", &[])
 }
 
 #[derive(serde::Serialize)]

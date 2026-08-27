@@ -649,6 +649,8 @@ pub fn run() {
             import_bat,
             export_bat,
             commands::firmware::open_firmware,
+            commands::firmware::download_stock,
+            commands::firmware::open_stock_build,
             commands::firmware::list_patches,
             commands::firmware::apply_patch_cmd,
             commands::firmware::rollback_patch_cmd,
