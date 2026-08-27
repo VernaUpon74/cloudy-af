@@ -52,3 +52,32 @@ fn test_devices_json_parses() {
         .iter()
         .any(|p| p == "M041"));
 }
+
+use crate::firmware::stock::{line_for_product, load_library, match_build, MatchKind};
+
+fn lib() -> crate::firmware::stock::StockLibrary {
+    let raw = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
+            .join("resources/firmware/devices.json")).unwrap();
+    load_library(&raw).unwrap()
+}
+
+#[test]
+fn test_line_lookup() {
+    let lib = lib();
+    assert_eq!(line_for_product(&lib, "M041").unwrap().name, "nuvoton");
+    assert!(line_for_product(&lib, "X999").is_none());
+}
+
+#[test]
+fn test_match_build_rules() {
+    let lib = lib();
+    // No fw_versions recorded yet -> LineOnly, newest nuvoton build.
+    let (kind, build) = match_build(&lib, "M041", 110);
+    assert!(matches!(kind, MatchKind::LineOnly));
+    assert_eq!(build.unwrap().id, "af_190602");
+    // Unknown product -> NoLine.
+    let (kind, build) = match_build(&lib, "X999", 110);
+    assert!(matches!(kind, MatchKind::NoLine));
+    assert!(build.is_none());
+}

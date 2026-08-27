@@ -6,6 +6,7 @@ pub mod flasher;
 pub mod loader;
 pub mod patch;
 pub mod state;
+pub mod stock;
 
 #[cfg(test)]
 mod tests;
