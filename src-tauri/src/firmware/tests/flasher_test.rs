@@ -12,6 +12,23 @@ fn test_parse_fw_version() {
 
 #[test]
 #[ignore]
+fn test_backup_dataflash_hardware() {
+    //! Saves the raw dataflash (settings) to BACKUP_OUT (default
+    //! DecryptProject/rescue/dataflash_backup.bin) before firmware surgery.
+    let data = flasher::read_dataflash().expect("read_dataflash failed");
+    assert_eq!(data.len(), 2048);
+    let out = std::env::var("BACKUP_OUT").unwrap_or_else(|_| {
+        "/var/home/j/cloudy-af/DecryptProject/rescue/dataflash_backup.bin".into()
+    });
+    std::fs::write(&out, &data).expect("write backup");
+    println!("saved {} bytes to {out}", data.len());
+    println!("fw version: {}, product: {}",
+        flasher::parse_fw_version(&data).map(|v| v.to_string()).unwrap_or_else(|_| "?".into()),
+        String::from_utf8_lossy(&data[316..320]));
+}
+
+#[test]
+#[ignore]
 fn test_read_dataflash_hardware() {
     let data = flasher::read_dataflash().expect("read_dataflash failed");
     assert_eq!(data.len(), 2048);
@@ -502,8 +519,11 @@ fn test_check_state_hardware() {
     let fwver = i32::from_le_bytes(df[4 + 256..4 + 260].try_into().unwrap());
     println!("fw version raw: {} ({}.{:02})", fwver, fwver / 100, fwver % 100);
     println!("product id: {}", String::from_utf8_lossy(&df[316..320]));
-    let s = f::screenshot(&mut dev).expect("screenshot failed");
-    println!("screenshot nonzero: {}", s.iter().filter(|b| **b != 0).count());
+    // 0xC1 screenshot exists only in ArcticFox builds; stock v1.00 drops it.
+    match f::screenshot(&mut dev) {
+        Ok(s) => println!("screenshot nonzero: {}", s.iter().filter(|b| **b != 0).count()),
+        Err(e) => println!("screenshot unavailable (expected on stock firmware): {e}"),
+    }
 }
 
 #[test]

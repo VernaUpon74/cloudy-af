@@ -208,6 +208,9 @@ const CMD_SCREENSHOT: u8 = 0xC1;
 const SCREENSHOT_SIZE: usize = 0x400;
 
 /// Capture the current screen contents (1024 bytes, 64x128 vertical packing).
+/// ArcticFox firmware only — stock Joyetech v1.00 has no 0xC1 handler (its
+/// dispatcher services 0x35/0x3C/0x53/0x7C/0xB4) and silently drops the
+/// command, so on stock firmware this fails with an HID read timeout.
 pub fn screenshot(device: &mut hidapi::HidDevice) -> Result<Vec<u8>> {
     send_command(device, CMD_SCREENSHOT, 0, SCREENSHOT_SIZE as i32)?;
     read_exact(device, SCREENSHOT_SIZE)
