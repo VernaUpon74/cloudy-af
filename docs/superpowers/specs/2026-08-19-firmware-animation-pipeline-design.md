@@ -18,10 +18,17 @@ build published on nfeteam.org.
 
 ## Decisions Log
 
-- **Read-back approach:** gated on LDROM command-set analysis (Phase 1a) —
-  true APROM read-back if the bootloader supports it, otherwise
-  version-matched stock + instrumented verify-read. Bare-metal USB payload
-  rejected: flashing any APROM payload erases the firmware it would preserve.
+- **Read-back approach (resolved 2026-08-27):** LDROM dumped and command set
+  enumerated (`resources/re/ldrom-commands.json`). **Gate B:** the LDROM
+  implements exactly three HID commands — `0x35` ReadDataflash (0x800-byte
+  cache only), `0xB4` Restart, `0xC3` WriteData — and **no APROM read
+  command exists**. True read-back of unknown firmware is impossible on this
+  hardware; version-matched stock is the only acquisition path, and the
+  instrumented verify-read is retained for post-flash checks. The dump was
+  obtained via an "absread2" patched stock image (0x35 → absolute FMC-ISP
+  read; CPU loads at `0x00100000` alias to APROM, ISP reads with
+  `LDUEN|CFGUEN` do not). Bare-metal USB payload rejected: flashing any
+  APROM payload erases the firmware it would preserve.
 - **RE tooling is an optional feature:** Ghidra + JDK are fetched on demand
   via `scripts/fetch-ghidra.sh` into the gitignored `DecryptProject/`
   scratch directory and are never packaged with the app. The main project
