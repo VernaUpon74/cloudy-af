@@ -88,6 +88,13 @@ pub fn read_exact_pub(device: &mut hidapi::HidDevice, len: usize) -> Result<Vec<
     read_exact(device, len)
 }
 
+/// Test-only: 0x35 with arbitrary args, for the absread-patched firmware
+/// (pico_absread.bin turns 0x35 into an absolute memory read).
+pub fn read_abs_pub(device: &mut hidapi::HidDevice, addr: u32, len: u32) -> Result<Vec<u8>> {
+    send_command(device, CMD_READ_DATAFLASH, addr as i32, len as i32)?;
+    read_exact(device, len as usize)
+}
+
 /// Test-only re-export for hardware experiments.
 pub fn send_command_pub(device: &mut hidapi::HidDevice, cmd: u8, arg1: i32, arg2: i32) -> Result<()> {
     send_command(device, cmd, arg1, arg2)

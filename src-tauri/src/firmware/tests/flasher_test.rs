@@ -12,8 +12,179 @@ fn test_read_dataflash_hardware() {
     println!("Product ID: {pid}");
     println!("dataflash[4..20]: {:02x?}", &data[4..20]);
     println!("dataflash[300..340]: {:?}", &data[300..340]);
+    println!("page2 [0x400..0x420]: {:02x?}", &data[4 + 0x400..4 + 0x420]);
     println!("checksum ok: {}", u32::from_le_bytes(data[0..4].try_into().unwrap())
         == data[4..].iter().map(|b| *b as u32).sum::<u32>());
+}
+
+#[test]
+#[ignore]
+fn test_flash_patched_timed_hardware() {
+    //! Full-cycle patched-image experiment: enter LDROM via the normal
+    //! ensure_ldrom_mode path, stream PATCHED_IMAGE (or default patched
+    //! build), 0xB4 back to APROM, then measure time-to-first-open — the
+    //! v0 delay stub shows up as +10 s here, proving the image landed AND
+    //! the stub executed.
+    use crate::firmware::flasher as f;
+    let bytes = std::fs::read(std::env::var("PATCHED_IMAGE")
+        .unwrap_or_else(|_| "/var/home/j/cloudy-af/DecryptProject/ldrom/pico_patched.bin".into()))
+        .expect("read patched image");
+    let mut d;
+    'flash: for attempt in 1..=5 {
+        if std::env::var("SKIP_ENSURE").is_err() {
+            if f::ensure_ldrom_mode().is_err() { continue; }
+        }
+        println!("in LDROM; flashing {} bytes (attempt {attempt})", bytes.len());
+        d = f::open_device().expect("open failed");
+        if f::send_command_pub(&mut d, 0xC3, 0, bytes.len() as i32).is_err() {
+            drop(d);
+            continue;
+        }
+        let mut ok = true;
+        for (ci, chunk) in bytes.chunks(64).enumerate() {
+            if ci % 100 == 0 { println!("  chunk {ci}/{}", bytes.len() / 64); }
+            let mut report = vec![0u8; 65];
+            report[1..1 + chunk.len()].copy_from_slice(chunk);
+            let mut tries = 0;
+            while let Err(e) = d.write(&report) {
+                tries += 1;
+                if tries > 50 {
+                    println!("  write failed at chunk {ci}: {e} — restarting update");
+                    ok = false;
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            if !ok { break; }
+        }
+        if ok { break 'flash; }
+        drop(d);
+        if attempt == 5 { panic!("flash failed after 5 attempts"); }
+    }
+    d = f::open_device().expect("open failed");
+    drop(d);
+    println!("flashed; restarting to APROM");
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    // The LDROM may drop USB briefly while finalizing the flash; retry.
+    let mut restarted = false;
+    for _ in 0..150 {
+        if f::restart_device().is_ok() { restarted = true; break; }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    if !restarted { panic!("restart failed"); }
+    let start = std::time::Instant::now();
+    loop {
+        if let Ok(mut d) = f::open_device() {
+            println!("TIMING APROM open after {:.3?}", start.elapsed());
+            if let Ok(df) = f::read_dataflash_from(&mut d) {
+                println!("flag data[9]={} page2[0x400..0x420]={:02x?}",
+                    df[4 + 9], &df[4 + 0x400..4 + 0x420]);
+                println!("product id: {}", String::from_utf8_lossy(&df[316..320]));
+            }
+            break;
+        }
+        if start.elapsed() > std::time::Duration::from_secs(120) {
+            panic!("device never came back after 0xB4");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+#[test]
+#[ignore]
+fn test_ldrom_absread_dump_hardware() {
+    //! Requires the absread-patched APROM (pico_absread.bin): 0x35(arg1=addr,
+    //! arg2=len) streams len bytes from ABSOLUTE device memory. Dumps the
+    //! LDROM at 0x00100000 in 2 KB chunks and writes ldrom_m041.bin.
+    use crate::firmware::flasher as f;
+    let mut dev = f::open_device().expect("open failed");
+    let mut dump = Vec::new();
+    for addr in (0x0010_0000u32..0x0010_4000).step_by(0x800) {
+        let chunk = f::read_abs_pub(&mut dev, addr, 0x800).expect("abs read failed");
+        assert_eq!(chunk.len(), 0x800);
+        println!("chunk {:#010x}: {:02x?} ...", addr, &chunk[..16]);
+        dump.extend_from_slice(&chunk);
+    }
+    std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_m041.bin", &dump).unwrap();
+    let sp = u32::from_le_bytes(dump[0..4].try_into().unwrap());
+    let rst = u32::from_le_bytes(dump[4..8].try_into().unwrap());
+    println!("LDROM vectors: SP={sp:#x} reset={rst:#x}");
+    assert!(sp >= 0x2000_0000 && sp < 0x2001_0000, "bad SP — dump corrupt");
+    assert!(rst & 1 == 1, "bad reset vector");
+    println!("LDROM DUMP OK: {} bytes", dump.len());
+}
+
+#[test]
+#[ignore]
+fn test_read_staged_hardware() {
+    //! After a v6 (LDROM-stage) patched boot: read the 4 KB staging area at
+    //! raw 0x9000 via the absread 0x35 patch and save to ldrom_staged.bin.
+    use crate::firmware::flasher as f;
+    let mut dev = f::open_device().expect("open failed");
+    let mut dump = Vec::new();
+    for addr in (0x9000u32..0xA000).step_by(0x800) {
+        let chunk = f::read_abs_pub(&mut dev, addr, 0x800).expect("abs read failed");
+        assert_eq!(chunk.len(), 0x800);
+        dump.extend_from_slice(&chunk);
+    }
+    std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_staged.bin", &dump).unwrap();
+    println!("staged[0..64]: {:02x?}", &dump[..64]);
+    let sp = u32::from_le_bytes(dump[0..4].try_into().unwrap());
+    let rst = u32::from_le_bytes(dump[4..8].try_into().unwrap());
+    let magic = u32::from_le_bytes(dump[0xFFC..0x1000].try_into().unwrap());
+    println!("staged vectors: SP={sp:#x} reset={rst:#x} magic={magic:#x}");
+}
+
+#[test]
+#[ignore]
+fn test_mode_probe_hardware() {
+    //! Prints the first bytes of a 0x35 read to identify device mode:
+    //! starts with 90 1f 00 20 (stock vector table) => APROM running the
+    //! absread image; otherwise (checksum word etc.) => LDROM.
+    use crate::firmware::flasher as f;
+    let mut dev = f::open_device().expect("open failed");
+    let d = f::read_abs_pub(&mut dev, 0, 64).expect("read failed");
+    println!("0x35[0..64]: {:02x?}", &d[..]);
+    let is_aprom_code = d.starts_with(&[0x90, 0x1f, 0x00, 0x20]);
+    println!("guessed mode: {}", if is_aprom_code { "APROM (absread image)" } else { "LDROM (or cache-based 0x35)" });
+}
+
+#[test]
+#[ignore]
+fn test_bootflag_warm_return_hardware() {
+    //! Boot-rule experiment: write boot flag data[9]=1 via the PROVEN host
+    //! 0x53 path, restart with 0xB4, and measure how long the device takes to
+    //! come back. A fast return (seconds) confirms: (a) warm reset re-enumerates
+    //! USB when flag==1, (b) the boot rule is data[9]==1 (not "nonzero") — which
+    //! would explain why all payload probes went dark (their flag writes never
+    //! land; 0xFF != 1 -> boots the no-USB payload in APROM).
+    use crate::firmware::flasher as f;
+    let mut dev = loop {
+        if let Ok(d) = f::open_device() { break d; }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    };
+    let df = f::read_dataflash_from(&mut dev).expect("read failed");
+    println!("current flag data[9]={}", df[4 + 9]);
+    let mut user = [0u8; 2044];
+    user.copy_from_slice(&df[4..]);
+    user[9] = 1;
+    f::write_dataflash(&user).expect("write failed");
+    drop(dev);
+    let start = std::time::Instant::now();
+    f::restart_device().expect("restart failed");
+    loop {
+        if let Ok(mut d) = f::open_device() {
+            println!("TIMING re-enumerated after {:.3?}", start.elapsed());
+            if let Ok(df2) = f::read_dataflash_from(&mut d) {
+                println!("flag now data[9]={}", df2[4 + 9]);
+            }
+            break;
+        }
+        if start.elapsed() > std::time::Duration::from_secs(60) {
+            panic!("device did not re-enumerate within 60 s after 0xB4 with flag==1");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
 }
 
 #[test]
@@ -335,7 +506,8 @@ fn test_flash_recovery_loop_hardware() {
     // any failure goes back to waiting — the LDROM erases and restarts an
     // interrupted update cleanly on the next attempt.
     use crate::firmware::flasher as f;
-    let bytes = std::fs::read("/var/home/j/pico_v100_plain.bin").expect("read probe bin");
+    let bytes = std::fs::read(std::env::var("RECOVERY_IMAGE")
+        .unwrap_or_else(|_| "/var/home/j/pico_v100_plain.bin".into())).expect("read probe bin");
     'outer: loop {
         println!("waiting for Pico (M041)...");
         let mut dev = loop {
@@ -413,7 +585,11 @@ fn test_ldrom_dump_hardware() {
     use crate::firmware::flasher as f;
     const CHUNK: usize = 2028; // bytes per chunk (dataflash data[16..2044])
     const NCHUNKS: usize = 8;  // 16 KB LDROM
-    let payload = std::fs::read("/var/home/j/ldrom_dump_payload.bin").expect("read payload");
+    // Fixed payload (reads chunk index before the page erase) preferred;
+    // fall back to the original (broken) payload for comparison runs.
+    let payload = std::fs::read("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_dump_payload_fixed.bin")
+        .or_else(|_| std::fs::read("/var/home/j/ldrom_dump_payload.bin"))
+        .expect("read payload");
 
     println!("waiting for the Pico (M041)…");
     loop {
@@ -496,7 +672,7 @@ fn test_ldrom_dump_hardware() {
         for (i, c) in collected {
             dump[i * CHUNK..(i + 1) * CHUNK].copy_from_slice(c);
         }
-        std::fs::write("/var/home/j/ldrom_dump.bin", &dump).unwrap();
+        std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_m041.bin", &dump).unwrap();
         println!("  (saved {} chunks)", collected.len());
     };
     let start = std::time::Instant::now();
@@ -556,7 +732,7 @@ fn test_ldrom_dump_hardware() {
     println!("done: {} / {} chunks confirmed", confirmed.len(), NCHUNKS);
     assert_eq!(confirmed.len(), NCHUNKS, "incomplete dump");
     // final integrity: LDROM vector table sanity
-    let dump = std::fs::read("/var/home/j/ldrom_dump.bin").unwrap();
+    let dump = std::fs::read("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_m041.bin").unwrap();
     let sp = u32::from_le_bytes(dump[0..4].try_into().unwrap());
     let rst = u32::from_le_bytes(dump[4..8].try_into().unwrap());
     println!("LDROM vector table: SP={sp:08x} reset={rst:08x}");
@@ -564,6 +740,668 @@ fn test_ldrom_dump_hardware() {
     assert!(rst & 1 == 1 && (rst as usize) < dump.len() + 0x00100000, "bad reset vector");
     assert!(dump.windows(4).any(|w| w == b"HIDC"), "HIDC signature missing — dump corrupt");
     println!("integrity checks passed");
+}
+
+#[test]
+#[ignore]
+fn test_probe_flag_hardware() {
+    //! Diagnostic for the LDROM dump stall: flashes a MINIMAL probe payload
+    //! (probe_flag.py — unlock, erase page at candidate DFBA, write boot flag
+    //! data[9]=1 + marker 0xDEADBEEF at data[12..16], reset; no LDROM copy).
+    //! If the device returns in LDROM mode and the dataflash read shows the
+    //! marker, the candidate DFBA is the one the bootloader honors.
+    //! Payload path comes from PROBE_PAYLOAD env var.
+    use crate::firmware::flasher as f;
+    let payload = std::fs::read(std::env::var("PROBE_PAYLOAD").expect("set PROBE_PAYLOAD"))
+        .expect("read probe payload");
+
+    println!("waiting for the Pico (M041)…");
+    // PROBE_NO_IDCHECK=1: only require enumeration (open ok), skip the 0x35
+    // M041 check. Safe: open_device filters VID 0x0416/PID 0x5020, so the
+    // STM32 (0483:5750) can never be opened here. Needed while 0x35 is flaky.
+    let no_idcheck = std::env::var("PROBE_NO_IDCHECK").is_ok();
+    let wait_start = std::time::Instant::now();
+    loop {
+        if let Ok(mut d) = f::open_device() {
+            if no_idcheck { break; }
+            if let Ok(df) = f::read_dataflash_from(&mut d) {
+                if df.len() >= 320 && &df[316..320] == b"M041" { break; }
+                println!("  skipping {}", String::from_utf8_lossy(&df[316..320]));
+            }
+        }
+        if wait_start.elapsed() > std::time::Duration::from_secs(300) {
+            panic!("Pico never enumerated");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+
+    println!("flashing probe ({} bytes)", payload.len());
+    // PROBE_PRESET_FLAG1=1: set boot flag data[9]=1 via the proven host 0x53
+    // path BEFORE flashing. Payload resets then warm-boot back into LDROM
+    // (with USB) instead of going dark in the no-USB APROM payload.
+    if std::env::var("PROBE_PRESET_FLAG1").is_ok() {
+        let mut d0 = f::open_device().expect("open for flag preset failed");
+        let df0 = f::read_dataflash_from(&mut d0).expect("read for flag preset failed");
+        println!("preset: flag was data[9]={}", df0[4 + 9]);
+        let mut user = [0u8; 2044];
+        user.copy_from_slice(&df0[4..]);
+        user[9] = 1;
+        // Preload page 0x1E400 (data 0x400..0x600) with 0x00 so a payload-side
+        // erase is observable (0x00 -> 0xFF) via the post-run 0x35 read.
+        for b in user[0x400..0x600].iter_mut() { *b = 0x00; }
+        f::write_dataflash(&user).expect("flag preset write failed");
+        drop(d0);
+        println!("preset: data[9]=1 written via 0x53");
+    }
+    let mut d = f::open_device().expect("open failed");
+    f::send_command_pub(&mut d, 0xC3, 0, payload.len() as i32).expect("write cmd failed");
+    for chunk in payload.chunks(64) {
+        let mut report = vec![0u8; 65];
+        report[1..1 + chunk.len()].copy_from_slice(chunk);
+        let mut tries = 0;
+        while let Err(e) = d.write(&report) {
+            tries += 1;
+            if tries > 50 { panic!("payload write failed: {e}"); }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+    drop(d);
+    println!("probe flashed; waiting for the device to return in LDROM mode…");
+
+    let start = std::time::Instant::now();
+    // Timing channel for diag probes: the device must DISAPPEAR once (payload
+    // ran SYSRESETREQ), then we measure gone->return. If it never disappears
+    // within 30 s the payload did not reset (hard hang) — that too is a signal.
+    let mut gone_at: Option<std::time::Instant> = None;
+    let mut t_return_printed = false;
+    loop {
+        if start.elapsed() > std::time::Duration::from_secs(300) {
+            panic!("device never returned to LDROM — DFBA candidate WRONG (flag not honored)");
+        }
+        match f::open_device() {
+            Ok(mut d) => {
+                if let Some(g) = gone_at {
+                    if !t_return_printed {
+                        println!("TIMING return after {:.3?} gone (flash+{:.3?})",
+                            g.elapsed(), start.elapsed());
+                        t_return_printed = true;
+                    }
+                } else if start.elapsed() > std::time::Duration::from_secs(30) {
+                    println!("TIMING device still present 30 s after flash — payload did NOT reset");
+                    gone_at = Some(std::time::Instant::now() - std::time::Duration::from_secs(30));
+                }
+                match f::read_dataflash_from(&mut d) {
+                Ok(df) => {
+                    println!("device is back in LDROM after {:.3?}", start.elapsed());
+                    println!("flag data[9]={} idx data[8]={:#04x}", df[4 + 9], df[4 + 8]);
+                    println!("marker data[12..16]={:02x?}", &df[4 + 12..4 + 16]);
+                    println!("page2 data[0x400..0x420]={:02x?}", &df[4 + 0x400..4 + 0x420]);
+                    println!("product id: {}", String::from_utf8_lossy(&df[316..320]));
+                    assert_eq!(df[4 + 9], 1, "boot flag not set");
+                    assert_eq!(&df[4 + 12..4 + 16], &[0xEF, 0xBE, 0xAD, 0xDE],
+                        "marker mismatch — LDROM reads a different page than the payload wrote");
+                    println!("PROBE OK: DFBA candidate confirmed");
+                    break;
+                }
+                Err(e) => {
+                    println!("read failed: {e} — retrying");
+                    drop(d);
+                }
+                }
+            }
+            Err(_) => {
+                if gone_at.is_none() {
+                    gone_at = Some(std::time::Instant::now());
+                    println!("TIMING device gone at flash+{:.3?}", start.elapsed());
+                }
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+#[test]
+#[ignore]
+fn test_df_investigate_hardware() {
+    //! Where does 0x53 actually write? Dump the top 16 KB of flash via the
+    //! absread 0x35, write a marker block (flag data[9]=1 + 0xDEADBEEF at
+    //! data[12..16]) via the stock 0x53 path, dump again, diff. Answers:
+    //! (a) does 0x53 land at all, (b) at which page, (c) is the boot flag
+    //! there afterwards.
+    use crate::firmware::flasher as f;
+    let mut dev = f::open_device().expect("open failed");
+
+    let snap = |dev: &mut hidapi::HidDevice, tag: &str| -> Vec<u8> {
+        let mut buf = Vec::new();
+        for addr in (0x1C000u32..0x20000).step_by(0x800) {
+            // the absread 0x35 is stateless per command: retry partial reads
+            let mut c = Vec::new();
+            for attempt in 1..=4 {
+                match f::read_abs_pub(dev, addr, 0x800) {
+                    Ok(x) => { c = x; break; }
+                    Err(e) => {
+                        println!("  read {addr:#x} attempt {attempt}: {e}");
+                        if attempt == 4 { panic!("abs read failed at {addr:#x}"); }
+                    }
+                }
+            }
+            buf.extend_from_slice(&c);
+        }
+        // per-page summary
+        for (i, pg) in buf.chunks(0x800).enumerate() {
+            let base = 0x1C000 + i * 0x800;
+            let ff = pg.iter().filter(|&&b| b == 0xFF).count();
+            let z = pg.iter().filter(|&&b| b == 0).count();
+            println!("{tag} page {base:#x}: 0xFF={ff} 0x00={z} of 2048; [316..320]={:02x?} [0..16]={:02x?}",
+                &pg[316..320], &pg[..16]);
+        }
+        buf
+    };
+
+    let before = snap(&mut dev, "BEFORE");
+    let mut user = [0u8; 2044];
+    user[9] = 1;
+    user[12..16].copy_from_slice(&[0xEF, 0xBE, 0xAD, 0xDE]);
+    user[316..320].copy_from_slice(b"M041");
+    f::write_dataflash(&user).expect("0x53 write failed");
+    println!("0x53 marker block written");
+    let after = snap(&mut dev, "AFTER ");
+    for (i, (b, a)) in before.iter().zip(after.iter()).enumerate() {
+        if b != a {
+            println!("  diff at {:#x}: {b:#04x} -> {a:#04x}", 0x1C000 + i);
+        }
+    }
+    println!("diff scan done");
+}
+
+#[test]
+#[ignore]
+fn test_ldrom_entry_and_rate_hardware() {
+    //! After the 0x53 journal-append at 0x1EE00 (flag data[9]=1 landed):
+    //! 1) dump the raw journal region 0x1E000..0x1F000 for offline analysis
+    //! 2) 0xB4 restart, detect resulting mode (LDROM vs APROM)
+    //! 3) if LDROM: stream dummy4k_v2 (stock[0..4K] + 0xDEADBEEF marker at
+    //!    0x18, boot-safe) with per-chunk timing -> LDROM write rate and
+    //!    small-update commit behaviour.
+    use crate::firmware::flasher as f;
+    let mut dev = f::open_device().expect("open failed");
+
+    // 1) journal dump
+    let mut region = Vec::new();
+    for addr in (0x1E000u32..0x1F000).step_by(0x800) {
+        for attempt in 1..=4 {
+            match f::read_abs_pub(&mut dev, addr, 0x800) {
+                Ok(c) => { region.extend_from_slice(&c); break; }
+                Err(e) => {
+                    println!("  read {addr:#x} attempt {attempt}: {e}");
+                    if attempt == 4 { panic!("abs read failed"); }
+                }
+            }
+        }
+    }
+    std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/df_region.bin", &region).unwrap();
+    for (i, row) in region.chunks(16).enumerate() {
+        println!("  {:#06x}: {:02x?}", 0x1E000 + i * 16, row);
+    }
+
+    // 2) restart and detect mode
+    drop(dev);
+    f::restart_device().expect("restart failed");
+    println!("restarted; waiting for re-enumeration...");
+    let w = std::time::Instant::now();
+    let mut mode_ldrom = false;
+    let mut dev = loop {
+        if let Ok(d) = f::open_device() { break d; }
+        if w.elapsed() > std::time::Duration::from_secs(30) { panic!("no re-enumeration"); }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    };
+    println!("enumerated after {:.3?}", w.elapsed());
+    for attempt in 1..=6 {
+        match f::read_abs_pub(&mut dev, 0, 64) {
+            Ok(d) => {
+                println!("0x35[0..16]: {:02x?}", &d[..16]);
+                mode_ldrom = !d.starts_with(&[0x90, 0x1f, 0x00, 0x20]);
+                break;
+            }
+            Err(e) => println!("  mode probe attempt {attempt}: {e}"),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    }
+    println!("mode: {}", if mode_ldrom { "LDROM" } else { "APROM" });
+
+    // 3) if LDROM: timed dummy stream
+    if mode_ldrom {
+        let payload = std::fs::read("/var/home/j/cloudy-af/DecryptProject/ldrom/dummy4k_v2.bin")
+            .expect("read dummy");
+        f::send_command_pub(&mut dev, 0xC3, 0, payload.len() as i32).expect("write cmd failed");
+        let t0 = std::time::Instant::now();
+        for (ci, chunk) in payload.chunks(64).enumerate() {
+            let mut report = vec![0u8; 65];
+            report[1..1 + chunk.len()].copy_from_slice(chunk);
+            let t = std::time::Instant::now();
+            let mut tries = 0;
+            while let Err(e) = dev.write(&report) {
+                tries += 1;
+                if tries > 50 { panic!("dummy write failed at chunk {ci}: {e}"); }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            println!("  chunk {ci}: {:?} (retries {tries})", t.elapsed());
+        }
+        println!("streamed {} bytes in {:.3?}", payload.len(), t0.elapsed());
+    }
+}
+
+#[test]
+#[ignore]
+fn test_absread2_verify_and_dump_hardware() {
+    //! Second half of the absread2 experiment (device already flashed with
+    //! pico_absread2.bin by test_absread2_dump_hardware). No re-flash:
+    //! verify the bl-cave patch bytes, dump the cave region, then dump the
+    //! LDROM via the absread 0x35 whatever the cave state is — the result
+    //! discriminates: memcpy cave (bl not landed) => APROM alias returns;
+    //! ISP cave => real LDROM or 0xBAD00000|idx markers.
+    use crate::firmware::flasher as f;
+    let mut dev = f::open_device().expect("open failed");
+    let peek = |dev: &mut hidapi::HidDevice, addr: u32, len: u32, tag: &str| -> Vec<u8> {
+        for attempt in 1..=4 {
+            match f::read_abs_pub(dev, addr, len) {
+                Ok(c) => {
+                    println!("{tag} {addr:#x}: {:02x?}", &c[..(len as usize).min(32)]);
+                    return c;
+                }
+                Err(e) => {
+                    println!("  {tag} {addr:#x} attempt {attempt}: {e}");
+                    if attempt == 4 { panic!("peek failed at {addr:#x}"); }
+                }
+            }
+        }
+        unreachable!()
+    };
+    peek(&mut dev, 0x1d5c, 8, "patch");
+    peek(&mut dev, 0x1d6e, 4, "blcave");
+    let cave = peek(&mut dev, 0x8800, 0x800, "cave-region");
+    let more = peek(&mut dev, 0x8980, 0x100, "cave-region2");
+    let mut region = cave.clone();
+    region.extend_from_slice(&more);
+    std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/cave_region.bin", &region).unwrap();
+
+    let mut dump = Vec::new();
+    // 64-byte reads: one command = one report, self-aligning. Long streams
+    // lose reports on this link and misalign (proven by seam analysis).
+    for addr in (0x0010_0000u32..0x0010_4000).step_by(0x40) {
+        let c = peek(&mut dev, addr, 0x40, "ldrom");
+        dump.extend_from_slice(&c);
+    }
+    std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_real.bin", &dump).unwrap();
+    let bad = dump.chunks(4).filter(|w| {
+        (u32::from_le_bytes((*w).try_into().unwrap()) & 0xFFFF_0000) == 0xBAD0_0000
+    }).count();
+    let sp = u32::from_le_bytes(dump[0..4].try_into().unwrap());
+    let rst = u32::from_le_bytes(dump[4..8].try_into().unwrap());
+    println!("LDROM vectors: SP={sp:#x} reset={rst:#x}; BAD markers: {bad}");
+    println!("(alias signature would be SP=0x20001f90 reset=0x171)");
+}
+
+#[test]
+#[ignore]
+fn test_absread2_dump_hardware() {
+    //! THE LDROM dump. Flow: (1) enter LDROM (0x53 flag=1 + 0xB4 if needed),
+    //! (2) stream pico_absread2.bin (0x35 -> absolute FMC-ISP read cave),
+    //! (3) reboot to APROM, verify the image committed (patch bytes at
+    //! 0x1d5c + cave at 0x89a8), (4) dump 0x00100000..0x00104000 via the
+    //! absread 0x35 and save ldrom_real.bin. Vector check: reset must land
+    //! in 0x00100000..0x00104000 (NOT the 0x171 APROM alias), no BAD markers.
+    use crate::firmware::flasher as f;
+
+    // mode helper: Ok(true)=LDROM, Ok(false)=APROM
+    let probe_mode = |dev: &mut hidapi::HidDevice| -> Option<bool> {
+        for _ in 0..6 {
+            if let Ok(d) = f::read_abs_pub(dev, 0, 64) {
+                return Some(!d.starts_with(&[0x90, 0x1f, 0x00, 0x20]));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
+        None
+    };
+    let wait_open = |secs: u64| -> hidapi::HidDevice {
+        let w = std::time::Instant::now();
+        loop {
+            if let Ok(d) = f::open_device() { return d; }
+            if w.elapsed() > std::time::Duration::from_secs(secs) { panic!("no enumeration"); }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+    };
+
+    // (1) ensure LDROM
+    let mut dev = wait_open(30);
+    match probe_mode(&mut dev) {
+        Some(true) => println!("already in LDROM"),
+        Some(false) => {
+            println!("in APROM; setting boot flag via 0x53 + restart");
+            let mut user = [0u8; 2044];
+            user[9] = 1;
+            user[316..320].copy_from_slice(b"M041");
+            f::write_dataflash(&user).expect("0x53 flag write failed");
+            drop(dev);
+            f::restart_device().expect("restart failed");
+            dev = wait_open(30);
+            match probe_mode(&mut dev) {
+                Some(true) => println!("in LDROM after flag+restart"),
+                other => panic!("expected LDROM, got {other:?}"),
+            }
+        }
+        None => panic!("mode probe failed"),
+    }
+
+    // (2) stream absread2
+    let image = std::fs::read("/var/home/j/cloudy-af/DecryptProject/ldrom/pico_absread2.bin")
+        .expect("read absread2");
+    f::send_command_pub(&mut dev, 0xC3, 0, image.len() as i32).expect("write cmd failed");
+    let t0 = std::time::Instant::now();
+    for (ci, chunk) in image.chunks(64).enumerate() {
+        let mut report = vec![0u8; 65];
+        report[1..1 + chunk.len()].copy_from_slice(chunk);
+        let mut tries = 0;
+        while let Err(e) = dev.write(&report) {
+            tries += 1;
+            if tries > 100 { panic!("image write failed at chunk {ci}: {e}"); }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+    println!("flashed absread2 ({} bytes) in {:.3?}", image.len(), t0.elapsed());
+    drop(dev);
+
+    // (3) reboot to APROM, verify commit
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    let mut dev = wait_open(2);
+    if probe_mode(&mut dev) == Some(true) {
+        println!("still LDROM; 0xB4 to APROM");
+        drop(dev);
+        let _ = f::restart_device();
+        dev = wait_open(30);
+    }
+    match probe_mode(&mut dev) {
+        Some(false) => println!("in APROM"),
+        other => panic!("expected APROM after flash, got {other:?}"),
+    }
+    let hdr = f::read_abs_pub(&mut dev, 0x1d5c, 4).expect("read patch site");
+    println!("patch site 0x1d5c: {:02x?} (expect c0 46 21 46)", hdr);
+    let cave = f::read_abs_pub(&mut dev, 0x89a8, 4).expect("read cave");
+    println!("cave 0x89a8: {:02x?} (expect f0 b5 .. ..)", cave);
+    assert_eq!(hdr, [0xc0, 0x46, 0x21, 0x46], "absread2 image did NOT commit");
+
+    // (4) dump the LDROM
+    let mut dump = Vec::new();
+    for addr in (0x0010_0000u32..0x0010_4000).step_by(0x800) {
+        let mut c = Vec::new();
+        for attempt in 1..=4 {
+            match f::read_abs_pub(&mut dev, addr, 0x800) {
+                Ok(x) => { c = x; break; }
+                Err(e) => {
+                    println!("  read {addr:#x} attempt {attempt}: {e}");
+                    if attempt == 4 { panic!("ldrom read failed"); }
+                }
+            }
+        }
+        println!("chunk {addr:#010x}: {:02x?} ...", &c[..16]);
+        dump.extend_from_slice(&c);
+    }
+    std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_real.bin", &dump).unwrap();
+    let bad = dump.chunks(4).filter(|w| {
+        (u32::from_le_bytes((*w).try_into().unwrap()) & 0xFFFF_0000) == 0xBAD0_0000
+    }).count();
+    let sp = u32::from_le_bytes(dump[0..4].try_into().unwrap());
+    let rst = u32::from_le_bytes(dump[4..8].try_into().unwrap());
+    println!("LDROM vectors: SP={sp:#x} reset={rst:#x}; BAD markers: {bad}");
+    println!("(alias signature would be SP=0x20001f90 reset=0x171)");
+}
+
+#[test]
+#[ignore]
+fn test_probe_diag_hardware() {
+    //! Runner for probe_diag.py payloads (cal0/calN/read/write). Unlike
+    //! test_probe_flag_hardware this handles the APROM-absread state
+    //! correctly: raw 0xC3 to APROM is ignored and ensure_ldrom_mode is
+    //! fooled (APROM[0x0D]==0x01 reads as a set boot flag through the
+    //! absread 0x35), so the LDROM transition is done manually: locate the
+    //! real dataflash via absread at 0x1E000/0x1F000, set flag data[9]=1,
+    //! 0x53 write, 0xB4 warm reset -> LDROM+USB. Then stream the payload
+    //! (0xC3) and measure the dark->return time = mask * UNIT (+overhead).
+    //! PROBE_PAYLOAD env: path to payload bin.
+    use crate::firmware::flasher as f;
+    let payload = std::fs::read(std::env::var("PROBE_PAYLOAD").expect("set PROBE_PAYLOAD"))
+        .expect("read probe payload");
+
+    // --- phase 1: ensure LDROM with boot flag = 1 ---
+    let wait_open = std::time::Instant::now();
+    let mut dev = loop {
+        if let Ok(d) = f::open_device() { break d; }
+        if wait_open.elapsed() > std::time::Duration::from_secs(180) {
+            panic!("Pico never enumerated");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    };
+    let in_ldrom = match f::read_dataflash_from(&mut dev) {
+        Ok(d) => d.len() >= 320 && &d[316..320] == b"M041",
+        Err(_) => false,
+    };
+    if in_ldrom {
+        println!("already in LDROM (product id readable)");
+    } else {
+        println!("in APROM; locating real dataflash via absread...");
+        let mut found = None;
+        for base in [0x1F000u32, 0x1E000] {
+            match f::read_abs_pub(&mut dev, base, 2048) {
+                Ok(pg) => {
+                    let sum_ok = u32::from_le_bytes(pg[0..4].try_into().unwrap())
+                        == pg[4..].iter().map(|b| *b as u32).sum::<u32>();
+                    let pid_ok = &pg[316..320] == b"M041";
+                    println!("  page {base:#x}: checksum_ok={sum_ok} pid_ok={pid_ok} flag={}", pg[4 + 9]);
+                    if sum_ok && pid_ok { found = Some(pg); break; }
+                }
+                Err(e) => println!("  page {base:#x}: read failed: {e}"),
+            }
+        }
+        let pg = found.expect("no valid dataflash page found via absread");
+        let mut user = [0u8; 2044];
+        user.copy_from_slice(&pg[4..]);
+        user[9] = 1;
+        f::write_dataflash(&user).expect("flag write failed");
+        drop(dev);
+        f::restart_device().expect("restart failed");
+        println!("flag=1 written, restarted; waiting for LDROM...");
+        let w = std::time::Instant::now();
+        loop {
+            if let Ok(mut d) = f::open_device() {
+                if let Ok(dd) = f::read_dataflash_from(&mut d) {
+                    if dd.len() >= 320 && &dd[316..320] == b"M041" && dd[4 + 9] == 1 {
+                        println!("in LDROM after {:.3?}", w.elapsed());
+                        break;
+                    }
+                }
+            }
+            if w.elapsed() > std::time::Duration::from_secs(60) {
+                panic!("no LDROM after flag+restart");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+    }
+
+    // --- phase 2: stream payload ---
+    let mut d = f::open_device().expect("open failed");
+    f::send_command_pub(&mut d, 0xC3, 0, payload.len() as i32).expect("write cmd failed");
+    for (ci, chunk) in payload.chunks(64).enumerate() {
+        let mut report = vec![0u8; 65];
+        report[1..1 + chunk.len()].copy_from_slice(chunk);
+        let t = std::time::Instant::now();
+        let mut tries = 0;
+        while let Err(e) = d.write(&report) {
+            tries += 1;
+            if tries > 50 { panic!("payload write failed at chunk {ci}: {e}"); }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        println!("  chunk {ci}: {:?} (retries {tries})", t.elapsed());
+    }
+    drop(d);
+    println!("payload flashed; watching dark->return...");
+
+    // --- phase 3: dark->return timing = mask * UNIT + overhead ---
+    let start = std::time::Instant::now();
+    let mut gone_at: Option<std::time::Instant> = None;
+    loop {
+        if start.elapsed() > std::time::Duration::from_secs(300) {
+            panic!("device never returned");
+        }
+        match f::open_device() {
+            Ok(mut d) => {
+                if let Some(g) = gone_at {
+                    println!("TIMING dark = {:.3?} (flash+{:.3?})", g.elapsed(), start.elapsed());
+                    if let Ok(dd) = f::read_dataflash_from(&mut d) {
+                        println!("returned: flag={} idx={:#04x} pid={}",
+                            dd[4 + 9], dd[4 + 8], String::from_utf8_lossy(&dd[316..320]));
+                    }
+                    break;
+                }
+            }
+            Err(_) => {
+                if gone_at.is_none() {
+                    gone_at = Some(std::time::Instant::now());
+                    println!("device dark at flash+{:.3?}", start.elapsed());
+                }
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+#[test]
+#[ignore]
+fn test_df_roundtrip_hardware() {
+    //! Host-side dataflash write/read roundtrip. Toggles one tail byte via
+    //! the LDROM 0x53 write command, reads back, restores. Answers: does the
+    //! LDROM-side dataflash WRITE work at all, and does 0x35 reflect the
+    //! latest write immediately (vs wear-leveled slot games)?
+    use crate::firmware::flasher as f;
+    println!("waiting for the Pico…");
+    let w = std::time::Instant::now();
+    let mut dev = loop {
+        if let Ok(d) = f::open_device() { break d; }
+        if w.elapsed() > std::time::Duration::from_secs(180) { panic!("Pico never enumerated"); }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    };
+    let r1 = f::read_dataflash_from(&mut dev).expect("read1 failed");
+    println!("baseline: flag data[9]={} data[8]={:#04x} sum16={:02x?}",
+        r1[4 + 9], r1[4 + 8], &r1[4..20]);
+
+    let mut data = [0u8; 2044];
+    data.copy_from_slice(&r1[4..]);
+    let idx = 2000; // harmless tail byte
+    data[idx] ^= 0x5A;
+    f::write_dataflash(&data).expect("write failed");
+    drop(dev);
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let mut dev = f::open_device().expect("re-open failed");
+    let r2 = f::read_dataflash_from(&mut dev).expect("read2 failed");
+    let toggle_visible = r2[4 + idx] == data[idx];
+    let same_elsewhere = r2[4..4 + idx] == r1[4..4 + idx];
+    println!("toggle visible: {toggle_visible}, rest identical: {same_elsewhere}");
+    println!("r2 flag data[9]={} idx data[8]={:#04x}", r2[4 + 9], r2[4 + 8]);
+    if !toggle_visible {
+        println!("r2[1996..2044]: {:02x?}", &r2[4 + 1996..]);
+    }
+    // restore original content regardless
+    let mut orig = [0u8; 2044];
+    orig.copy_from_slice(&r1[4..]);
+    f::write_dataflash(&orig).expect("restore write failed");
+    drop(dev);
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let r3 = f::read_dataflash().expect("read3 failed");
+    println!("restored: {}", r3[4..] == r1[4..]);
+}
+
+#[test]
+#[ignore]
+fn test_df_map_hardware() {
+    //! Maps the 0x35 read window: arg1 = 0..0x1000 in 0x100 steps (arg1=0x800
+    //! worked, 0x1000 died mid-stream — find the exact boundary). Saves every
+    //! response to /var/home/j/dfmap/ for offline analysis. Stops at first
+    //! failure (device crash => replug needed).
+    use crate::firmware::flasher as f;
+    std::fs::create_dir_all("/var/home/j/dfmap").unwrap();
+    println!("waiting for the Pico…");
+    let w = std::time::Instant::now();
+    let mut dev = loop {
+        if let Ok(d) = f::open_device() { break d; }
+        if w.elapsed() > std::time::Duration::from_secs(180) { panic!("Pico never enumerated"); }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    };
+    for arg1 in (0..=0x1000i32).step_by(0x100) {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        match f::send_command_pub(&mut dev, 0x35, arg1, 2048)
+            .and_then(|_| f::read_exact_pub(&mut dev, 2048))
+        {
+            Ok(buf) => {
+                let cks = u32::from_le_bytes(buf[0..4].try_into().unwrap());
+                let sum: u32 = buf[4..].iter().map(|b| *b as u32).sum();
+                println!("arg1={arg1:#06x} cks={cks:#010x} sum={sum:#010x} {} data8={:02x?}",
+                    if cks == sum { "OK " } else { "BAD" }, &buf[4..12]);
+                std::fs::write(format!("/var/home/j/dfmap/{arg1:06x}.bin"), &buf).unwrap();
+            }
+            Err(e) => { println!("arg1={arg1:#06x} FAILED: {e} — stopping"); break; }
+        }
+    }
+    println!("map done");
+}
+
+#[test]
+#[ignore]
+fn test_ldrom_direct_read_hardware() {
+    //! Gate-A probe: 0x35 honors arg1 as a dataflash-relative offset
+    //! (arg1=0x800 returned distinct content). If the base is DFBA 0x1E000,
+    //! arg1 = 0x100000 - 0x1E000 = 0xE2000 reads the LDROM directly.
+    //! Reads 9 x 2044-byte chunks (4-byte prefix stripped), assembles 16 KB.
+    use crate::firmware::flasher as f;
+    println!("waiting for the Pico…");
+    let w = std::time::Instant::now();
+    let mut dev = loop {
+        if let Ok(d) = f::open_device() { break d; }
+        if w.elapsed() > std::time::Duration::from_secs(180) { panic!("Pico never enumerated"); }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    };
+    let mut dump = Vec::new();
+    for i in 0..9i32 {
+        let arg1 = 0xE2000 + i * 2044;
+        let mut ok = false;
+        for _ in 0..3 {
+            match f::send_command_pub(&mut dev, 0x35, arg1, 2048)
+                .and_then(|_| f::read_exact_pub(&mut dev, 2048))
+            {
+                Ok(buf) => {
+                    println!("chunk {i} @ arg1={arg1:#x}: data16={:02x?}", &buf[4..20]);
+                    dump.extend_from_slice(&buf[4..]);
+                    ok = true;
+                    break;
+                }
+                Err(e) => {
+                    println!("chunk {i} err: {e} — retry");
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                }
+            }
+        }
+        if !ok { println!("chunk {i} FAILED — stopping"); break; }
+    }
+    println!("got {} bytes", dump.len());
+    if dump.len() >= 16 {
+        let sp = u32::from_le_bytes(dump[0..4].try_into().unwrap());
+        let rst = u32::from_le_bytes(dump[4..8].try_into().unwrap());
+        println!("LDROM vector table: SP={sp:#010x} reset={rst:#06x}");
+    }
+    if dump.len() >= 16384 {
+        dump.truncate(16384);
+        std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_m041.bin", &dump).unwrap();
+        println!("SAVED 16 KB ldrom_m041.bin");
+        assert!(dump.windows(4).any(|w| w == b"HIDC"), "no HIDC sig — wrong region?");
+    }
 }
 
 #[test]
@@ -616,4 +1454,89 @@ fn test_stm32_identify_hardware() {
         }
         Err(e) => println!("screenshot failed: {e}"),
     }
+}
+
+#[test]
+#[ignore]
+fn test_restore_stock_hardware() {
+    //! Restore stock v1.00 over whatever RE image is on the device, using the
+    //! proven LDROM path (0x53 flag=1 + 0xB4 -> LDROM; 0xC3 stream; auto-boot
+    //! APROM). If the current APROM is the absread2 image, also recover the
+    //! LDROM's last 64 bytes (0x103FC0) first — reads are one-command-behind,
+    //! so each address is read twice and the second result is used.
+    use crate::firmware::flasher as f;
+    let wait_open = |secs: u64| -> hidapi::HidDevice {
+        let w = std::time::Instant::now();
+        loop {
+            if let Ok(d) = f::open_device() { return d; }
+            if w.elapsed() > std::time::Duration::from_secs(secs) { panic!("no enumeration"); }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+    };
+    let mut dev = wait_open(60);
+
+    // opportunistic: LDROM tail recovery while absread2 is still running
+    if let Ok(d) = f::read_abs_pub(&mut dev, 0, 64) {
+        if d.starts_with(&[0x90, 0x1f, 0x00, 0x20]) {
+            let _ = f::read_abs_pub(&mut dev, 0x103FC0, 64); // prime (one-behind)
+            if let Ok(tail) = f::read_abs_pub(&mut dev, 0x103FC0, 64) {
+                println!("LDROM tail 0x103FC0: {:02x?}", &tail[..32]);
+                std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_tail.bin", &tail).unwrap();
+            }
+        } else {
+            println!("not absread APROM (stock or LDROM) — skipping tail read");
+        }
+    }
+
+    // enter LDROM (if not already there)
+    let in_ldrom = match f::read_abs_pub(&mut dev, 0, 64) {
+        Ok(d) => !d.starts_with(&[0x90, 0x1f, 0x00, 0x20]),
+        Err(_) => false,
+    };
+    if !in_ldrom {
+        let mut user = [0u8; 2044];
+        user[9] = 1;
+        user[316..320].copy_from_slice(b"M041");
+        f::write_dataflash(&user).expect("0x53 flag write failed");
+        drop(dev);
+        f::restart_device().expect("restart failed");
+        dev = wait_open(30);
+        println!("flag=1 written, restarted");
+    } else {
+        println!("already in LDROM");
+    }
+
+    // flash stock
+    let image = std::fs::read("/var/home/j/pico_v100_plain.bin").expect("read stock");
+    f::send_command_pub(&mut dev, 0xC3, 0, image.len() as i32).expect("write cmd failed");
+    let t0 = std::time::Instant::now();
+    for (ci, chunk) in image.chunks(64).enumerate() {
+        let mut report = vec![0u8; 65];
+        report[1..1 + chunk.len()].copy_from_slice(chunk);
+        let mut tries = 0;
+        while let Err(e) = dev.write(&report) {
+            tries += 1;
+            if tries > 100 { panic!("stock write failed at chunk {ci}: {e}"); }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+    println!("flashed stock ({} bytes) in {:.3?}", image.len(), t0.elapsed());
+    drop(dev);
+
+    // verify: device returns and 0x35 serves the dataflash cache (stock semantics)
+    dev = wait_open(30);
+    for attempt in 1..=10 {
+        match f::read_dataflash_from(&mut dev) {
+            Ok(df) => {
+                println!("0x35[0..16]: {:02x?}", &df[..16]);
+                println!("product id: {}", String::from_utf8_lossy(&df[316..320]));
+                assert!(!df.starts_with(&[0x90, 0x1f, 0x00, 0x20]), "still absread image?!");
+                println!("STOCK RESTORED");
+                return;
+            }
+            Err(e) => println!("verify attempt {attempt}: {e}"),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    panic!("stock restore verification failed");
 }
