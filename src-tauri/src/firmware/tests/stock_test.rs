@@ -72,12 +72,20 @@ fn test_line_lookup() {
 #[test]
 fn test_match_build_rules() {
     let lib = lib();
-    // No fw_versions recorded yet -> LineOnly, newest nuvoton build.
-    let (kind, build) = match_build(&lib, "M041", 110);
+    // No build records fw_version 999 -> LineOnly, newest nuvoton build.
+    let (kind, build) = match_build(&lib, "M041", 999);
     assert!(matches!(kind, MatchKind::LineOnly));
     assert_eq!(build.unwrap().id, "af_190602");
     // Unknown product -> NoLine.
     let (kind, build) = match_build(&lib, "X999", 110);
     assert!(matches!(kind, MatchKind::NoLine));
     assert!(build.is_none());
+}
+
+#[test]
+fn test_exact_version_match() {
+    let lib = lib();
+    let (kind, build) = match_build(&lib, "M041", 110);
+    assert!(matches!(kind, MatchKind::ExactVersion));
+    assert_eq!(build.unwrap().id, "af_190602");
 }

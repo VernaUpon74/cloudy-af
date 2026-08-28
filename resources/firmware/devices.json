@@ -6,7 +6,7 @@
   "builds": [
     { "id": "af_170222", "file": "af_170222.bin", "line": "nuvoton", "fw_versions": [] },
     { "id": "af_180913", "file": "af_180913.bin", "line": "nuvoton", "fw_versions": [] },
-    { "id": "af_190602", "file": "af_190602.bin", "line": "nuvoton", "fw_versions": [] },
+    { "id": "af_190602", "file": "af_190602.bin", "line": "nuvoton", "fw_versions": [110] },
     { "id": "af_211009", "file": "af_211009.bin", "line": "stm32",    "fw_versions": [] }
   ]
 }

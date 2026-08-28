@@ -24,7 +24,9 @@ Loose ends carried over from the firmware read-back Phase 1 plan
       display is asleep (wake via button press and capture immediately);
       PNG packing in `test_screenshot_hardware` renders garbage at the top —
       revisit in Phase 3 (screenshot verification).
-- [ ] Phase 2 — stock library & pipeline: use `flasher::read_fw_version()`
+- [x] Phase 2 — stock library & pipeline: use `flasher::read_fw_version()`
       to match the device against bundled stock builds (see
       `docs/superpowers/specs/2026-08-19-firmware-animation-pipeline-design.md`,
-      Phase 2). Gets its own plan.
+      Phase 2). (done 2026-08-27: four bundled builds + devices.json with
+      matcher; af_190602 fw_versions=[110] observed on the Pico; apply →
+      flash → undo hardware cycle passes in `test_stock_cycle_hardware`.)

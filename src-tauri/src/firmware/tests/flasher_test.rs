@@ -39,6 +39,51 @@ fn test_backup_dataflash_hardware() {
 
 #[test]
 #[ignore]
+fn test_restore_dataflash_hardware() {
+    //! Restores a raw 2048-byte dataflash backup (4-byte checksum prefix +
+    //! 2044 data, as produced by test_backup_dataflash_hardware) onto the
+    //! device. Waits out boot-loop windows: retries open+write until the
+    //! device holds still long enough. RESTORE_IN defaults to the stock
+    //! v1.00 rescue backup.
+    use crate::firmware::flasher as f;
+    let path = std::env::var("RESTORE_IN").unwrap_or_else(|_| {
+        "/var/home/j/cloudy-af/DecryptProject/rescue/dataflash_stock_v1.00.bin".into()
+    });
+    let raw = std::fs::read(&path).expect("read backup");
+    assert_eq!(raw.len(), 2048);
+    let mut user = [0u8; 2044];
+    user.copy_from_slice(&raw[4..]);
+    // sanity: the backup's own checksum must match its data
+    let cks = u32::from_le_bytes(raw[0..4].try_into().unwrap());
+    let sum: u32 = user.iter().map(|b| *b as u32).sum();
+    assert_eq!(cks, sum, "backup file checksum mismatch");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
+    loop {
+        match f::write_dataflash(&user) {
+            Ok(()) => { println!("dataflash restored from {path}"); break; }
+            Err(e) => {
+                if std::time::Instant::now() > deadline {
+                    panic!("restore failed for 300s: {e}");
+                }
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
+        }
+    }
+    // verify: wait for a window and read back
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
+    loop {
+        if let Ok(df) = f::read_dataflash() {
+            let ver = f::parse_fw_version(&df).unwrap_or(-1);
+            println!("readback: version={ver} product={}", String::from_utf8_lossy(&df[316..320]));
+            break;
+        }
+        if std::time::Instant::now() > deadline { panic!("no readback window"); }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    }
+}
+
+#[test]
+#[ignore]
 fn test_read_dataflash_hardware() {
     let data = flasher::read_dataflash().expect("read_dataflash failed");
     assert_eq!(data.len(), 2048);
@@ -1576,4 +1621,141 @@ fn test_restore_stock_hardware() {
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
     panic!("stock restore verification failed");
+}
+
+
+#[test]
+#[ignore]
+fn test_stock_cycle_hardware() {
+    //! Full stock-library cycle on the Pico (M041) running ArcticFox:
+    //! 1. read dataflash -> product id + fw version word (assert M041);
+    //! 2. flash the bundled `resources/firmware/af_190602.bin` AS SHIPPED
+    //!    (encrypted package) through `flash_firmware_guarded`, the same
+    //!    path the app uses;
+    //! 3. re-open, read dataflash, screenshot (0xC1 is AF-only: must
+    //!    respond) and print the nonzero count;
+    //! 4. undo: restore `AF_fw/decrypted/af_190602.dec.bin` via the
+    //!    recovery flash path, verify version word 110 again.
+    //!
+    //! The undo ALWAYS runs, even when the step-2 flash fails or the
+    //! flashed image does not boot: the device must end on af_190602.
+    //! Step 5 then asserts the step-2 result, so a non-booting encrypted
+    //! build fails the test only after the device has been restored.
+    use crate::firmware::flasher as f;
+
+    // 1. identify. The Pico drops off the bus when idle and a previous
+    // interrupted flash leaves it flapping in LDROM — wait for it, and
+    // retry the dataflash read.
+    let df = loop {
+        if let Ok(mut dev) = f::open_device() {
+            if let Ok(df) = f::read_dataflash_from(&mut dev) { break df; }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    };
+    let pid = String::from_utf8_lossy(&df[316..320])
+        .trim_matches(char::from(0)).trim().to_string();
+    let ver = f::parse_fw_version(&df).expect("parse_fw_version failed");
+    println!("before: pid={pid} fw_version={ver} boot_flag={}", df[4 + 9]);
+    assert_eq!(pid, "M041");
+
+    // 2. flash the bundled build as shipped (encrypted package). A USB drop
+    // mid-stream is recoverable: the LDROM restarts an interrupted update
+    // cleanly, so retry the whole guarded flash. Note flash_firmware_guarded
+    // only returns Ok once the device is back in APROM (boot flag 0), so an
+    // image that does not boot shows up here as an error, not a pass.
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent().unwrap().join("resources/firmware/af_190602.bin");
+    let bytes = std::fs::read(&path).expect("read bundled build");
+    println!("flashing {} ({} bytes, as shipped/encrypted)", path.display(), bytes.len());
+    let t = std::time::Instant::now();
+    let mut flash_err = None;
+    for attempt in 1..=3 {
+        // Wait for the Pico to be on the bus before each attempt; it drops
+        // off when idle or mid-update and re-enumerates on its own.
+        let w = std::time::Instant::now();
+        while f::open_device().is_err() {
+            if w.elapsed() > std::time::Duration::from_secs(180) {
+                panic!("Pico never re-enumerated (attempt {attempt})");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        match f::flash_firmware_guarded(&bytes, Some("M041")) {
+            Ok(()) => { flash_err = None; break; }
+            Err(e) => {
+                println!("flash attempt {attempt} failed: {e}");
+                flash_err = Some(e.to_string());
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        }
+    }
+    match &flash_err {
+        None => println!("flashed in {:.3?}", t.elapsed()),
+        Some(e) => println!("ENCRYPTED FLASH DID NOT COMPLETE: {e}"),
+    }
+
+    // 3. post-flash state (bounded wait; the device may be flapping in
+    // LDROM if the image did not boot — that is a RESULT, not a test error)
+    let mut post: Option<(i32, u8, Option<usize>)> = None;
+    let w = std::time::Instant::now();
+    while w.elapsed() < std::time::Duration::from_secs(90) {
+        if let Ok(mut dev) = f::open_device() {
+            if let Ok(df) = f::read_dataflash_from(&mut dev) {
+                let ver2 = f::parse_fw_version(&df).expect("parse_fw_version failed");
+                let flag = df[4 + 9];
+                println!("after flash: pid={} fw_version={ver2} boot_flag={flag}",
+                    String::from_utf8_lossy(&df[316..320]));
+                let shot = f::screenshot(&mut dev).ok().map(|s| {
+                    let n = s.iter().filter(|b| **b != 0).count();
+                    println!("screenshot nonzero bytes: {n}/{}", s.len());
+                    n
+                });
+                if shot.is_none() {
+                    println!("screenshot: no response (not booted into AF)");
+                }
+                post = Some((ver2, flag, shot));
+                break;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+    if post.is_none() {
+        println!("after flash: device never readable within 90 s");
+    }
+
+    // 4. undo: restore the decrypted af_190602 via the recovery path.
+    // ALWAYS runs — the device must end on af_190602 regardless of how the
+    // encrypted flash went.
+    let undo = std::fs::read("/var/home/j/cloudy-af/AF_fw/decrypted/af_190602.dec.bin")
+        .expect("read undo image");
+    println!("undo: restoring af_190602.dec.bin ({} bytes) via recovery path", undo.len());
+    let t = std::time::Instant::now();
+    let mut restored = false;
+    for attempt in 1..=10 {
+        match f::recovery_flash(&undo, Some("M041"), |s| println!("recovery: {s}")) {
+            Ok(()) => { restored = true; break; }
+            Err(e) => {
+                println!("undo attempt {attempt} failed: {e} — retrying");
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        }
+    }
+    assert!(restored, "undo flash failed after 10 attempts");
+    println!("undo flashed in {:.3?}", t.elapsed());
+    let df = loop {
+        if let Ok(mut dev) = f::open_device() {
+            if let Ok(df) = f::read_dataflash_from(&mut dev) { break df; }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    };
+    let ver3 = f::parse_fw_version(&df).expect("parse_fw_version failed");
+    println!("after undo: pid={} fw_version={ver3}",
+        String::from_utf8_lossy(&df[316..320]));
+    assert_eq!(ver3, 110, "device not back on af_190602");
+
+    // 5. now that the device is safely back on af_190602, assert the
+    // step-2/3 outcome.
+    let (ver2, flag2, shot2) = post.expect("device never readable after encrypted flash");
+    assert!(flash_err.is_none(), "encrypted flash failed: {:?}", flash_err);
+    assert_eq!((ver2, flag2), (110, 0), "encrypted build did not boot into AF");
+    assert!(shot2.is_some(), "AF screenshot did not respond after encrypted flash");
 }
