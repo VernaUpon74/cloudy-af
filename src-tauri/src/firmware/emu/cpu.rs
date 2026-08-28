@@ -165,6 +165,143 @@ impl Cpu {
                 self.r[rdn as usize] = res;
                 self.pc = self.pc.wrapping_add(2);
             }
+            Instr::DataProc { op, rdn, rm } => {
+                let a = self.r[rdn as usize];
+                let b = self.r[rm as usize];
+                match op {
+                    0 => {
+                        // AND
+                        let res = a & b;
+                        self.set_nz(res);
+                        self.r[rdn as usize] = res;
+                    }
+                    1 => {
+                        // EOR
+                        let res = a ^ b;
+                        self.set_nz(res);
+                        self.r[rdn as usize] = res;
+                    }
+                    2 => {
+                        // LSL by register: low byte of rm is the amount; 0 = no shift
+                        let res = self.lsl_c(a, b & 0xFF);
+                        self.set_nz(res);
+                        self.r[rdn as usize] = res;
+                    }
+                    3 => {
+                        // LSR by register: 0 = no shift (unlike imm form, where 0 = 32)
+                        let s = b & 0xFF;
+                        let res = if s == 0 { a } else { self.lsr_c(a, s) };
+                        self.set_nz(res);
+                        self.r[rdn as usize] = res;
+                    }
+                    4 => {
+                        // ASR by register: 0 = no shift
+                        let s = b & 0xFF;
+                        let res = if s == 0 { a } else { self.asr_c(a, s) };
+                        self.set_nz(res);
+                        self.r[rdn as usize] = res;
+                    }
+                    5 => {
+                        // ADC
+                        let res = self.add_flags(a, b, self.c);
+                        self.r[rdn as usize] = res;
+                    }
+                    6 => {
+                        // SBC
+                        let res = self.sub_flags(a, b, self.c);
+                        self.r[rdn as usize] = res;
+                    }
+                    7 => {
+                        // ROR by register
+                        let s0 = b & 0xFF;
+                        let res = if s0 == 0 {
+                            a // C unchanged
+                        } else {
+                            let s = s0 & 31;
+                            if s == 0 {
+                                self.c = a >> 31 != 0;
+                                a
+                            } else {
+                                let res = a.rotate_right(s);
+                                self.c = res >> 31 != 0;
+                                res
+                            }
+                        };
+                        self.set_nz(res);
+                        self.r[rdn as usize] = res;
+                    }
+                    8 => {
+                        // TST: discard result, C unchanged (no shifter here)
+                        self.set_nz(a & b);
+                    }
+                    9 => {
+                        // RSB (negate): rdn = 0 - rm
+                        let res = self.sub_flags(0, b, true);
+                        self.r[rdn as usize] = res;
+                    }
+                    10 => {
+                        // CMP
+                        self.sub_flags(a, b, true);
+                    }
+                    11 => {
+                        // CMN
+                        self.add_flags(a, b, false);
+                    }
+                    12 => {
+                        // ORR
+                        let res = a | b;
+                        self.set_nz(res);
+                        self.r[rdn as usize] = res;
+                    }
+                    13 => {
+                        // MUL: sets N,Z; C,V unchanged
+                        let res = a.wrapping_mul(b);
+                        self.set_nz(res);
+                        self.r[rdn as usize] = res;
+                    }
+                    14 => {
+                        // BIC
+                        let res = a & !b;
+                        self.set_nz(res);
+                        self.r[rdn as usize] = res;
+                    }
+                    _ => {
+                        // 15: MVN
+                        let res = !b;
+                        self.set_nz(res);
+                        self.r[rdn as usize] = res;
+                    }
+                }
+                self.pc = self.pc.wrapping_add(2);
+            }
+            Instr::AddHi { rd, rm } => {
+                // no flags; writes to pc branch (set_reg masks bit0)
+                let res = self.reg(rd).wrapping_add(self.reg(rm));
+                self.set_reg(rd, res);
+                if rd != 15 {
+                    self.pc = self.pc.wrapping_add(2);
+                }
+            }
+            Instr::CmpHi { rn, rm } => {
+                self.sub_flags(self.reg(rn), self.reg(rm), true);
+                self.pc = self.pc.wrapping_add(2);
+            }
+            Instr::MovHi { rd, rm } => {
+                // no flags
+                let v = self.reg(rm);
+                self.set_reg(rd, v);
+                if rd != 15 {
+                    self.pc = self.pc.wrapping_add(2);
+                }
+            }
+            Instr::Bx { rm } => {
+                self.pc = self.reg(rm) & !1;
+            }
+            Instr::Blx { rm } => {
+                let target = self.reg(rm) & !1; // bit0 is the Thumb mode bit
+                self.lr = self.pc.wrapping_add(2) | 1;
+                self.pc = target;
+            }
             Instr::B { off } => {
                 self.pc = (self.pc as i32 + 4 + off) as u32;
             }
@@ -193,7 +330,8 @@ impl Cpu {
         // computes a - b - (1 - cin); cin=true means "no borrow"
         let sub = b.wrapping_add(!cin as u32);
         let res = a.wrapping_sub(sub);
-        self.c = a as u64 >= sub as u64;
+        // borrow comparison without wrapping: b+1 wraps to 0 when b = 0xFFFF_FFFF
+        self.c = a as u64 >= b as u64 + !cin as u64;
         self.v = ((a ^ sub) & (a ^ res)) >> 31 != 0;
         self.set_nz(res);
         res
@@ -359,5 +497,118 @@ mod tests {
         let mut cpu = Cpu::new();
         let err = cpu.run_until(&mut bus, 0x1000, 100).unwrap_err();
         assert!(matches!(err, EmuError::BudgetExceeded { .. }));
+    }
+
+    #[test]
+    fn test_dataproc_mul() {
+        // 0x4348 = muls r0, r1, r0
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0x4348u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[0] = 7; cpu.r[1] = 6;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[0], 42);
+    }
+
+    #[test]
+    fn test_dataproc_rsb() {
+        // 0x4248 = rsbs r0, r1, #0  (negs r0, r1)
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0x4248u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[1] = 5;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[0], (-5i32) as u32);
+        assert!(cpu.n);
+    }
+
+    #[test]
+    fn test_dataproc_adc() {
+        // 0x4140 = adcs r0, r0
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0x4140u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[0] = 1; cpu.c = true;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[0], 3);
+    }
+
+    #[test]
+    fn test_dataproc_sbc_carry_wrap() {
+        // 0x4188 = sbcs r0, r1 ; carried fix: sub_flags borrow comparison
+        // must not wrap when b = 0xFFFF_FFFF and C is clear.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0x4188u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[0] = 5; cpu.r[1] = 0xFFFF_FFFF; cpu.c = false;
+        cpu.step(&mut bus).unwrap();
+        // 5 - 0xFFFF_FFFF - 1 wraps to 5, but always borrows
+        assert_eq!(cpu.r[0], 5);
+        assert!(!cpu.c);
+    }
+
+    #[test]
+    fn test_adds_overflow_v_flag() {
+        // 0x3001 = adds r0, #1
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0x3001u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[0] = 0x7FFF_FFFF;
+        cpu.step(&mut bus).unwrap();
+        assert!(cpu.v);
+        assert!(cpu.n);
+        // no-overflow case
+        cpu.r[0] = 1;
+        cpu.pc = 0;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[0], 2);
+        assert!(!cpu.v);
+    }
+
+    #[test]
+    fn test_mov_hi_and_bx() {
+        // 0x4686 = mov lr, r0 ; 0x4770 = bx lr
+        // (brief said 0x4687, which decodes to mov pc, r0; 0x4686 is mov lr, r0)
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0x4686u16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0x4770u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[0] = 0x41; // bit0 set (thumb)
+        cpu.step(&mut bus).unwrap(); // mov lr, r0
+        assert_eq!(cpu.lr, 0x41);
+        cpu.step(&mut bus).unwrap(); // bx lr
+        assert_eq!(cpu.pc, 0x40); // bit0 masked
+    }
+
+    #[test]
+    fn test_blx_sets_lr() {
+        // 0x4788 = blx r1
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0x4788u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[1] = 0x21;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.pc, 0x20);
+        assert_eq!(cpu.lr, 3); // (0 + 2) | 1
+    }
+
+    #[test]
+    fn test_tst_discards() {
+        // 0x4208 = tst r0, r1
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0x4208u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[0] = 0xF0; cpu.r[1] = 0x0F;
+        cpu.step(&mut bus).unwrap();
+        assert!(cpu.z);
+        assert_eq!(cpu.r[0], 0xF0);
     }
 }

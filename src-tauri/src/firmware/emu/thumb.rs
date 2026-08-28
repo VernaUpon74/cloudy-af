@@ -15,12 +15,37 @@ pub enum Instr {
     CmpImm { rn: u8, imm: u8 },
     AddImm8 { rdn: u8, imm: u8 },
     SubImm8 { rdn: u8, imm: u8 },
+    /// 0x4000..0x43FF data-processing; op 0x0..0xF, low regs only.
+    DataProc { op: u8, rdn: u8, rm: u8 },
+    /// Hi-register add (010001 00); reg ids 0..15. No flags.
+    AddHi { rd: u8, rm: u8 },
+    /// Hi-register compare (010001 01); sets flags.
+    CmpHi { rn: u8, rm: u8 },
+    /// Hi-register move (010001 10); no flags.
+    MovHi { rd: u8, rm: u8 },
+    Bx { rm: u8 },
+    Blx { rm: u8 },
     /// Unconditional branch; `off` is the sign-extended byte offset from pc+4.
     B { off: i32 },
 }
 
 pub fn decode(hw: u16) -> Option<Instr> {
-    // Later tasks add `if` guards above this match for wider encodings.
+    if hw >> 10 == 0b010000 {
+        // 0x4000..0x43FF data-processing
+        return Some(Instr::DataProc { op: ((hw >> 6) & 0xF) as u8, rdn: (hw & 7) as u8, rm: ((hw >> 3) & 7) as u8 });
+    }
+    if hw >> 8 >= 0x44 && hw >> 8 <= 0x47 {
+        // 010001xx hi-reg ops / BX / BLX
+        let op = (hw >> 8) & 3;
+        let rd = ((((hw >> 7) & 1) << 3) | (hw & 7)) as u8;
+        let rm = ((((hw >> 6) & 1) << 3) | ((hw >> 3) & 7)) as u8;
+        return Some(match op {
+            0 => Instr::AddHi { rd, rm },
+            1 => Instr::CmpHi { rn: rd, rm },
+            2 => Instr::MovHi { rd, rm },
+            _ => if (hw >> 7) & 1 == 1 { Instr::Blx { rm } } else { Instr::Bx { rm } },
+        });
+    }
     let instr = match hw >> 11 {
         0b000 => Instr::LslImm { rd: (hw & 7) as u8, rm: ((hw >> 3) & 7) as u8, imm: ((hw >> 6) & 0x1F) as u8 },
         0b001 => Instr::LsrImm { rd: (hw & 7) as u8, rm: ((hw >> 3) & 7) as u8, imm: ((hw >> 6) & 0x1F) as u8 },
