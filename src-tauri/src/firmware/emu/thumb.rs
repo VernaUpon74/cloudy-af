@@ -25,6 +25,22 @@ pub enum Instr {
     MovHi { rd: u8, rm: u8 },
     Bx { rm: u8 },
     Blx { rm: u8 },
+    /// LDR rt, [PC, #imm8*4]; base is (pc+4) & !3. No flags.
+    LdrLit { rt: u8, imm: u8 },
+    /// Register-offset load/store; op: 0=STR,1=STRH,2=STRB,3=LDRSB,4=LDR,5=LDRH,6=LDRB,7=LDRSH.
+    LsReg { op: u8, rt: u8, rn: u8, rm: u8 },
+    /// Word/byte imm5-offset load/store. No flags.
+    LsImm { load: bool, byte: bool, rt: u8, rn: u8, imm: u8 },
+    /// Halfword imm5-offset load/store. No flags.
+    LshImm { load: bool, rt: u8, rn: u8, imm: u8 },
+    /// SP-relative load/store, imm8*4. No flags.
+    LsSp { load: bool, rt: u8, imm: u8 },
+    /// ADD rd, PC, #imm8*4 (ADR); base is (pc+4) & !3. No flags.
+    Adr { rd: u8, imm: u8 },
+    /// ADD rd, SP, #imm8*4. No flags.
+    AddSpImm { rd: u8, imm: u8 },
+    /// ADD/SUB SP, #imm7*4. No flags.
+    AdjSp { sub: bool, imm: u8 },
     /// Unconditional branch; `off` is the sign-extended byte offset from pc+4.
     B { off: i32 },
 }
@@ -45,6 +61,39 @@ pub fn decode(hw: u16) -> Option<Instr> {
             2 => Instr::MovHi { rd, rm },
             _ => if (hw >> 7) & 1 == 1 { Instr::Blx { rm } } else { Instr::Bx { rm } },
         });
+    }
+    // Group C (loads/stores, ADR, SP adjust). These guards sit above the
+    // group-A `match hw >> 11`; their top-bit patterns (0x4800+, 0x5000+,
+    // 0x6000..0x9FFF, 0xA000+, 0xB0xx) do not overlap the group-B guards
+    // (0x4000..0x47FF) checked above.
+    if hw >> 11 == 0b01001 {
+        // LDR literal
+        return Some(Instr::LdrLit { rt: ((hw >> 8) & 7) as u8, imm: (hw & 0xFF) as u8 });
+    }
+    if hw >> 12 == 0b0101 {
+        // load/store with register offset
+        return Some(Instr::LsReg { op: ((hw >> 9) & 7) as u8, rm: ((hw >> 6) & 7) as u8, rn: ((hw >> 3) & 7) as u8, rt: (hw & 7) as u8 });
+    }
+    if hw >> 13 == 0b011 {
+        // load/store word/byte with imm5 offset
+        let op = (hw >> 11) & 3; // 0=STR,1=LDR,2=STRB,3=LDRB
+        return Some(Instr::LsImm { load: op & 1 == 1, byte: op >= 2, rt: (hw & 7) as u8, rn: ((hw >> 3) & 7) as u8, imm: ((hw >> 6) & 0x1F) as u8 });
+    }
+    if hw >> 12 == 0b1000 {
+        // load/store halfword with imm5 offset
+        return Some(Instr::LshImm { load: (hw >> 11) & 1 == 1, rt: (hw & 7) as u8, rn: ((hw >> 3) & 7) as u8, imm: ((hw >> 6) & 0x1F) as u8 });
+    }
+    if hw >> 12 == 0b1001 {
+        // SP-relative load/store
+        return Some(Instr::LsSp { load: (hw >> 11) & 1 == 1, rt: ((hw >> 8) & 7) as u8, imm: (hw & 0xFF) as u8 });
+    }
+    if hw >> 12 == 0b1010 {
+        // ADR / ADD rd, SP, #imm8*4
+        let rd = ((hw >> 8) & 7) as u8; let imm = (hw & 0xFF) as u8;
+        return Some(if (hw >> 11) & 1 == 0 { Instr::Adr { rd, imm } } else { Instr::AddSpImm { rd, imm } });
+    }
+    if hw >> 8 == 0xB0 { // 1011 0000 x imm7  SP adjust
+        return Some(Instr::AdjSp { sub: (hw >> 7) & 1 == 1, imm: (hw & 0x7F) as u8 });
     }
     let instr = match hw >> 11 {
         0b000 => Instr::LslImm { rd: (hw & 7) as u8, rm: ((hw >> 3) & 7) as u8, imm: ((hw >> 6) & 0x1F) as u8 },
