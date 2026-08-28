@@ -47,10 +47,14 @@ impl Bus {
         self.stubs.insert(addr, value);
     }
 
-    fn resolve(&self, addr: u32) -> Result<Region, EmuError> {
-        if addr >= FLASH_BASE && (addr - FLASH_BASE) < self.flash.len() as u32 {
+    /// Resolve the region containing the whole access `addr .. addr + size`.
+    /// Any byte outside the region makes the entire access `Unmapped` — never
+    /// let a multi-byte access index past the end of a backing vec.
+    fn resolve(&self, addr: u32, size: u8) -> Result<Region, EmuError> {
+        let size = size as u64;
+        if addr >= FLASH_BASE && (addr - FLASH_BASE) as u64 + size <= self.flash.len() as u64 {
             Ok(Region::Flash((addr - FLASH_BASE) as usize))
-        } else if addr >= RAM_BASE && (addr - RAM_BASE) < self.ram.len() as u32 {
+        } else if addr >= RAM_BASE && (addr - RAM_BASE) as u64 + size <= self.ram.len() as u64 {
             Ok(Region::Ram((addr - RAM_BASE) as usize))
         } else if (0x4000_0000..0x6000_0000).contains(&addr) || addr >= 0xE000_0000 {
             Ok(Region::Peripheral)
@@ -69,10 +73,10 @@ impl Bus {
 
     fn read(&self, addr: u32, size: u8) -> Result<u32, EmuError> {
         self.check_align(addr, size)?;
-        let size = size as usize;
-        match self.resolve(addr)? {
-            Region::Flash(off) => Ok(self.read_le(&self.flash, off, size)),
-            Region::Ram(off) => Ok(self.read_le(&self.ram, off, size)),
+        let size_us = size as usize;
+        match self.resolve(addr, size)? {
+            Region::Flash(off) => Ok(self.read_le(&self.flash, off, size_us)),
+            Region::Ram(off) => Ok(self.read_le(&self.ram, off, size_us)),
             Region::Peripheral => Ok(self.stubs.get(&addr).copied().unwrap_or(0)),
         }
     }
@@ -97,10 +101,19 @@ impl Bus {
         self.read(addr, 4)
     }
 
+    /// Whole-range ACL: the access `addr .. addr + size` must lie within ONE
+    /// allow region (matching how regions are carved) to avoid a violation.
+    fn allowed(&self, addr: u32, size: u8) -> bool {
+        let (start, end) = (addr as u64, addr as u64 + size as u64);
+        self.allow
+            .iter()
+            .any(|r| r.start as u64 <= start && end <= r.end as u64)
+    }
+
     fn write(&mut self, addr: u32, value: u32, size: u8) -> Result<(), EmuError> {
         self.check_align(addr, size)?;
         let record = WriteRecord { addr, value, size };
-        match self.resolve(addr)? {
+        match self.resolve(addr, size)? {
             Region::Flash(_) => {
                 // CPU stores cannot write flash on real hardware — runaway code.
                 self.acl_violations.push(record);
@@ -109,7 +122,7 @@ impl Bus {
                 for i in 0..size as usize {
                     self.ram[off + i] = (value >> (8 * i)) as u8;
                 }
-                if !self.allow.iter().any(|r| r.contains(&addr)) {
+                if !self.allowed(addr, size) {
                     self.acl_violations.push(record.clone());
                 }
                 self.write_log.push(record);
@@ -195,5 +208,39 @@ mod tests {
         b.write_u32(RAM_BASE + 0x100, 0x0102_0304).unwrap();
         assert_eq!(b.read_u8(RAM_BASE + 0x100).unwrap(), 0x04);
         assert_eq!(b.read_u16(RAM_BASE + 0x102).unwrap(), 0x0102);
+    }
+
+    #[test]
+    fn test_read_straddling_ram_end_is_unmapped_not_panic() {
+        // RAM size not a multiple of 4 so an aligned u32 read can straddle the end.
+        let b = Bus::new(vec![0u8; 0x1000], 0x1002);
+        assert!(matches!(
+            b.read_u32(RAM_BASE + 0x1000), // covers 0x1000..0x1004, RAM ends at 0x1002
+            Err(EmuError::Unmapped { .. })
+        ));
+    }
+
+    #[test]
+    fn test_write_straddling_flash_end_is_unmapped_not_panic() {
+        // Flash size not a multiple of 4 so an aligned u32 write can straddle the end.
+        let mut b = Bus::new(vec![0u8; 0x1002], 0x1000);
+        assert!(matches!(
+            b.write_u32(FLASH_BASE + 0x1000, 0xFFFF_FFFF), // covers 0x1000..0x1004
+            Err(EmuError::Unmapped { .. })
+        ));
+        assert!(b.acl_violations.is_empty()); // error, not a recorded violation
+    }
+
+    #[test]
+    fn test_write_straddling_allow_region_end_is_violation_but_applied() {
+        let mut b = bus();
+        b.allow_region(RAM_BASE + 0x400..RAM_BASE + 0x402); // end not 4-aligned
+        b.write_u16(RAM_BASE + 0x400, 0xBEEF).unwrap(); // 0x400..0x402 fits the region
+        assert!(b.acl_violations.is_empty());
+        b.write_u32(RAM_BASE + 0x400, 0xAABB_CCDD).unwrap(); // 0x400..0x404 straddles region end
+        assert_eq!(b.read_u32(RAM_BASE + 0x400).unwrap(), 0xAABB_CCDD); // applied
+        assert_eq!(b.acl_violations.len(), 1);
+        assert_eq!(b.acl_violations[0].addr, RAM_BASE + 0x400);
+        assert_eq!(b.write_log.len(), 2);
     }
 }
