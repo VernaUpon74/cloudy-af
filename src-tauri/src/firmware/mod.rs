@@ -7,6 +7,7 @@ pub mod loader;
 pub mod patch;
 pub mod state;
 pub mod stock;
+pub mod emu;
 
 #[cfg(test)]
 mod tests;
