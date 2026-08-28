@@ -320,19 +320,21 @@ impl Cpu {
         let res = a.wrapping_add(b).wrapping_add(cin as u32);
         let wide = a as u64 + b as u64 + cin as u64;
         self.c = wide > 0xFFFF_FFFF;
-        let b2 = b.wrapping_add(cin as u32);
-        self.v = (!(a ^ b2) & (a ^ res)) >> 31 != 0;
+        // wide signed sum: b+cin can wrap the sign bit (b = 0x7FFF_FFFF, cin)
+        let wide_s = a as i32 as i64 + b as i32 as i64 + cin as i64;
+        self.v = wide_s > i32::MAX as i64 || wide_s < i32::MIN as i64;
         self.set_nz(res);
         res
     }
 
     fn sub_flags(&mut self, a: u32, b: u32, cin: bool) -> u32 {
         // computes a - b - (1 - cin); cin=true means "no borrow"
-        let sub = b.wrapping_add(!cin as u32);
-        let res = a.wrapping_sub(sub);
+        let res = a.wrapping_sub(b).wrapping_sub(!cin as u32);
         // borrow comparison without wrapping: b+1 wraps to 0 when b = 0xFFFF_FFFF
         self.c = a as u64 >= b as u64 + !cin as u64;
-        self.v = ((a ^ sub) & (a ^ res)) >> 31 != 0;
+        // wide signed difference: b+!cin can wrap the sign bit (b = 0x7FFF_FFFF, !cin)
+        let wide_s = a as i32 as i64 - b as i32 as i64 - (!cin as i64);
+        self.v = wide_s > i32::MAX as i64 || wide_s < i32::MIN as i64;
         self.set_nz(res);
         res
     }
@@ -597,6 +599,36 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.pc, 0x20);
         assert_eq!(cpu.lr, 3); // (0 + 2) | 1
+    }
+
+    #[test]
+    fn test_sbc_v_flag_sign_corner() {
+        // 0x4188 = sbcs r0, r1 ; V must not be computed against the
+        // wrapped b+!cin (0x7FFF_FFFF + 1 wraps the sign bit).
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0x4188u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[0] = 0xFFFF_FFFF; cpu.r[1] = 0x7FFF_FFFF; cpu.c = false;
+        cpu.step(&mut bus).unwrap();
+        // -1 - 2147483647 - 1 = -2147483649, below i32::MIN
+        assert_eq!(cpu.r[0], 0x7FFF_FFFF);
+        assert!(cpu.v);
+    }
+
+    #[test]
+    fn test_adc_v_flag_sign_corner() {
+        // 0x4148 = adcs r0, r1 ; b+cin wraps the sign bit
+        // (0x7FFF_FFFF + 1 = 0x8000_0000), so the XOR formula misses V.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0x4148u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[0] = 0; cpu.r[1] = 0x7FFF_FFFF; cpu.c = true;
+        cpu.step(&mut bus).unwrap();
+        // 0 + 0x7FFF_FFFF + 1 = 0x8000_0000, past i32::MAX
+        assert_eq!(cpu.r[0], 0x8000_0000);
+        assert!(cpu.v);
     }
 
     #[test]
