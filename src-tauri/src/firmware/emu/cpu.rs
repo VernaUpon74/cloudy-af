@@ -61,6 +61,20 @@ impl Cpu {
         }
         let pc = self.pc;
         let hw = bus.read_u16(pc)?;
+        if hw >> 11 == 0b11110 {
+            // BL: 32-bit. decode() is pure and cannot see the second
+            // halfword, so intercept here and skip the decode call.
+            let hw2 = bus.read_u16(pc.wrapping_add(2))?;
+            let s = (hw >> 10) & 1;
+            let j1 = (hw2 >> 13) & 1;
+            let j2 = (hw2 >> 11) & 1;
+            let i1 = (!(j1 ^ s)) & 1;
+            let i2 = (!(j2 ^ s)) & 1;
+            let imm25 = ((s as u32) << 24) | ((i1 as u32) << 23) | ((i2 as u32) << 22)
+                | (((hw & 0x3FF) as u32) << 12) | (((hw2 & 0x7FF) as u32) << 1);
+            let off = ((imm25 << 7) as i32) >> 7; // sign-extend 25 bits
+            return self.execute(bus, Instr::Bl { off });
+        }
         let instr = decode(hw).ok_or(EmuError::Undefined { pc, instr: hw })?;
         self.execute(bus, instr)
     }
@@ -304,8 +318,8 @@ impl Cpu {
             }
             Instr::LdrLit { rt, imm } => {
                 // no flags; base is the aligned pc+4
-                let base = (self.pc + 4) & !3;
-                let addr = base + (imm as u32) * 4;
+                let base = self.pc.wrapping_add(4) & !3;
+                let addr = base.wrapping_add((imm as u32) * 4);
                 let v = bus.read_u32(addr)?;
                 self.r[rt as usize] = v;
                 self.pc = self.pc.wrapping_add(2);
@@ -327,7 +341,7 @@ impl Cpu {
             }
             Instr::LsImm { load, byte, rt, rn, imm } => {
                 // no flags
-                let addr = self.r[rn as usize] + (imm as u32) * (if byte { 1 } else { 4 });
+                let addr = self.r[rn as usize].wrapping_add((imm as u32) * (if byte { 1 } else { 4 }));
                 match (load, byte) {
                     (false, false) => bus.write_u32(addr, self.r[rt as usize])?,
                     (false, true) => bus.write_u8(addr, self.r[rt as usize] as u8)?,
@@ -338,7 +352,7 @@ impl Cpu {
             }
             Instr::LshImm { load, rt, rn, imm } => {
                 // no flags
-                let addr = self.r[rn as usize] + (imm as u32) * 2;
+                let addr = self.r[rn as usize].wrapping_add((imm as u32) * 2);
                 if load {
                     self.r[rt as usize] = bus.read_u16(addr)? as u32;
                 } else {
@@ -348,7 +362,7 @@ impl Cpu {
             }
             Instr::LsSp { load, rt, imm } => {
                 // no flags
-                let addr = self.sp + (imm as u32) * 4;
+                let addr = self.sp.wrapping_add((imm as u32) * 4);
                 if load {
                     self.r[rt as usize] = bus.read_u32(addr)?;
                 } else {
@@ -358,12 +372,12 @@ impl Cpu {
             }
             Instr::Adr { rd, imm } => {
                 // no flags; base is the aligned pc+4
-                self.r[rd as usize] = ((self.pc + 4) & !3) + (imm as u32) * 4;
+                self.r[rd as usize] = (self.pc.wrapping_add(4) & !3).wrapping_add((imm as u32) * 4);
                 self.pc = self.pc.wrapping_add(2);
             }
             Instr::AddSpImm { rd, imm } => {
                 // no flags
-                self.r[rd as usize] = self.sp + (imm as u32) * 4;
+                self.r[rd as usize] = self.sp.wrapping_add((imm as u32) * 4);
                 self.pc = self.pc.wrapping_add(2);
             }
             Instr::AdjSp { sub, imm } => {
@@ -377,10 +391,133 @@ impl Cpu {
                 self.pc = self.pc.wrapping_add(2);
             }
             Instr::B { off } => {
-                self.pc = (self.pc as i32 + 4 + off) as u32;
+                self.pc = (self.pc as i32).wrapping_add(4).wrapping_add(off) as u32;
+            }
+            Instr::Push { list, lr } => {
+                // no flags; full descending stack: decrement first, store ascending
+                let count = list.count_ones() + lr as u32;
+                let mut addr = self.sp.wrapping_sub(4 * count);
+                self.sp = addr;
+                for i in 0..8u8 {
+                    if list >> i & 1 == 1 {
+                        bus.write_u32(addr, self.r[i as usize])?;
+                        addr = addr.wrapping_add(4);
+                    }
+                }
+                if lr {
+                    bus.write_u32(addr, self.lr)?;
+                }
+                self.pc = self.pc.wrapping_add(2);
+            }
+            Instr::Pop { list, pc } => {
+                // no flags; load ascending, then pop PC last (bit0 masked)
+                let mut addr = self.sp;
+                for i in 0..8u8 {
+                    if list >> i & 1 == 1 {
+                        self.r[i as usize] = bus.read_u32(addr)?;
+                        addr = addr.wrapping_add(4);
+                    }
+                }
+                let new_pc = if pc {
+                    let v = bus.read_u32(addr)?;
+                    addr = addr.wrapping_add(4);
+                    Some(v & !1)
+                } else {
+                    None
+                };
+                self.sp = addr;
+                self.pc = new_pc.unwrap_or_else(|| self.pc.wrapping_add(2));
+            }
+            Instr::Stm { rn, list } => {
+                // no flags; store ascending, writeback rn += 4*count
+                let mut addr = self.r[rn as usize];
+                for i in 0..8u8 {
+                    if list >> i & 1 == 1 {
+                        bus.write_u32(addr, self.r[i as usize])?;
+                        addr = addr.wrapping_add(4);
+                    }
+                }
+                self.r[rn as usize] = addr;
+                self.pc = self.pc.wrapping_add(2);
+            }
+            Instr::Ldm { rn, list } => {
+                // no flags; load ascending, writeback unless rn is in the list
+                let mut addr = self.r[rn as usize];
+                for i in 0..8u8 {
+                    if list >> i & 1 == 1 {
+                        self.r[i as usize] = bus.read_u32(addr)?;
+                        addr = addr.wrapping_add(4);
+                    }
+                }
+                if list >> rn & 1 == 0 {
+                    self.r[rn as usize] = addr;
+                }
+                self.pc = self.pc.wrapping_add(2);
+            }
+            Instr::BCond { cond, off } => {
+                if self.cond_true(cond) {
+                    self.pc = (self.pc as i32).wrapping_add(4).wrapping_add(off) as u32;
+                } else {
+                    self.pc = self.pc.wrapping_add(2);
+                }
+            }
+            Instr::Bl { off } => {
+                // lr/pc update lives here; step() decodes the two halfwords
+                self.lr = self.pc.wrapping_add(4) | 1;
+                self.pc = (self.pc as i32).wrapping_add(4).wrapping_add(off) as u32;
+            }
+            Instr::Svc { .. } | Instr::Bkpt { .. } => {
+                // no meaning in this harness; just advance
+                self.pc = self.pc.wrapping_add(2);
+            }
+            Instr::Extend { op, rd, rm } => {
+                // no flags; 0=SXTH, 1=SXTB, 2=UXTH, 3=UXTB
+                let v = self.r[rm as usize];
+                self.r[rd as usize] = match op {
+                    0 => v as i16 as i32 as u32,
+                    1 => v as i8 as i32 as u32,
+                    2 => v & 0xFFFF,
+                    _ => v & 0xFF,
+                };
+                self.pc = self.pc.wrapping_add(2);
+            }
+            Instr::Rev { op, rd, rm } => {
+                // no flags; 0=REV, 1=REV16, 3=REVSH
+                let v = self.r[rm as usize];
+                self.r[rd as usize] = match op {
+                    0 => v.swap_bytes(),
+                    1 => (v << 8 & 0xFF00_FF00) | (v >> 8 & 0x00FF_00FF),
+                    _ => (v as u16).swap_bytes() as i16 as i32 as u32,
+                };
+                self.pc = self.pc.wrapping_add(2);
+            }
+            Instr::Nop => {
+                self.pc = self.pc.wrapping_add(2);
             }
         }
         Ok(())
+    }
+
+    /// Evaluate a 4-bit condition code against the flags (cond 14/15 are
+    /// never passed here: decode maps 15 to Svc and rejects 14).
+    fn cond_true(&self, cond: u8) -> bool {
+        match cond {
+            0 => self.z,
+            1 => !self.z,
+            2 => self.c,
+            3 => !self.c,
+            4 => self.n,
+            5 => !self.n,
+            6 => self.v,
+            7 => !self.v,
+            8 => self.c && !self.z,
+            9 => !self.c || self.z,
+            10 => self.n == self.v,
+            11 => self.n != self.v,
+            12 => !self.z && self.n == self.v,
+            13 => self.z || self.n != self.v,
+            _ => false,
+        }
     }
 
     // ---- flag / shift helpers (shared by all decode groups) ----
@@ -801,5 +938,113 @@ mod tests {
         cpu.r[1] = RAM_BASE + 0x101;
         let err = cpu.step(&mut bus).unwrap_err();
         assert!(matches!(err, EmuError::Unaligned { size: 4, .. }));
+    }
+
+    #[test]
+    fn test_push_pop_roundtrip() {
+        // 0xB510 = push {r4, lr} ; 0xBD10 = pop {r4, pc}
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xB510u16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0xBD10u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.sp = RAM_BASE + 0x800;
+        cpu.r[4] = 0x1122_3344;
+        cpu.lr = 0x61; // thumb return to 0x60
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.sp, RAM_BASE + 0x7F8);
+        cpu.r[4] = 0; // clobber to prove pop restores
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[4], 0x1122_3344);
+        assert_eq!(cpu.sp, RAM_BASE + 0x800);
+        assert_eq!(cpu.pc, 0x60);
+    }
+
+    #[test]
+    fn test_bcond_taken_and_not() {
+        // 0xD101 = bne +2
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xD101u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.z = false;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.pc, 6); // 0 + 4 + 2
+        let mut cpu2 = Cpu::new();
+        cpu2.z = true;
+        cpu2.step(&mut bus).unwrap();
+        assert_eq!(cpu2.pc, 2);
+    }
+
+    #[test]
+    fn test_bl_link_and_target() {
+        // BL to +0x10: first hw 0xF000, second 0xF808 (S=0,imm10=0,J1=J2=1,imm11=8 -> off=16)
+        // (brief said 0xF008, which has J2=0 and yields off=0x400010 under the
+        // ARM formula; 0xF808 is the encoding matching the stated fields)
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xF000u16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0xF808u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.pc, 0x14); // 0 + 4 + 16
+        assert_eq!(cpu.lr, 5);    // (0+4)|1
+    }
+
+    #[test]
+    fn test_stm_ldm() {
+        // 0xC006 = stm r0!, {r1, r2} ; 0xC806 = ldm r0!, {r1, r2}
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xC006u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[0] = RAM_BASE + 0x100;
+        cpu.r[1] = 0x11; cpu.r[2] = 0x22;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[0], RAM_BASE + 0x108);
+        assert_eq!(bus.read_u32(RAM_BASE + 0x100).unwrap(), 0x11);
+        assert_eq!(bus.read_u32(RAM_BASE + 0x104).unwrap(), 0x22);
+    }
+
+    #[test]
+    fn test_extend_and_rev() {
+        // 0xB201 = sxth r1, r0 ; 0xBA01 = rev r1, r0
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xB201u16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0xBA01u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[0] = 0x1234_80FF;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[1], 0xFFFF_80FF);
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[1], 0xFF80_3412);
+    }
+
+    #[test]
+    fn test_undefined_instruction_faults() {
+        // 0xDE00 is architecturally undefined in v6-M
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xDE00u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        let err = cpu.step(&mut bus).unwrap_err();
+        assert!(matches!(err, EmuError::Undefined { pc: 0, instr: 0xDE00 }));
+    }
+
+    #[test]
+    fn test_wild_address_faults_not_panics() {
+        // carried ruling: address arithmetic must wrap, not panic in debug.
+        // 0x6848 = ldr r0, [r1, #4] with r1 = 0xFFFF_FFFE wraps the base+offset
+        // add to 2; the step must produce a clean EmuError (unaligned here).
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0x6848u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[1] = 0xFFFF_FFFE;
+        let err = cpu.step(&mut bus).unwrap_err();
+        assert!(matches!(err, EmuError::Unaligned { addr: 2, size: 4 }));
     }
 }

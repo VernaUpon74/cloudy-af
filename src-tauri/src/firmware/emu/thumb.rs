@@ -43,6 +43,28 @@ pub enum Instr {
     AdjSp { sub: bool, imm: u8 },
     /// Unconditional branch; `off` is the sign-extended byte offset from pc+4.
     B { off: i32 },
+    /// PUSH register list; `lr` = store LR too. No flags.
+    Push { list: u8, lr: bool },
+    /// POP register list; `pc` = load PC too (masks bit0). No flags.
+    Pop { list: u8, pc: bool },
+    /// STM rn!, {list}: store ascending, writeback. No flags.
+    Stm { rn: u8, list: u8 },
+    /// LDM rn!, {list}: load ascending, writeback unless rn in list. No flags.
+    Ldm { rn: u8, list: u8 },
+    /// Conditional branch; `off` is the sign-extended byte offset from pc+4.
+    BCond { cond: u8, off: i32 },
+    /// 32-bit branch-with-link; decoded in Cpu::step (needs the second halfword).
+    Bl { off: i32 },
+    /// Supervisor call; a no-op in this harness.
+    Svc { imm: u8 },
+    /// Breakpoint; a no-op in this harness.
+    Bkpt { imm: u8 },
+    /// Sign/zero extend; op: 0=SXTH,1=SXTB,2=UXTH,3=UXTB. No flags.
+    Extend { op: u8, rd: u8, rm: u8 },
+    /// Byte reverse; op: 0=REV,1=REV16,3=REVSH. No flags.
+    Rev { op: u8, rd: u8, rm: u8 },
+    /// NOP and other hints (incl. CPS). No flags.
+    Nop,
 }
 
 pub fn decode(hw: u16) -> Option<Instr> {
@@ -94,6 +116,39 @@ pub fn decode(hw: u16) -> Option<Instr> {
     }
     if hw >> 8 == 0xB0 { // 1011 0000 x imm7  SP adjust
         return Some(Instr::AdjSp { sub: (hw >> 7) & 1 == 1, imm: (hw & 0x7F) as u8 });
+    }
+    // Group D (stack ops, multi load/store, branches, misc). Same placement
+    // reasoning as group C: these top-bit patterns (0xB2xx+, 0xB4xx..0xBFxx,
+    // 0xC000+, 0xD000+) do not overlap the group-B guards checked above.
+    if hw >> 9 == 0b1011_010 { // 0xB400/0xB500 PUSH: 1011 0 10 1 list
+        return Some(Instr::Push { list: (hw & 0xFF) as u8, lr: (hw >> 8) & 1 == 1 });
+    }
+    if hw >> 9 == 0b1011_110 { // POP: 1011 1 10 1 list
+        return Some(Instr::Pop { list: (hw & 0xFF) as u8, pc: (hw >> 8) & 1 == 1 });
+    }
+    if hw >> 8 == 0xBA && (hw >> 6) & 3 != 2 { // REV family
+        return Some(Instr::Rev { op: ((hw >> 6) & 3) as u8, rd: (hw & 7) as u8, rm: ((hw >> 3) & 7) as u8 });
+    }
+    if hw >> 8 == 0xB2 { // extend family
+        return Some(Instr::Extend { op: ((hw >> 6) & 3) as u8, rd: (hw & 7) as u8, rm: ((hw >> 3) & 7) as u8 });
+    }
+    if hw >> 8 == 0xBE { return Some(Instr::Bkpt { imm: (hw & 0xFF) as u8 }); }
+    if hw >> 8 == 0xBF || hw == 0xB660 { return Some(Instr::Nop); } // hints + CPS
+    if hw >> 12 == 0b1100 {
+        let rn = ((hw >> 8) & 7) as u8; let list = (hw & 0xFF) as u8;
+        return Some(if (hw >> 11) & 1 == 0 { Instr::Stm { rn, list } } else { Instr::Ldm { rn, list } });
+    }
+    if hw >> 12 == 0b1101 {
+        let cond = ((hw >> 8) & 0xF) as u8;
+        if cond == 0b1111 { return Some(Instr::Svc { imm: (hw & 0xFF) as u8 }); }
+        if cond == 0b1110 { return None; }
+        let off = ((hw & 0xFF) as i32) << 24 >> 23; // sign-extend imm8<<1
+        return Some(Instr::BCond { cond, off });
+    }
+    if hw >> 11 == 0b11110 { // BL prefix; second halfword at pc+2
+        // decode() is pure; BL needs the second halfword, so Cpu::step
+        // intercepts this encoding before calling decode.
+        unreachable!("Cpu::step intercepts the BL prefix before decode");
     }
     let instr = match hw >> 11 {
         0b000 => Instr::LslImm { rd: (hw & 7) as u8, rm: ((hw >> 3) & 7) as u8, imm: ((hw >> 6) & 0x1F) as u8 },
