@@ -1,9 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.16.0 — 2026-09-03
 
 ### Added
 - **Firmware Editor → Recovery tab**: emergency recovery flasher that waits for a bricked device to enumerate (handles USB flapping), optionally guards on Product ID (e.g. `M041`), streams the image with retry/backoff, restarts the device, and verifies it boots the flashed firmware. Includes a live connected-devices list.
+- **All ArcticFox-compatible devices are now recognised**, not just the iStick Pico: the device list grew from 19 Eleaf-only Product IDs to the full 47 known IDs (Joyetech eVic/Cuboid/eGrip, Eleaf iStick, Wismec Presa/Reuleaux, Vaporflask, Beyondvape, Vaponaute, Vapor Shark). All share the same Nuvoton HID interface (VID `0x0416` / PID `0x5020`); no udev rule changes needed.
+- **VandalProof decryption documented with the recovered AES key** (`FA89412D87B0EFD9` as ASCII): see `docs/vandalproof-encryption.md`.
 - **Appearance → Clock Type → Clock Animation** dropdown (Off / Swirl / Gradient Fade / Rippling Wave), persisted in `.afc` configs as `ClockAnimation`. Disabled until firmware patch support lands.
 - Default TFR/power-curve plot data: zeroed tables fall back to the built-in default curves so plots never render a flat zero line.
 - Hardware-in-the-loop tests (`cargo test -- --ignored`) covering dataflash reads, multi-device enumeration, screenshots, logo writes, and recovery flashing.
@@ -17,9 +19,18 @@
   - Firmware streaming retries with backoff while the LDROM programs flash (was a hard failure mid-flash).
 - Product ID read offset corrected for the 4-byte dataflash checksum prefix.
 - Flashing now restarts the device afterwards and waits for it to return in APROM mode.
+- **Firmware Editor failed to open STM32-line builds** (`af_211009.bin`, "Definition not found"): the shipped `resources/definitions/ArcticFox.xml` lacked the STM32-line definition (`Joyetech APP` marker) that the test suite had inlined. Definition added; the stock test now parses the shipped file so the gap can't regress.
+- **Puff Cut-Off ignored on current firmware (SettingsVersion 12)**: the v12 config layout widened `PuffCutOff` from u8 to u16 (tenths of a second, up to 60 s), but the config codec still used the v11 single byte — misaligning every Advanced field after it (battery offsets, TFR tables, power curves all read/written shifted by one byte). The codec now branches on SettingsVersion; encode/decode round-trips byte-exact against the live device, and the UI cap is raised 15 s → 60 s.
+- Float truncation on scaled config writes (`Voltage * 100`, `Factor * 10000`, power/resistance scaling) could land one unit low; all scaled encodes now round.
+- **Firmware flash hardening** (audit of the Firmware Editor flash path):
+  - Flashing from the editor now verifies the connected device's Product ID belongs to the firmware's device line (Nuvoton vs STM32), refusing cross-line flashes. The guard check runs *before* the device is switched to bootloader mode, so a refused flash leaves the device untouched.
+  - The post-flash restart is retried with backoff instead of failing single-shot while the LDROM finalizes flash — a successful flash is no longer reported as failed.
+  - The HID sidecar (config polling) is suspended for the duration of any flash/undo/recovery operation, closing a race where config commands could interleave into the firmware stream.
+  - Firmware images are size-checked before streaming (1 KiB–128 KiB); oversized images are rejected instead of being written past the end of APROM.
+- **Flatpak builds didn't bundle `resources/firmware`**, so Download Stock / Open Stock Build failed with "firmware resource directory not found". Both manifests now copy it.
 
 ### Changed
-- Firmware with no recognised encryption marker (e.g. VandalProof-encrypted update packages) now fails with a clear "unsupported encryption" error instead of silently producing garbage. Note: VandalProof decryption happens on-device (LDROM); encrypted `.bin` files can still be flashed directly.
+- VandalProof-encrypted update packages are now decrypted in-app (AES-128-CBC, key `FA89412D87B0EFD9` as ASCII, IV = first 16 bytes of the file — see `docs/vandalproof-encryption.md`). They can also still be flashed as-is: VandalProof decryption happens on-device (LDROM).
 
 ## 1.15.3 — 2026-08-15
 

@@ -198,6 +198,21 @@ Start the application and connect your ArcticFox device. The app will automatica
 device and download its configuration. Use the tabs to edit profiles, power curves, TFR tables,
 and device settings, then click **Upload** to write the configuration back to the device.
 
+All ArcticFox-compatible devices are supported (Joyetech eVic/Cuboid/eGrip, Eleaf iStick,
+Wismec Presa/Reuleaux, Vaporflask, and friends) — they all share the same Nuvoton HID
+bootloader interface (VID `0x0416` / PID `0x5020`) and are told apart by the Product ID
+string in the device dataflash.
+
+## Firmware encryption (VandalProof)
+
+ArcticFox firmware update packages (`af_*.bin`, 2018 and later) are encrypted with
+"VandalProof": AES-128-CBC, the first 16 bytes of the file are the IV, PKCS7 padding.
+The AES key is the 16 ASCII bytes of the string **`FA89412D87B0EFD9`**
+(key bytes hex: `46 41 38 39 34 31 32 44 38 37 42 30 45 46 44 39`), recovered from
+NFirmwareEditor's obfuscated loader. Full format and provenance:
+[docs/vandalproof-encryption.md](docs/vandalproof-encryption.md). The app decrypts these
+packages in-app; they can also be flashed as-is (the on-device LDROM updater decrypts them).
+
 ## Debug
 
 If no device is detected, follow the USB permissions instructions above.
@@ -280,12 +295,14 @@ Notable changes include:
 - Lite mode support in Appearance settings
 - Hover tooltips on all settings rows (specific vape-function descriptions where available)
 - Dependency security updates (`highcharts` 9.x, `xml2js` 0.6.2, local `put` replacement)
+- Firmware Editor: open/edit/patch/flash ArcticFox firmware images (all encryption schemes, incl. VandalProof), with an emergency recovery flasher
+- Support for every ArcticFox-compatible device (47 Product IDs: Joyetech, Eleaf, Wismec, Vaporflask…), not just the iStick Pico
 
 
 Planned developments include:
-- Firmware update tool
 - Screen animations
 - Auto TFR curve plotting
+- Device Monitor (live device telemetry window like NToolbox's; the in-progress firmware emulation harness — `src-tauri/src/firmware/emu/` — will be used to replicate its rendering behaviour)
 
 ## Contributing
 

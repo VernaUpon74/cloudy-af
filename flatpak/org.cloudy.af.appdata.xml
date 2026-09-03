@@ -34,6 +34,11 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
+    <release version="1.16.0" date="2026-09-03">
+      <description>
+        <p>Added Firmware Editor Recovery tab, support for all 47 ArcticFox-compatible device Product IDs, in-app VandalProof firmware decryption, and bundled stock firmware library. Fixed STM32-line firmware opening and Flatpak resource bundling.</p>
+      </description>
+    </release>
     <release version="1.15.3" date="2026-08-15">
       <description>
         <p>Added Firmware Editor window with Patches tab for opening, patching, saving, and flashing ArcticFox firmware binaries. Added Undo Changes backup restore.</p>

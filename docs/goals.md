@@ -24,6 +24,12 @@ Loose ends carried over from the firmware read-back Phase 1 plan
       display is asleep (wake via button press and capture immediately);
       PNG packing in `test_screenshot_hardware` renders garbage at the top —
       revisit in Phase 3 (screenshot verification).
+- [ ] Device Monitor: replicate NToolbox's live device-monitoring window
+      (telemetry readouts). The firmware emulation harness
+      (`src-tauri/src/firmware/emu/`, plan
+      `docs/superpowers/plans/2026-08-28-firmware-emulation-harness.md`) is
+      intended to help replicate its rendering. NToolbox runs locally for
+      reference via Wine — see `docs/wine-usb-passthrough.md`.
 - [x] Phase 2 — stock library & pipeline: use `flasher::read_fw_version()`
       to match the device against bundled stock builds (see
       `docs/superpowers/specs/2026-08-19-firmware-animation-pipeline-design.md`,

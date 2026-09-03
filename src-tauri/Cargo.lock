@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "cloudy-af"
-version = "1.15.3"
+version = "1.16.0"
 dependencies = [
  "aes",
  "base64 0.22.1",

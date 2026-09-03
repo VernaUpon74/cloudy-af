@@ -104,7 +104,7 @@ The backend implements the same encryption/decryption algorithms used by NFirmwa
 2. **Joyetech** — XOR with a length+magic-derived function.
 3. **ArcticFox** — 4-byte key + pseudo-random XOR table.
 4. **ArcticFox2** — variant of the above if distinct in the original source.
-5. **VandalProof** — attempt a clean-room reimplementation of the obfuscated loader logic found in `NCore/VandalProofEncryption.cs`. If the obfuscation or external-assembly dependency proves impractical to port safely, the backend returns a clear error and VandalProof firmwares remain unsupported.
+5. **VandalProof** — AES-128-CBC; key is the ASCII string `FA89412D87B0EFD9`, IV is the first 16 bytes of the file, PKCS7 padding. Implemented and tested against real 2018+ builds; format and key provenance are documented in `docs/vandalproof-encryption.md`.
 
 ## Patch Application Logic
 
