@@ -3,6 +3,20 @@
 
 use crate::firmware::flasher;
 
+/// Absolute path to a file under `<repo>/test-fixtures/` (device-specific
+/// hardware-test binaries, not committed).
+fn fixture(rel: &str) -> String {
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../test-fixtures/").to_string() + rel
+}
+
+/// Path for test-produced dumps under `<repo>/test-fixtures/out/` (created
+/// on demand).
+fn out(rel: impl AsRef<str>) -> String {
+    let dir = fixture("out");
+    std::fs::create_dir_all(&dir).unwrap();
+    format!("{dir}/{}", rel.as_ref())
+}
+
 #[test]
 fn test_parse_fw_version() {
     let mut df = vec![0u8; 2048];
@@ -24,11 +38,11 @@ fn test_download_stock_hardware() {
 #[ignore]
 fn test_backup_dataflash_hardware() {
     //! Saves the raw dataflash (settings) to BACKUP_OUT (default
-    //! DecryptProject/rescue/dataflash_backup.bin) before firmware surgery.
+    //! test-fixtures/rescue/dataflash_backup.bin) before firmware surgery.
     let data = flasher::read_dataflash().expect("read_dataflash failed");
     assert_eq!(data.len(), 2048);
     let out = std::env::var("BACKUP_OUT").unwrap_or_else(|_| {
-        "/var/home/j/cloudy-af/DecryptProject/rescue/dataflash_backup.bin".into()
+        fixture("rescue/dataflash_backup.bin")
     });
     std::fs::write(&out, &data).expect("write backup");
     println!("saved {} bytes to {out}", data.len());
@@ -47,7 +61,7 @@ fn test_restore_dataflash_hardware() {
     //! v1.00 rescue backup.
     use crate::firmware::flasher as f;
     let path = std::env::var("RESTORE_IN").unwrap_or_else(|_| {
-        "/var/home/j/cloudy-af/DecryptProject/rescue/dataflash_stock_v1.00.bin".into()
+        fixture("rescue/dataflash_stock_v1.00.bin")
     });
     let raw = std::fs::read(&path).expect("read backup");
     assert_eq!(raw.len(), 2048);
@@ -106,7 +120,7 @@ fn test_flash_patched_timed_hardware() {
     //! the stub executed.
     use crate::firmware::flasher as f;
     let bytes = std::fs::read(std::env::var("PATCHED_IMAGE")
-        .unwrap_or_else(|_| "/var/home/j/cloudy-af/DecryptProject/ldrom/pico_patched.bin".into()))
+        .unwrap_or_else(|_| fixture("pico_patched.bin")))
         .expect("read patched image");
     let mut d;
     'flash: for attempt in 1..=5 {
@@ -184,7 +198,7 @@ fn test_ldrom_absread_dump_hardware() {
         println!("chunk {:#010x}: {:02x?} ...", addr, &chunk[..16]);
         dump.extend_from_slice(&chunk);
     }
-    std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_m041.bin", &dump).unwrap();
+    std::fs::write(fixture("ldrom/ldrom_m041.bin"), &dump).unwrap();
     let sp = u32::from_le_bytes(dump[0..4].try_into().unwrap());
     let rst = u32::from_le_bytes(dump[4..8].try_into().unwrap());
     println!("LDROM vectors: SP={sp:#x} reset={rst:#x}");
@@ -206,7 +220,7 @@ fn test_read_staged_hardware() {
         assert_eq!(chunk.len(), 0x800);
         dump.extend_from_slice(&chunk);
     }
-    std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_staged.bin", &dump).unwrap();
+    std::fs::write(fixture("ldrom/ldrom_staged.bin"), &dump).unwrap();
     println!("staged[0..64]: {:02x?}", &dump[..64]);
     let sp = u32::from_le_bytes(dump[0..4].try_into().unwrap());
     let rst = u32::from_le_bytes(dump[4..8].try_into().unwrap());
@@ -328,7 +342,7 @@ fn test_set_logo_static_hardware() {
 #[test]
 #[ignore]
 fn test_screenshot_hardware() {
-    // Captures the screen as PNG (scaled 4x) at /var/home/j/af_screenshot.png.
+    // Captures the screen as PNG (scaled 4x) under test-fixtures/out/.
     let mut dev = flasher::open_device().expect("open failed");
     let raw = flasher::screenshot(&mut dev).expect("screenshot failed");
     assert_eq!(raw.len(), 0x400);
@@ -390,7 +404,7 @@ fn test_screenshot_hardware() {
     z.extend_from_slice(&((s2 << 16 | s1).to_be_bytes()));
     chunk(&mut png, b"IDAT", &z);
     chunk(&mut png, b"IEND", &[]);
-    std::fs::write("/var/home/j/af_screenshot.png", &png).unwrap();
+    std::fs::write(out("af_screenshot.png"), &png).unwrap();
     println!("saved /var/home/j/af_screenshot.png ({} bytes)", png.len());
 }
 
@@ -413,7 +427,7 @@ fn test_logo_visibility_hardware() {
         let raw = flasher::screenshot(&mut dev).expect("screenshot failed");
         let nonzero = raw[..192].iter().filter(|b| **b != 0).count();
         println!("t={}s nonzero={}", i * 5, nonzero);
-        std::fs::write(format!("/var/home/j/af_shot_{:02}.bin", i), &raw).unwrap();
+        std::fs::write(out(format!("af_shot_{:02}.bin", i)), &raw).unwrap();
         std::thread::sleep(std::time::Duration::from_secs(5));
     }
 }
@@ -423,7 +437,7 @@ fn test_logo_visibility_hardware() {
 fn test_flash_plaintext_probe_hardware() {
     // DANGER: flashes a decrypted stock iStick Pico V1.00 image to the first
     // device, then restarts it. Watch whether the device boots stock.
-    let bytes = std::fs::read("/var/home/j/pico_v100_plain.bin").expect("read probe bin");
+    let bytes = std::fs::read(fixture("pico_v100_plain.bin")).expect("read probe bin");
     println!("flashing {} bytes (plaintext stock Pico V1.00)", bytes.len());
     flasher::flash_firmware(&bytes).expect("flash failed");
     flasher::restart_device().expect("restart failed");
@@ -494,7 +508,7 @@ fn test_monitoring_wake_hardware() {
 #[ignore]
 fn test_flash_verbose_hardware() {
     use crate::firmware::flasher as f;
-    let bytes = std::fs::read("/var/home/j/pico_v100_plain.bin").expect("read probe bin");
+    let bytes = std::fs::read(fixture("pico_v100_plain.bin")).expect("read probe bin");
     println!("step 1: ensure_ldrom_mode");
     f::ensure_ldrom_mode().expect("ensure_ldrom_mode failed");
     println!("step 2: open device in LDROM");
@@ -541,7 +555,7 @@ fn test_flash_hidraw_direct_hardware() {
     println!("using {:?}", node);
     let mut fdev = std::fs::OpenOptions::new().read(true).write(true).open(&node).expect("open hidraw");
 
-    let bytes = std::fs::read("/var/home/j/pico_v100_plain.bin").expect("read probe bin");
+    let bytes = std::fs::read(fixture("pico_v100_plain.bin")).expect("read probe bin");
     // WriteData(0, len) command: [cmd, 14, arg1 LE, arg2 LE, "HIDC", sum LE i32]
     let mut cmd = [0u8; 18];
     cmd[0] = 0xC3; cmd[1] = 14;
@@ -589,7 +603,7 @@ fn test_flash_recovery_loop_hardware() {
     // interrupted update cleanly on the next attempt.
     use crate::firmware::flasher as f;
     let bytes = std::fs::read(std::env::var("RECOVERY_IMAGE")
-        .unwrap_or_else(|_| "/var/home/j/pico_v100_plain.bin".into())).expect("read probe bin");
+        .unwrap_or_else(|_| fixture("pico_v100_plain.bin").into())).expect("read probe bin");
     'outer: loop {
         println!("waiting for Pico (M041)...");
         let mut dev = loop {
@@ -669,8 +683,8 @@ fn test_ldrom_dump_hardware() {
     const NCHUNKS: usize = 8;  // 16 KB LDROM
     // Fixed payload (reads chunk index before the page erase) preferred;
     // fall back to the original (broken) payload for comparison runs.
-    let payload = std::fs::read("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_dump_payload_fixed.bin")
-        .or_else(|_| std::fs::read("/var/home/j/ldrom_dump_payload.bin"))
+    let payload = std::fs::read(fixture("ldrom/ldrom_dump_payload_fixed.bin"))
+        .or_else(|_| std::fs::read(fixture("ldrom_dump_payload.bin")))
         .expect("read payload");
 
     println!("waiting for the Pico (M041)…");
@@ -754,7 +768,7 @@ fn test_ldrom_dump_hardware() {
         for (i, c) in collected {
             dump[i * CHUNK..(i + 1) * CHUNK].copy_from_slice(c);
         }
-        std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_m041.bin", &dump).unwrap();
+        std::fs::write(fixture("ldrom/ldrom_m041.bin"), &dump).unwrap();
         println!("  (saved {} chunks)", collected.len());
     };
     let start = std::time::Instant::now();
@@ -814,7 +828,7 @@ fn test_ldrom_dump_hardware() {
     println!("done: {} / {} chunks confirmed", confirmed.len(), NCHUNKS);
     assert_eq!(confirmed.len(), NCHUNKS, "incomplete dump");
     // final integrity: LDROM vector table sanity
-    let dump = std::fs::read("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_m041.bin").unwrap();
+    let dump = std::fs::read(fixture("ldrom/ldrom_m041.bin")).unwrap();
     let sp = u32::from_le_bytes(dump[0..4].try_into().unwrap());
     let rst = u32::from_le_bytes(dump[4..8].try_into().unwrap());
     println!("LDROM vector table: SP={sp:08x} reset={rst:08x}");
@@ -1021,7 +1035,7 @@ fn test_ldrom_entry_and_rate_hardware() {
             }
         }
     }
-    std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/df_region.bin", &region).unwrap();
+    std::fs::write(fixture("ldrom/df_region.bin"), &region).unwrap();
     for (i, row) in region.chunks(16).enumerate() {
         println!("  {:#06x}: {:02x?}", 0x1E000 + i * 16, row);
     }
@@ -1053,7 +1067,7 @@ fn test_ldrom_entry_and_rate_hardware() {
 
     // 3) if LDROM: timed dummy stream
     if mode_ldrom {
-        let payload = std::fs::read("/var/home/j/cloudy-af/DecryptProject/ldrom/dummy4k_v2.bin")
+        let payload = std::fs::read(fixture("ldrom/dummy4k_v2.bin"))
             .expect("read dummy");
         f::send_command_pub(&mut dev, 0xC3, 0, payload.len() as i32).expect("write cmd failed");
         let t0 = std::time::Instant::now();
@@ -1105,7 +1119,7 @@ fn test_absread2_verify_and_dump_hardware() {
     let more = peek(&mut dev, 0x8980, 0x100, "cave-region2");
     let mut region = cave.clone();
     region.extend_from_slice(&more);
-    std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/cave_region.bin", &region).unwrap();
+    std::fs::write(fixture("ldrom/cave_region.bin"), &region).unwrap();
 
     let mut dump = Vec::new();
     // 64-byte reads: one command = one report, self-aligning. Long streams
@@ -1114,7 +1128,7 @@ fn test_absread2_verify_and_dump_hardware() {
         let c = peek(&mut dev, addr, 0x40, "ldrom");
         dump.extend_from_slice(&c);
     }
-    std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_real.bin", &dump).unwrap();
+    std::fs::write(fixture("ldrom/ldrom_real.bin"), &dump).unwrap();
     let bad = dump.chunks(4).filter(|w| {
         (u32::from_le_bytes((*w).try_into().unwrap()) & 0xFFFF_0000) == 0xBAD0_0000
     }).count();
@@ -1176,7 +1190,7 @@ fn test_absread2_dump_hardware() {
     }
 
     // (2) stream absread2
-    let image = std::fs::read("/var/home/j/cloudy-af/DecryptProject/ldrom/pico_absread2.bin")
+    let image = std::fs::read(fixture("ldrom/pico_absread2.bin"))
         .expect("read absread2");
     f::send_command_pub(&mut dev, 0xC3, 0, image.len() as i32).expect("write cmd failed");
     let t0 = std::time::Instant::now();
@@ -1228,7 +1242,7 @@ fn test_absread2_dump_hardware() {
         println!("chunk {addr:#010x}: {:02x?} ...", &c[..16]);
         dump.extend_from_slice(&c);
     }
-    std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_real.bin", &dump).unwrap();
+    std::fs::write(fixture("ldrom/ldrom_real.bin"), &dump).unwrap();
     let bad = dump.chunks(4).filter(|w| {
         (u32::from_le_bytes((*w).try_into().unwrap()) & 0xFFFF_0000) == 0xBAD0_0000
     }).count();
@@ -1409,7 +1423,7 @@ fn test_df_map_hardware() {
     //! response to /var/home/j/dfmap/ for offline analysis. Stops at first
     //! failure (device crash => replug needed).
     use crate::firmware::flasher as f;
-    std::fs::create_dir_all("/var/home/j/dfmap").unwrap();
+    std::fs::create_dir_all(fixture("out/dfmap")).unwrap();
     println!("waiting for the Pico…");
     let w = std::time::Instant::now();
     let mut dev = loop {
@@ -1427,7 +1441,7 @@ fn test_df_map_hardware() {
                 let sum: u32 = buf[4..].iter().map(|b| *b as u32).sum();
                 println!("arg1={arg1:#06x} cks={cks:#010x} sum={sum:#010x} {} data8={:02x?}",
                     if cks == sum { "OK " } else { "BAD" }, &buf[4..12]);
-                std::fs::write(format!("/var/home/j/dfmap/{arg1:06x}.bin"), &buf).unwrap();
+                std::fs::write(out(format!("dfmap/{arg1:06x}.bin")), &buf).unwrap();
             }
             Err(e) => { println!("arg1={arg1:#06x} FAILED: {e} — stopping"); break; }
         }
@@ -1480,7 +1494,7 @@ fn test_ldrom_direct_read_hardware() {
     }
     if dump.len() >= 16384 {
         dump.truncate(16384);
-        std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_m041.bin", &dump).unwrap();
+        std::fs::write(fixture("ldrom/ldrom_m041.bin"), &dump).unwrap();
         println!("SAVED 16 KB ldrom_m041.bin");
         assert!(dump.windows(4).any(|w| w == b"HIDC"), "no HIDC sig — wrong region?");
     }
@@ -1532,7 +1546,7 @@ fn test_stm32_identify_hardware() {
         Ok(shot) => {
             let on = shot.iter().filter(|b| **b != 0).count();
             println!("screenshot: 1024 bytes, {on} non-zero");
-            std::fs::write("/var/home/j/stm32_shot.bin", &shot).unwrap();
+            std::fs::write(out("stm32_shot.bin"), &shot).unwrap();
         }
         Err(e) => println!("screenshot failed: {e}"),
     }
@@ -1563,7 +1577,7 @@ fn test_restore_stock_hardware() {
             let _ = f::read_abs_pub(&mut dev, 0x103FC0, 64); // prime (one-behind)
             if let Ok(tail) = f::read_abs_pub(&mut dev, 0x103FC0, 64) {
                 println!("LDROM tail 0x103FC0: {:02x?}", &tail[..32]);
-                std::fs::write("/var/home/j/cloudy-af/DecryptProject/ldrom/ldrom_tail.bin", &tail).unwrap();
+                std::fs::write(fixture("ldrom/ldrom_tail.bin"), &tail).unwrap();
             }
         } else {
             println!("not absread APROM (stock or LDROM) — skipping tail read");
@@ -1589,7 +1603,7 @@ fn test_restore_stock_hardware() {
     }
 
     // flash stock
-    let image = std::fs::read("/var/home/j/pico_v100_plain.bin").expect("read stock");
+    let image = std::fs::read(fixture("pico_v100_plain.bin")).expect("read stock");
     f::send_command_pub(&mut dev, 0xC3, 0, image.len() as i32).expect("write cmd failed");
     let t0 = std::time::Instant::now();
     for (ci, chunk) in image.chunks(64).enumerate() {

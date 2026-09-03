@@ -18,7 +18,7 @@ Loose ends carried over from the firmware read-back Phase 1 plan
 - [x] Upgrade Pico to ArcticFox (done 2026-08-27: af_190602 flashed via
       LDROM WriteData; product M041, boot flag 0, user-confirmed AF UI on
       screen; 0xC1 screenshot now responds). Stock v1.00 rescue kit staged in
-      `DecryptProject/rescue/` (image + dataflash backup + README with the
+      `test-fixtures/rescue/` (image + dataflash backup + README with the
       battery-out + Plus recovery procedure).
 - [ ] Screenshot capture quirks on AF: framebuffer reads all-zero when the
       display is asleep (wake via button press and capture immediately);

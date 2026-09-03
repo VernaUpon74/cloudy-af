@@ -16,3 +16,5 @@ repo/
 # Local firmware RE scratch (optional tooling, see scripts/fetch-ghidra.sh)
 DecryptProject/
 AF_fw/
+# Device-specific hardware-test binaries and dumps (not committed)
+test-fixtures/

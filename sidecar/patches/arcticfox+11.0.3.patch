@@ -1,0 +1,217 @@
+diff --git a/node_modules/arcticfox/index.js b/node_modules/arcticfox/index.js
+index 9363c3c..1e27e60 100644
+--- a/node_modules/arcticfox/index.js
++++ b/node_modules/arcticfox/index.js
+@@ -1,5 +1,10 @@
+ const events = require('events');
+ const binary = require('binary');
++// DEVIATION: Use a local secure replacement for the unmaintained `put` package.
++// The sidecar `package.json` overrides `put` to `file:./put-replacement`, so
++// `require('put')` resolves to the zero-initialized replacement both in local
++// development and in the Flatpak bundle (where the build copies
++// `put-replacement` into `node_modules/put`).
+ const put = require('put');
+ const HID = require('node-hid');
+ 
+@@ -61,7 +66,9 @@ class ArcticFox extends events.EventEmitter {
+         this.callbackTimeout = 1000;
+ 
+         this.minimumSupportedBuildNumber = 170909;
+-        this.supportedSettingsVersion = 11;
++        // SettingsVersion 12 (current ArcticFox builds) widened PuffCutOff
++        // from u8 to u16 in the Advanced section; see encode/parse below.
++        this.supportedSettingsVersion = 12;
+ 
+         this.vendorId = 0x0416;
+         this.productId = 0x5020;
+@@ -95,8 +102,16 @@ class ArcticFox extends events.EventEmitter {
+ 
+     connect() {
+         try {
+-            this.hid = new HID.HID(this.vendorId, this.productId);
+-            let message = Buffer.from([]);
++            // DEVIATION: Enumerate devices fresh and open by path. Opening by
++            // vendor/product ID can use a stale cached enumeration and fail to
++            // detect a device that was plugged in after the sidecar started.
++            const devices = HID.devices();
++            const device = devices.find(d => d.vendorId === this.vendorId && d.productId === this.productId);
++            if (!device) {
++                throw new Error('device not found');
++            }
++            this.hid = new HID.HID(device.path);
++            this.message = Buffer.from([]);
+             this.hid.on('data', data => {
+                 clearTimeout(this.timeout);
+                 switch (this.expectedAnswer) {
+@@ -108,9 +123,9 @@ class ArcticFox extends events.EventEmitter {
+                         break;
+                     case 'configuration':
+                         if (this.callback) {
+-                            message = Buffer.concat([message, data]);
+-                            if (message.length >= this.configurationLength) {
+-                                this.parseConfiguration(message, (err, config) => {
++                            this.message = Buffer.concat([this.message, data]);
++                            if (this.message.length >= this.configurationLength) {
++                                this.parseConfiguration(this.message, (err, config) => {
+                                     this.callback(err, config);
+                                     this.callback = null;
+                                 });
+@@ -119,9 +134,9 @@ class ArcticFox extends events.EventEmitter {
+                         break;
+                     case 'screenshot':
+                         if (this.callback) {
+-                            message = Buffer.concat([message, data]);
+-                            if (message.length >= 0x400) {
+-                                this.callback(null, message);
++                            this.message = Buffer.concat([this.message, data]);
++                            if (this.message.length >= 0x400) {
++                                this.callback(null, this.message);
+                                 this.callback = null;
+                             }
+                         }
+@@ -131,7 +146,7 @@ class ArcticFox extends events.EventEmitter {
+             });
+             this.hid.on('error', err => {
+                 this.emit('error', err);
+-                if (err.toString() === 'Error: could not read from HID device') {
++                if (err.toString().startsWith('Error: could not read from HID device')) {
+                     this.disconnect();
+                 }
+             });
+@@ -259,6 +274,9 @@ class ArcticFox extends events.EventEmitter {
+         if (profile.IsTemperatureDominant) {
+             flags += 0x10;
+         }
++        if (profile.IsCelcius) {
++            flags += 0x20;
++        }
+         if (profile.IsResistanceLocked) {
+             flags += 0x40;
+         }
+@@ -281,14 +299,14 @@ class ArcticFox extends events.EventEmitter {
+             .put(Buffer.from((profile.Name + '\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000').substr(0, 8), 'ascii'))
+             .word8(flags)
+             .word8(flags2)
+-            .word16le(profile.Power * 10)
++            .word16le(Math.round(profile.Power * 10))
+             .word8(profile.PreheatType)
+             .word8(profile.SelectedCurve)
+-            .word8(profile.PreheatTime * 100)
+-            .word8(profile.PreheatDelay * 10)
+-            .word16le(profile.PreheatPower * 10)
++            .word8(Math.round(profile.PreheatTime * 100))
++            .word8(Math.round(profile.PreheatDelay * 10))
++            .word16le(Math.round(profile.PreheatPower * 10))
+             .word16le(profile.Temperature)
+-            .word16le(profile.Resistance * 1000)
++            .word16le(Math.round(profile.Resistance * 1000))
+             .word16le(profile.TCR)
+             .word8(profile.PIRegulatorRange)
+             .word16le(profile.PIRegulatorPValue)
+@@ -330,6 +348,7 @@ class ArcticFox extends events.EventEmitter {
+         data.PreheatPower /= 10;
+         data.Material = data.Flags & 0x0F;
+         data.IsTemperatureDominant = Boolean(data.Flags & 0x10);
++        data.IsCelcius = Boolean(data.Flags & 0x20);
+         data.IsResistanceLocked = Boolean(data.Flags & 0x40);
+         data.IsEnabled = Boolean(data.Flags & 0x80);
+ 
+@@ -774,13 +793,13 @@ class ArcticFox extends events.EventEmitter {
+         for (let i = 0; i < 11; i++) {
+             bin = Buffer.concat([bin, put()
+                 .word16le(battery.PercentsVoltage[i].Percents)
+-                .word16le(battery.PercentsVoltage[i].Voltage * 100)
++                .word16le(Math.round(battery.PercentsVoltage[i].Voltage * 100))
+                 .buffer()
+             ]);
+         }
+ 
+         bin = Buffer.concat([bin, put()
+-            .word16le(battery.Cutoff * 100)
++            .word16le(Math.round(battery.Cutoff * 100))
+             .buffer()
+         ]);
+ 
+@@ -833,7 +852,7 @@ class ArcticFox extends events.EventEmitter {
+         for (let i = 0; i < 7; i++) {
+             bin = Buffer.concat([bin, put()
+                 .word16le(table.Points[i].Temperature)
+-                .word16le(table.Points[i].Factor * 10000)
++                .word16le(Math.round(table.Points[i].Factor * 10000))
+                 .buffer()
+             ]);
+         }
+@@ -878,7 +897,7 @@ class ArcticFox extends events.EventEmitter {
+ 
+         for (let i = 0; i < 12; i++) {
+             bin = Buffer.concat([bin, put()
+-                .word8(curve.Points[i].Time * 10)
++                .word8(Math.round(curve.Points[i].Time * 10))
+                 .word8(curve.Points[i].Percent)
+                 .buffer()
+             ]);
+@@ -918,9 +937,17 @@ class ArcticFox extends events.EventEmitter {
+     }
+ 
+     encodeAdvancedConfiguration(config) {
+-        let bin = put()
+-            .word16le(config.PowerLimit * 10)
+-            .word8(Math.round(config.PuffCutOff * 10))
++        // SettingsVersion 12 stores PuffCutOff as u16 (tenths of a second,
++        // NToolbox caps at 60 s); older layouts use a single byte (max 15 s).
++        // Clamp so out-of-range UI input can't wrap the field.
++        const isV12 = config.SettingsVersion >= 12;
++        const maxCutoff = isV12 ? 60 : 15;
++        const cutoffTenths = Math.round(Math.min(Math.max(config.PuffCutOff, 1), maxCutoff) * 10);
++
++        let head = put().word16le(Math.round(config.PowerLimit * 10));
++        head = isV12 ? head.word16le(cutoffTenths) : head.word8(cutoffTenths);
++
++        let bin = head
+ 
+             .word8((((config.BatteryVoltageOffset1 < 0)) ? 0x80 : 0) + ((config.BatteryVoltageOffset1 * 100) & 0x7F))
+             .word8((((config.BatteryVoltageOffset2 < 0)) ? 0x80 : 0) + ((config.BatteryVoltageOffset2 * 100) & 0x7F))
+@@ -935,7 +962,7 @@ class ArcticFox extends events.EventEmitter {
+             .word8(config.ResetCountersOnStartup ? 1 : 0)
+ 
+             .word8(config.ShuntCorrection)
+-            .word8(config.InternalResistance * 1000)
++            .word8(Math.round(config.InternalResistance * 1000))
+ 
+             .word8(config.BatteryModel)
+             .buffer();
+@@ -961,10 +988,13 @@ class ArcticFox extends events.EventEmitter {
+         return bin;
+     }
+ 
+-    parseAdvancedConfiguration(buf) {
+-        const data = binary.parse(buf)
+-            .word16lu('PowerLimit')
+-            .word8u('PuffCutOff')
++    parseAdvancedConfiguration(buf, settingsVersion) {
++        // SettingsVersion 12 stores PuffCutOff as u16 (tenths of a second);
++        // older layouts use a single byte. Everything after it shifts by one.
++        const isV12 = settingsVersion >= 12;
++        let parser = binary.parse(buf).word16lu('PowerLimit');
++        parser = isV12 ? parser.word16lu('PuffCutOff') : parser.word8u('PuffCutOff');
++        const data = parser
+ 
+             .word8s('BatteryVoltageOffset1')
+             .word8s('BatteryVoltageOffset2')
+@@ -1098,7 +1128,7 @@ class ArcticFox extends events.EventEmitter {
+         res = this.parseUiConiguration(res.buf);
+         this.extend(data, res.data);
+ 
+-        res = this.parseAdvancedConfiguration(res.buf);
++        res = this.parseAdvancedConfiguration(res.buf, data.SettingsVersion);
+         this.extend(data, res.data);
+ 
+         callback(null, data);
+@@ -1163,6 +1193,7 @@ class ArcticFox extends events.EventEmitter {
+     }
+ 
+     readConfiguration(callback) {
++        this.message = Buffer.from([]);
+         if (this.hidWrite(this.createCommand(this.commands.readConfiguration, 0, this.configurationLength))) {
+             this.expectedAnswer = 'configuration';
+             this.callback = callback;

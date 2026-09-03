@@ -16,7 +16,7 @@
   `flatpak run --env=FLATPAK_ENABLE_SDK_EXT=rust-stable --filesystem=home --device=all --command=bash org.gnome.Sdk//49 -c 'export PATH=/usr/lib/sdk/rust-stable/bin:$PATH; cd /var/home/j/cloudy-af/src-tauri && cargo test --offline --lib ...'`
 - Hardware tests are `#[ignore]`-gated and only run on the Pico (Product ID `M041`, VID `0x0416` / PID `0x5020`). Never touch the STM32 device (VID `0x0483` / PID `0x5750`).
 - **The Pico now runs ArcticFox af_190602** (upgraded 2026-08-27). Stock Joyetech v1.00 is the rescue contingency, NOT the resting state. Anything that flashes must end by restoring `AF_fw/decrypted/af_190602.dec.bin` unless the test's whole point is stock.
-- Rescue kit: `DecryptProject/rescue/` (stock image, dataflash backup, README with the battery-out + Plus recovery procedure). `DecryptProject/` is gitignored.
+- Rescue kit: `test-fixtures/rescue/` (stock image, dataflash backup, README with the battery-out + Plus recovery procedure). `test-fixtures/` is gitignored.
 - `flasher::screenshot` (0xC1) works on ArcticFox only; stock firmware drops the command. Framebuffer reads all-zero while the display is asleep.
 - Bundled firmware binaries are committed to `resources/firmware/` (they are app resources, not RE artifacts). `AF_fw/` stays gitignored.
 - STM32 builds ship bundled but STM32 flash/read-back UI stays disabled (Phase 5).
@@ -392,7 +392,7 @@ flatpak run --env=FLATPAK_ENABLE_SDK_EXT=rust-stable --filesystem=home --device=
 ```
 
 Expected: PASS; device ends on af_190602. If anything wedges mid-flash, the
-rescue kit (`DecryptProject/rescue/README.md`) recovers: battery out, hold
+rescue kit (`test-fixtures/rescue/README.md`) recovers: battery out, hold
 Plus, plug, flash stock, then reflash af_190602.
 
 - [ ] **Step 4: Update goals.md and commit**
