@@ -161,3 +161,36 @@ fn test_two_frames_differ_via_phase() {
     assert_eq!(f2.pixels[0], 0);
     assert!(Harness::frames_differ(&f1, &f2));
 }
+
+/// LAYER-4 PRE-FLASH GATE. Requires:
+///   - resources/animations/af_190602.json (Phase 3 RE output)
+///   - AF_fw/decrypted/af_190602.dec.bin (gitignored RE artifact)
+/// Both absent in CI/other machines -> skip. Run explicitly before flashing
+/// any animation image:
+///   cargo test --offline --lib firmware::tests::emu_test -- --ignored
+#[test]
+#[ignore]
+fn test_af_190602_render_gate() {
+    use std::path::Path;
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let desc_path = root.join("resources/animations/af_190602.json");
+    let img_path = root.join("AF_fw/decrypted/af_190602.dec.bin");
+    if !desc_path.exists() || !img_path.exists() {
+        eprintln!("descriptor or decrypted image missing; skipping gate");
+        return;
+    }
+    let desc = load_descriptor(&std::fs::read_to_string(&desc_path).unwrap()).unwrap();
+    let img = std::fs::read(&img_path).unwrap();
+    let mut h = Harness::new(&img, desc);
+    let mut prev = None;
+    for frame_no in 0..4 {
+        let frame = h.run_frame(5_000_000)
+            .unwrap_or_else(|e| panic!("frame {frame_no}: {e}\n{}", h.cpu.debug_dump()));
+        if let Some(p) = &prev {
+            // stock charge screen may be static; just record. Animation patches
+            // assert difference in the effect tests (later phase).
+            let _ = Harness::frames_differ(p, &frame);
+        }
+        prev = Some(frame);
+    }
+}
