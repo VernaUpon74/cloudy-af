@@ -1,7 +1,12 @@
-﻿<FirmwareDefinition Name="ArcticFox">
+<FirmwareDefinition Name="ArcticFox">
 	<Marker Offset="0x140" Bytes="0x41 0x46 0x4F 0x58" />
 	<ImageTable1 PtrFrom="0x144" PtrTo="0x148" />
 	<ImageTable2 PtrFrom="0x14C" PtrTo="0x150" />
 	<StringTable1 PtrFrom="0x154" PtrTo="0x158" TwoBytesPerChar="false" />
 	<StringsPreviewCorrection ForGlyphs="0x53 0x56 0x5C 0x5D 0x65" />
+</FirmwareDefinition>
+<!-- STM32-line ArcticFox builds carry no AFOX marker; they decrypt to a
+     plaintext whose only product marker is "Joyetech APP". -->
+<FirmwareDefinition Name="ArcticFox STM32">
+	<Marker Bytes="0x4A 0x6F 0x79 0x65 0x74 0x65 0x63 0x68 0x20 0x41 0x50 0x50" />
 </FirmwareDefinition>

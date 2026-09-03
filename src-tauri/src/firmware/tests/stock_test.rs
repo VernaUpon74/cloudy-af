@@ -12,22 +12,12 @@ fn resources() -> std::path::PathBuf {
 }
 
 fn defs() -> Vec<FirmwareDefinition> {
-    // Same definition setup as loader_test.rs (no load_definitions_from
-    // helper exists): ArcticFox detected via the AFOX marker at 0x140.
-    // STM32-line builds carry no AFOX marker; after the decrypt cascade the
-    // only identifying string is "Joyetech APP" (the same marker
-    // encryption.rs uses to validate decrypted STM32 images), so a second
-    // definition keyed on it detects them.
-    let xml = r#"<FirmwareDefinition Name="ArcticFox">
-        <Marker Offset="0x140" Bytes="0x41 0x46 0x4F 0x58" />
-        <ImageTable1 PtrFrom="0x144" PtrTo="0x148" />
-        <ImageTable2 PtrFrom="0x14C" PtrTo="0x150" />
-        <StringTable1 PtrFrom="0x154" PtrTo="0x158" TwoBytesPerChar="false" />
-    </FirmwareDefinition>
-    <FirmwareDefinition Name="ArcticFox STM32">
-        <Marker Bytes="0x4A 0x6F 0x79 0x65 0x74 0x65 0x63 0x68 0x20 0x41 0x50 0x50" />
-    </FirmwareDefinition>"#;
-    parse_definition(xml).unwrap()
+    // Parse the SHIPPED definitions file, not an inline copy: an inline copy
+    // once masked the fact that ArcticFox.xml lacked the STM32-line
+    // ("Joyetech APP" marker) definition, making af_211009.bin unloadable in
+    // the app while this test passed.
+    let xml = std::fs::read_to_string(resources().join("definitions/ArcticFox.xml")).unwrap();
+    parse_definition(&xml).unwrap()
 }
 
 #[test]

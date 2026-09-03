@@ -4,7 +4,6 @@ runtime-version: '49'
 sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.node22
-  - org.freedesktop.Sdk.Extension.rust-stable
 command: cloudy-af
 finish-args:
   - --share=ipc
@@ -20,12 +19,7 @@ modules:
   - name: cloudy-af
     buildsystem: simple
     build-options:
-      append-path: /usr/lib/sdk/node22/bin:/usr/lib/sdk/rust-stable/bin
-      build-args:
-        - --share=network
-      env:
-        CARGO_HOME: /run/build/cloudy-af/cargo
-        CARGO_BUILD_JOBS: "1"
+      append-path: /usr/lib/sdk/node22/bin
     sources:
       - type: dir
         path: ..
@@ -33,16 +27,7 @@ modules:
     build-commands:
       - |
         cd source
-        # Clean any host artifacts that may have been copied in.
-        rm -rf node_modules src-tauri/target dist sidecar/node_modules
-        # Install Node dependencies from lock files.
-        npm ci
-        cd sidecar
-        npm ci
-        cd ..
-        # Build Tauri release (also builds frontend via beforeBuildCommand and embeds assets).
-        npm run tauri:build -- --no-bundle
-        # Install application files.
+        # Use the Tauri binary that was already built on the host/toolbox.
         install -Dm755 src-tauri/target/release/cloudy-af /app/bin/cloudy-af
         install -Dm644 flatpak/org.cloudy.af.desktop /app/share/applications/org.cloudy.af.desktop
         install -Dm644 flatpak/org.cloudy.af.appdata.xml /app/share/metainfo/org.cloudy.af.metainfo.xml
@@ -60,8 +45,6 @@ modules:
         # native prebuilds from the sidecar to reduce the Flatpak size.
         cd /app/lib/cloudy-af/resources/sidecar
         npm prune --production
-        # npm's file: override for put can leave a broken symlink after prune;
-        # replace it with a real copy of the local zero-initialized replacement.
         rm -rf node_modules/put
         cp -r put-replacement node_modules/put
         rm -rf patches node_modules/patch-package
