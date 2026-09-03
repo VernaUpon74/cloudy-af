@@ -29,10 +29,12 @@ const AfcFile = require('./afcfile');
 
 const afc = new AfcFile();
 let autoconnect = true;
+// While the Rust backend flashes firmware it owns the HID device; suspend
+// stops polling and reconnects so nothing interleaves into the flash stream.
+let suspended = false;
 
-// The device firmware reports SettingsVersion 12; the npm module is hard-coded
-// to reject anything above 11. Bump the supported version so we can read it.
-fox.supportedSettingsVersion = 12;
+// The device firmware reports SettingsVersion 12; the arcticfox module
+// supports it natively (PuffCutOff widened to u16 in the v12 layout).
 
 let currentRequestId = null;
 
@@ -51,7 +53,7 @@ function clearReconnectTimer() {
 
 function scheduleReconnect() {
     clearReconnectTimer();
-    if (!fox.connected) {
+    if (!suspended && !fox.connected) {
         reconnectTimer = setTimeout(() => {
             reconnectTimer = null;
             if (!fox.connected) {
@@ -182,6 +184,34 @@ function handleCommand(cmd) {
             } catch (err) {
                 sendError('Disconnect failed', err);
             }
+            break;
+
+        case 'suspend':
+            // The Rust firmware flasher is about to own the HID device:
+            // drop our handle and stop the reconnect loop until 'resume'.
+            suspended = true;
+            clearReconnectTimer();
+            try {
+                fox.close();
+            } catch (err) {
+                // already closed — fine
+            }
+            send('suspend_ack', {});
+            break;
+
+        case 'resume':
+            suspended = false;
+            if (autoconnect && !fox.connected) {
+                try {
+                    fox.connect();
+                } catch (err) {
+                    // Device not present; the reconnect loop will retry.
+                }
+                if (!fox.connected) {
+                    scheduleReconnect();
+                }
+            }
+            send('resume_ack', {});
             break;
 
         case 'download':

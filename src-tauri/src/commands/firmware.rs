@@ -7,11 +7,11 @@ use uuid::Uuid;
 
 use crate::firmware::definition::{parse_definition, FirmwareDefinition};
 use crate::firmware::encryption::{encrypt, EncryptionType};
-use crate::firmware::flasher::{flash_firmware as flash_to_device, read_dataflash, read_product_id, restart_device};
+use crate::firmware::flasher::{flash_firmware_guarded, read_dataflash, read_product_id, restart_device};
 use crate::firmware::loader::{load_firmware, FirmwareImage};
 use crate::firmware::patch::{apply_patch, parse_patch, rollback_patch};
 use crate::firmware::state::{FirmwareState, OpenFirmware};
-use crate::firmware::stock::{load_library, match_build, MatchKind};
+use crate::firmware::stock::{line_for_definition, line_for_product, load_library, match_build, MatchKind};
 
 fn backup_path(app: &AppHandle, handle: &str) -> Option<PathBuf> {
     app.path().config_dir().ok().map(|d| d.join(format!("cloudy-af/firmware-backups/{}.bin", handle)))
@@ -435,19 +435,54 @@ pub async fn read_device_product_id() -> Result<String, String> {
     read_product_id().map_err(|e| e.to_string())
 }
 
+/// Flash the opened image, refusing when the connected device's Product ID
+/// belongs to a different device line than the firmware's definition (e.g.
+/// an STM32-line build onto a Nuvoton device).
+fn flash_guarded_for_image(app: &AppHandle, bytes: &[u8], definition: &str) -> Result<(), String> {
+    let pid = read_product_id().map_err(|e| e.to_string())?;
+    let (lib, _) = load_stock_library(app)?;
+    let device_line = line_for_product(&lib, &pid)
+        .ok_or_else(|| format!("refusing to flash: unknown device product id {pid:?}"))?;
+    let image_line = line_for_definition(definition)
+        .ok_or_else(|| format!("refusing to flash: no device line known for definition {definition:?}"))?;
+    if device_line.name != image_line {
+        return Err(format!(
+            "refusing to flash: firmware targets the {image_line} line, but the device ({pid}) is {}",
+            device_line.name
+        ));
+    }
+    flash_firmware_guarded(bytes, Some(&pid)).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn flash_firmware_to_device(
+    app: AppHandle,
+    sidecar: State<'_, crate::SidecarState>,
     state: State<'_, FirmwareState>,
     handle: String,
 ) -> Result<(), String> {
-    let (bytes, enc) = state
+    let (bytes, enc, definition) = state
         .with(&handle, |fw| {
-            (fw.image.bytes.clone(), fw.image.encryption)
+            (
+                fw.image.bytes.clone(),
+                fw.image.encryption,
+                fw.image.definition.name.clone(),
+            )
         })
         .ok_or_else(|| "Firmware handle not found".to_string())?;
 
     let encrypted = encrypt(&bytes, enc).map_err(|e| e.to_string())?;
-    flash_to_device(&encrypted).map_err(|e| e.to_string())
+
+    // The HID sidecar polls the device for configuration; suspend it so it
+    // cannot interleave commands into the flash stream.
+    let _ = crate::suspend_sidecar(&sidecar).await;
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        flash_guarded_for_image(&app, &encrypted, &definition)
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let _ = crate::resume_sidecar(&sidecar).await;
+    result
 }
 
 #[tauri::command]
@@ -457,6 +492,7 @@ pub async fn restart_device_cmd() -> Result<(), String> {
 
 #[tauri::command]
 pub async fn undo_firmware_changes(
+    sidecar: State<'_, crate::SidecarState>,
     state: State<'_, FirmwareState>,
     handle: String,
 ) -> Result<(), String> {
@@ -466,7 +502,14 @@ pub async fn undo_firmware_changes(
 
     let backup = backup.ok_or_else(|| "No original firmware backup available".to_string())?;
     let bytes = std::fs::read(&backup).map_err(|e| e.to_string())?;
-    flash_to_device(&bytes).map_err(|e| e.to_string())
+    let _ = crate::suspend_sidecar(&sidecar).await;
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        flash_firmware_guarded(&bytes, None).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let _ = crate::resume_sidecar(&sidecar).await;
+    result
 }
 
 #[tauri::command]
@@ -479,18 +522,22 @@ pub async fn list_hid_devices() -> Result<Vec<crate::firmware::flasher::DeviceIn
 #[tauri::command]
 pub async fn recovery_flash(
     app: AppHandle,
+    sidecar: State<'_, crate::SidecarState>,
     path: String,
     expected_product_id: Option<String>,
 ) -> Result<(), String> {
     use tauri::Emitter;
     let bytes = std::fs::read(&path).map_err(|e| format!("cannot read {path}: {e}"))?;
     let app2 = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    let _ = crate::suspend_sidecar(&sidecar).await;
+    let result = tauri::async_runtime::spawn_blocking(move || {
         crate::firmware::flasher::recovery_flash(&bytes, expected_product_id.as_deref(), |msg| {
             let _ = app2.emit("recovery-progress", msg);
         })
         .map_err(|e| e.to_string())
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+    let _ = crate::resume_sidecar(&sidecar).await;
+    result
 }

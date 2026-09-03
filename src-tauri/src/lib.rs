@@ -35,7 +35,7 @@ struct SidecarErrorEvent {
     detail: Option<String>,
 }
 
-struct SidecarState {
+pub(crate) struct SidecarState {
     child: Arc<Mutex<Option<Child>>>,
     stdin: Arc<Mutex<Option<ChildStdin>>>,
     pending: Arc<Mutex<HashMap<String, oneshot::Sender<serde_json::Value>>>>,
@@ -117,6 +117,21 @@ async fn sidecar_request(state: &SidecarState, cmd: serde_json::Value) -> Result
     }
     sidecar_send(state, cmd, Some(id)).await?;
     rx.await.map_err(|_| "Sidecar response cancelled".to_string())
+}
+
+/// Tell the HID sidecar to close the device and stop polling/reconnecting.
+/// Must be called before the firmware flasher talks to the device directly,
+/// so config reads cannot interleave into the flash stream (brick risk).
+/// Best-effort: returns Err when no sidecar is running, callers ignore it.
+pub(crate) async fn suspend_sidecar(state: &SidecarState) -> Result<(), String> {
+    sidecar_request(state, serde_json::json!({ "type": "suspend" })).await?;
+    Ok(())
+}
+
+/// Undo `suspend_sidecar`: the sidecar reconnects and resumes polling.
+pub(crate) async fn resume_sidecar(state: &SidecarState) -> Result<(), String> {
+    sidecar_request(state, serde_json::json!({ "type": "resume" })).await?;
+    Ok(())
 }
 
 #[tauri::command]

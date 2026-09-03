@@ -279,10 +279,21 @@ pub fn ensure_ldrom_mode() -> Result<()> {
 /// accepted as-is. If `expected_product_id` is given, the device dataflash
 /// Product ID must match before anything is written.
 pub fn flash_firmware_guarded(bytes: &[u8], expected_product_id: Option<&str>) -> Result<()> {
-    ensure_ldrom_mode()?;
-    let mut device = open_device()?;
+    // Sanity-check the image before touching the device: the Nuvoton APROM
+    // is 128K flash minus the LDROM, and the largest known ArcticFox build
+    // is ~114K — anything larger would be written past the APROM end.
+    const MAX_FIRMWARE_SIZE: usize = 128 * 1024;
+    if !(1024..=MAX_FIRMWARE_SIZE).contains(&bytes.len()) {
+        return Err(FirmwareError::Other(format!(
+            "implausible firmware image size: {} bytes",
+            bytes.len()
+        )));
+    }
 
+    // Check the Product ID guard before switching to LDROM, so a refused
+    // flash leaves the device running its current firmware.
     if let Some(want) = expected_product_id {
+        let mut device = open_device()?;
         let df = read_dataflash_from(&mut device)?;
         if df.len() < 320 {
             return Err(FirmwareError::Other("dataflash too short".into()));
@@ -294,6 +305,9 @@ pub fn flash_firmware_guarded(bytes: &[u8], expected_product_id: Option<&str>) -
             )));
         }
     }
+
+    ensure_ldrom_mode()?;
+    let mut device = open_device()?;
 
     send_command(&mut device, CMD_WRITE_DATA, 0, bytes.len() as i32)?;
 
@@ -318,8 +332,26 @@ pub fn flash_firmware_guarded(bytes: &[u8], expected_product_id: Option<&str>) -
     }
     drop(device);
 
-    // Restart and wait for the device to come back in APROM mode.
-    restart_device()?;
+    // Restart and wait for the device to come back in APROM mode. The LDROM
+    // may drop USB briefly while finalizing the flash, making a single-shot
+    // restart fail transiently — retry before giving up, so a successful
+    // flash is never reported as failed.
+    let mut last_err = None;
+    for _ in 0..10 {
+        match restart_device() {
+            Ok(()) => {
+                last_err = None;
+                break;
+            }
+            Err(e) => {
+                last_err = Some(e);
+                thread::sleep(Duration::from_millis(300));
+            }
+        }
+    }
+    if let Some(e) = last_err {
+        return Err(e);
+    }
     for _ in 0..20 {
         thread::sleep(Duration::from_millis(500));
         if let Ok(mut device) = open_device() {

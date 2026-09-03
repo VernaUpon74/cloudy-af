@@ -89,6 +89,18 @@ pub fn line_for_product<'a>(lib: &'a StockLibrary, product_id: &str) -> Option<&
         .find(|l| l.product_ids.iter().any(|p| p == product_id))
 }
 
+/// Map a firmware definition name (`FirmwareDefinition.name`, from
+/// `resources/definitions/`) to the device line it targets. Used by the
+/// flash path to refuse cross-line flashes (e.g. an STM32-line build onto a
+/// Nuvoton device).
+pub fn line_for_definition(definition: &str) -> Option<&'static str> {
+    match definition {
+        "ArcticFox" => Some("nuvoton"),
+        "ArcticFox STM32" => Some("stm32"),
+        _ => None,
+    }
+}
+
 /// Pick the best stock build for a device. Unknown product ID →
 /// `(NoLine, None)`. Known line: prefer a build whose `fw_versions`
 /// contains `fw_version` (`ExactVersion`); otherwise the newest build in
