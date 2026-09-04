@@ -601,6 +601,17 @@ pub fn run() {
     }
 
     tauri::Builder::default()
+        // Single-instance MUST be the first plugin: a second concurrent
+        // instance runs its own HID sidecar whose auto-reconnect config reads
+        // interleave into a firmware flash stream and brick the device
+        // (observed 2026-09-04: three instances polling during an LDROM
+        // flash). A second launch just focuses the existing window instead.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_os::init())

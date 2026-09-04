@@ -70,10 +70,21 @@
                 flap on and off the USB bus), checks the Product ID, streams the
                 image, restarts the device and verifies it comes back.
             </p>
+            <p>
+                A bricked device must be flashed with the <strong>original
+                manufacturer firmware first</strong> — ArcticFox flashed directly
+                onto a bricked device keeps the boot loop. The bundled original
+                firmware is selected automatically for the detected device
+                (iStick Pico V1.00 is bundled; more can be added to the firmware
+                library). After the original firmware is restored, the device can
+                receive ArcticFox: you will be offered the matching bundled
+                ArcticFox build right away. If no stock image is bundled for your
+                device, choose the manufacturer firmware file manually.
+            </p>
             <div class="form-group">
                 <label>Recovery image (.bin):</label>
-                <button id="recovery-choose" class="btn btn-default">Choose File</button>
-                <span id="recovery-path">no file chosen</span>
+                <span id="recovery-path">detecting device…</span>
+                <button id="recovery-choose" class="btn btn-default">Choose File…</button>
             </div>
             <div class="form-group">
                 <label for="recovery-pid">Expected Product ID (optional, e.g. M041):</label>

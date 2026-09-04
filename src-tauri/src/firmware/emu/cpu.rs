@@ -18,6 +18,10 @@ pub struct Cpu {
     pub c: bool,
     pub v: bool,
     pub trace: VecDeque<u32>, // last 32 executed PCs
+    /// Deepest sp value seen; the harness compares it against the bottom of
+    /// the stack region to catch stack exhaustion even when no store landed
+    /// below the region (e.g. `sub sp, #big` then return).
+    pub min_sp: u32,
 }
 
 impl Cpu {
@@ -32,6 +36,7 @@ impl Cpu {
             c: false,
             v: false,
             trace: VecDeque::new(),
+            min_sp: u32::MAX,
         }
     }
 
@@ -65,6 +70,12 @@ impl Cpu {
             // BL: 32-bit. decode() is pure and cannot see the second
             // halfword, so intercept here and skip the decode call.
             let hw2 = bus.read_u16(pc.wrapping_add(2))?;
+            // The second halfword must be 11 J1 1 J2 imm11. Anything else
+            // means the 0xF0xx prefix was not a BL (or the instruction stream
+            // is misaligned) — fail loud instead of branching to garbage.
+            if hw2 & 0xD000 != 0xD000 {
+                return Err(EmuError::Undefined { pc, instr: hw });
+            }
             let s = (hw >> 10) & 1;
             let j1 = (hw2 >> 13) & 1;
             let j2 = (hw2 >> 11) & 1;
@@ -93,6 +104,9 @@ impl Cpu {
                 return Ok(n);
             }
             self.step(bus)?;
+            if self.sp < self.min_sp {
+                self.min_sp = self.sp;
+            }
             n += 1;
             if n >= budget {
                 return Err(EmuError::BudgetExceeded { executed: n });
@@ -461,6 +475,14 @@ impl Cpu {
                     self.pc = self.pc.wrapping_add(2);
                 }
             }
+            Instr::Cbz { nonzero, rn, off } => {
+                // no flags; branch when (rn != 0) == nonzero
+                if (self.r[rn as usize] != 0) == nonzero {
+                    self.pc = (self.pc as i32).wrapping_add(4).wrapping_add(off) as u32;
+                } else {
+                    self.pc = self.pc.wrapping_add(2);
+                }
+            }
             Instr::Bl { off } => {
                 // lr/pc update lives here; step() decodes the two halfwords
                 self.lr = self.pc.wrapping_add(4) | 1;
@@ -610,6 +632,21 @@ mod tests {
         let mut bus = Bus::new(flash, 0x1000);
         let mut cpu = Cpu::new(); // pc = 0
         cpu.sp = RAM_BASE + 0x800;
+        cpu.step(&mut bus).unwrap();
+        cpu
+    }
+
+
+    /// Run one instruction placed at flash offset 0 with register setup.
+    fn run_one_with(setup: impl Fn(&mut Cpu), hws: &[u16]) -> Cpu {
+        let mut flash = vec![0u8; 0x100];
+        for (i, hw) in hws.iter().enumerate() {
+            flash[i * 2..i * 2 + 2].copy_from_slice(&hw.to_le_bytes());
+        }
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.sp = RAM_BASE + 0x800;
+        setup(&mut cpu);
         cpu.step(&mut bus).unwrap();
         cpu
     }
@@ -1046,5 +1083,51 @@ mod tests {
         cpu.r[1] = 0xFFFF_FFFE;
         let err = cpu.step(&mut bus).unwrap_err();
         assert!(matches!(err, EmuError::Unaligned { addr: 2, size: 4 }));
+    }
+
+    #[test]
+    fn test_cbz_cbnz() {
+        // 0xB128 = cbz r0, #10 (i=0, imm5=5 -> offset (0:00101:0) = 10)
+        let cpu = run_one_with(|cpu| cpu.r[0] = 0, &[0xB128, 0x46C0, 0x46C0, 0x46C0, 0x46C0, 0x46C0, 0x46C0]);
+        assert_eq!(cpu.pc, 4 + 10);
+        // not taken when rn != 0
+        let cpu = run_one_with(|cpu| cpu.r[0] = 7, &[0xB128]);
+        assert_eq!(cpu.pc, 2);
+        // 0xB911 = cbnz r1, #4 (i=0, imm5=2 -> offset 4)
+        let cpu = run_one_with(|cpu| cpu.r[1] = 0x1234, &[0xB911]);
+        assert_eq!(cpu.pc, 4 + 4);
+        // not taken when rn == 0
+        let cpu = run_one_with(|cpu| cpu.r[1] = 0, &[0xB911]);
+        assert_eq!(cpu.pc, 2);
+        // i bit extends the range: 0xB328 = cbz r0, #(0b1001010) = +74
+        let cpu = run_one_with(|cpu| cpu.r[0] = 0, &[0xB328]);
+        assert_eq!(cpu.pc, 4 + 74);
+    }
+
+    #[test]
+    fn test_cps_variants_decode_as_nop() {
+        // cpsie i = 0xB662, cpsid i = 0xB672 (and the A/I/F variants) must
+        // decode as NOP; only bit 3 set (0xB668) stays architecturally invalid.
+        for hw in [0xB660u16, 0xB661, 0xB662, 0xB663, 0xB672] {
+            let cpu = run_one(hw);
+            assert_eq!(cpu.pc, 2, "CPS {hw:#06x} did not advance pc");
+        }
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xB668u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        assert!(matches!(cpu.step(&mut bus), Err(EmuError::Undefined { .. })));
+    }
+
+    #[test]
+    fn test_bl_rejects_bad_second_halfword() {
+        // 0xF000 prefix followed by 0xE000 (a `b` encoding, not 11 J1 1 J2)
+        // must fault as Undefined instead of branching to a garbage target.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xF000u16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0xE000u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        assert!(matches!(cpu.step(&mut bus), Err(EmuError::Undefined { pc: 0, instr: 0xF000 })));
     }
 }

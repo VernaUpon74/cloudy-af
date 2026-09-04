@@ -121,12 +121,45 @@ function onError(err) {
     sendError('HID error', err);
 }
 
+// node-hid's hidraw backend can heap-crash (free(): invalid pointer, seen
+// 2026-09-04) when close() races its background read thread while the device
+// is flapping (e.g. rebooting into LDROM during a firmware flash). Pausing
+// the reader first and deferring the close to the next tick shrinks that
+// race window; the full fix is single-instance + suspend (Rust side).
+function safeCloseHid(hid) {
+    if (!hid) {
+        return;
+    }
+    try {
+        if (hid.pause) {
+            hid.pause();
+        }
+    } catch (e) {
+        // ignore — closing anyway
+    }
+    setImmediate(() => {
+        try {
+            if (hid.close) {
+                hid.close();
+            }
+        } catch (e) {
+            // device already gone — fine
+        }
+    });
+}
+
 // Disable the arcticfox module's internal reconnect loop so this bridge controls
 // reconnection timing and avoids duplicate concurrent connection attempts.
 fox.disconnect = function() {
-    if (fox.hid && fox.hid.close) {
-        try { fox.hid.close(); } catch (e) {}
+    safeCloseHid(fox.hid);
+    if (fox.connected) {
+        fox.connected = false;
+        fox.emit('close');
     }
+};
+
+fox.close = function() {
+    safeCloseHid(fox.hid);
     if (fox.connected) {
         fox.connected = false;
         fox.emit('close');
@@ -392,7 +425,8 @@ process.stdin.on('data', chunk => {
 
 process.stdin.on('end', () => {
     fox.close();
-    process.exit(0);
+    // fox.close() defers the native close to the next tick; let it run.
+    setImmediate(() => process.exit(0));
 });
 
 // Emit firmware minimum once ready.

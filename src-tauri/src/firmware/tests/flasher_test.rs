@@ -1773,3 +1773,126 @@ fn test_stock_cycle_hardware() {
     assert_eq!((ver2, flag2), (110, 0), "encrypted build did not boot into AF");
     assert!(shot2.is_some(), "AF screenshot did not respond after encrypted flash");
 }
+
+#[test]
+#[ignore]
+fn test_rescue_stock_v100_hardware() {
+    //! Sanity-checks the Recovery-tab flow end to end on a (bricked) device:
+    //! runs the real `recovery_flash` with a bundled image and Product ID
+    //! guard, exactly as the UI does after auto-selection. Defaults to the
+    //! bundled iStick Pico stock rescue image; override with RECOVERY_IMAGE /
+    //! RECOVERY_PID / RECOVERY_FWVER (e.g. an M077 Pico 25 rescued directly
+    //! with the bundled ArcticFox build:
+    //! RECOVERY_IMAGE=.../resources/firmware/af_190602.bin RECOVERY_PID=M077 RECOVERY_FWVER=110).
+    use crate::firmware::flasher as f;
+    let default_img = concat!(env!("CARGO_MANIFEST_DIR"), "/../resources/firmware/istick_pico_v100.bin");
+    let path = std::env::var("RECOVERY_IMAGE").unwrap_or_else(|_| default_img.into());
+    let pid = std::env::var("RECOVERY_PID").unwrap_or_else(|_| "M041".into());
+    let want_ver: i32 = std::env::var("RECOVERY_FWVER").ok().and_then(|v| v.parse().ok()).unwrap_or(100);
+    let bytes = std::fs::read(&path).expect("read rescue image");
+    f::recovery_flash(&bytes, Some(&pid), |msg| println!("  [recovery] {msg}"))
+        .expect("recovery flash failed");
+    // verify: device is back in APROM running the flashed firmware
+    let mut dev = f::open_device().expect("open after recovery failed");
+    let df = f::read_dataflash_from(&mut dev).expect("read_dataflash failed");
+    let ver = f::parse_fw_version(&df).expect("parse_fw_version failed");
+    println!("after recovery: pid={} fw_version={ver} bootflag={}",
+        String::from_utf8_lossy(&df[316..320]), df[4 + 9]);
+    assert_eq!(&df[316..320], pid.as_bytes());
+    assert_eq!(df[4 + 9], 0, "device still in LDROM");
+    assert_eq!(ver, want_ver, "device not running the expected firmware version");
+}
+
+#[test]
+#[ignore]
+fn test_flash_stream_diag_hardware() {
+    //! Streaming diagnostic for flapping devices: waits for the device,
+    //! immediately streams DIAG_IMAGE (default: bundled af_190602) with
+    //! timestamped per-64-chunk progress, and reports exactly how far the
+    //! stream got before the device dropped. Loops across flaps.
+    use crate::firmware::flasher as f;
+    let path = std::env::var("DIAG_IMAGE").unwrap_or_else(|_| {
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../resources/firmware/af_190602.bin").into()
+    });
+    let bytes = std::fs::read(&path).expect("read diag image");
+    let t0 = std::time::Instant::now();
+    let log = |msg: String| println!("  [{:7.3?}] {msg}", t0.elapsed());
+    'wait: loop {
+        log("waiting for device…".into());
+        let mut dev = loop {
+            if let Ok(d) = f::open_device() { break d; }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        };
+        log("device open".into());
+        match f::read_dataflash_from(&mut dev) {
+            Ok(df) => log(format!("dataflash ok: pid={} flag={} ver={}",
+                String::from_utf8_lossy(&df[316..320]), df[4 + 9],
+                f::parse_fw_version(&df).unwrap_or(-1))),
+            Err(e) => { log(format!("dataflash read failed: {e} — re-waiting")); continue 'wait; }
+        }
+        if f::send_command_pub(&mut dev, 0xC3, 0, bytes.len() as i32).is_err() {
+            log("0xC3 command failed — re-waiting".into());
+            continue 'wait;
+        }
+        log(format!("0xC3 sent, streaming {} bytes", bytes.len()));
+        let total = bytes.len() / 64;
+        let mut ok = true;
+        for (i, chunk) in bytes.chunks(64).enumerate() {
+            let mut report = vec![0u8; 65];
+            report[1..1 + chunk.len()].copy_from_slice(chunk);
+            let mut tries = 0;
+            loop {
+                match dev.write(&report) {
+                    Ok(_) => break,
+                    Err(e) => {
+                        tries += 1;
+                        if tries > 50 {
+                            log(format!("WRITE DIED at chunk {i}/{total} ({:.1}%): {e}",
+                                i as f64 * 100.0 / total as f64));
+                            ok = false;
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                    }
+                }
+            }
+            if !ok { break; }
+            if i % 64 == 0 { log(format!("chunk {i}/{total}")); }
+        }
+        if ok {
+            log("stream COMPLETE — attempting restart".into());
+            for _ in 0..50 {
+                if f::restart_device().is_ok() { log("restart ok".into()); break; }
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            // watch what it boots into
+            loop {
+                match f::open_device() {
+                    Ok(mut d) => {
+                        if let Ok(df) = f::read_dataflash_from(&mut d) {
+                            log(format!("back: pid={} flag={} ver={}",
+                                String::from_utf8_lossy(&df[316..320]), df[4 + 9],
+                                f::parse_fw_version(&df).unwrap_or(-1)));
+                            return;
+                        }
+                    }
+                    Err(_) => {}
+                }
+                if t0.elapsed() > std::time::Duration::from_secs(600) { panic!("never came back"); }
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore]
+fn test_decrypt_to_file() {
+    //! DECRYPT_IN -> DECRYPT_OUT: writes the decrypted (plaintext) image.
+    let input = std::env::var("DECRYPT_IN").expect("set DECRYPT_IN");
+    let output = std::env::var("DECRYPT_OUT").expect("set DECRYPT_OUT");
+    let data = std::fs::read(&input).expect("read input");
+    let (plain, enc) = crate::firmware::encryption::decrypt(&data).expect("decrypt failed");
+    std::fs::write(&output, &plain).expect("write output");
+    println!("{input} ({enc:?}) -> {output}: {} bytes plaintext", plain.len());
+}

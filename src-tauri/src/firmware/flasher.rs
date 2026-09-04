@@ -256,6 +256,9 @@ pub fn ensure_ldrom_mode() -> Result<()> {
     user_data.copy_from_slice(&data[4..]);
     user_data[9] = 1; // BootFlagOffset within the 2044-byte data area
     write_dataflash(&user_data)?;
+    // NToolbox sleeps 100 ms here: give the device time to commit the
+    // dataflash sector before the restart command arrives.
+    thread::sleep(Duration::from_millis(100));
     restart_device()?;
 
     // Wait for re-enumeration and confirm the LDROM boot flag, like NFE does.
@@ -272,41 +275,10 @@ pub fn ensure_ldrom_mode() -> Result<()> {
     Err(FirmwareError::Other("device did not re-enumerate in bootloader mode".into()))
 }
 
-/// Flash a firmware image to the device, restart it, and verify it boots.
-///
-/// The image is streamed exactly as provided: encrypted (e.g. VandalProof)
-/// images are decrypted by the on-device LDROM updater, plaintext images are
-/// accepted as-is. If `expected_product_id` is given, the device dataflash
-/// Product ID must match before anything is written.
-pub fn flash_firmware_guarded(bytes: &[u8], expected_product_id: Option<&str>) -> Result<()> {
-    // Sanity-check the image before touching the device: the Nuvoton APROM
-    // is 128K flash minus the LDROM, and the largest known ArcticFox build
-    // is ~114K — anything larger would be written past the APROM end.
-    const MAX_FIRMWARE_SIZE: usize = 128 * 1024;
-    if !(1024..=MAX_FIRMWARE_SIZE).contains(&bytes.len()) {
-        return Err(FirmwareError::Other(format!(
-            "implausible firmware image size: {} bytes",
-            bytes.len()
-        )));
-    }
-
-    // Check the Product ID guard before switching to LDROM, so a refused
-    // flash leaves the device running its current firmware.
-    if let Some(want) = expected_product_id {
-        let mut device = open_device()?;
-        let df = read_dataflash_from(&mut device)?;
-        if df.len() < 320 {
-            return Err(FirmwareError::Other("dataflash too short".into()));
-        }
-        let pid = String::from_utf8_lossy(&df[316..320]).into_owned();
-        if pid != want {
-            return Err(FirmwareError::Other(format!(
-                "refusing to flash: connected device is {pid}, firmware is for {want}"
-            )));
-        }
-    }
-
-    ensure_ldrom_mode()?;
+/// One firmware-write attempt: open the device, send the 0xC3 WriteData
+/// command, and stream the whole image. Retried as a unit by
+/// [`flash_firmware_guarded`] (see its NToolbox-parity comment).
+fn write_firmware_stream(bytes: &[u8]) -> Result<()> {
     let mut device = open_device()?;
 
     send_command(&mut device, CMD_WRITE_DATA, 0, bytes.len() as i32)?;
@@ -330,7 +302,66 @@ pub fn flash_firmware_guarded(bytes: &[u8], expected_product_id: Option<&str>) -
             }
         }
     }
-    drop(device);
+    Ok(())
+}
+
+/// Flash a firmware image to the device, restart it, and verify it boots.
+///
+/// The image is streamed exactly as provided: encrypted (e.g. VandalProof)
+/// images are decrypted by the on-device LDROM updater, plaintext images are
+/// accepted as-is. If `expected_product_id` is given, the device dataflash
+/// Product ID must match before anything is written.
+/// Sanity-check the image before touching the device: the Nuvoton APROM
+/// is 128K flash minus the LDROM, and the largest known ArcticFox build
+/// is ~114K — anything larger would be written past the APROM end.
+fn check_image_size(bytes: &[u8]) -> Result<()> {
+    const MAX_FIRMWARE_SIZE: usize = 128 * 1024;
+    if !(1024..=MAX_FIRMWARE_SIZE).contains(&bytes.len()) {
+        return Err(FirmwareError::Other(format!(
+            "implausible firmware image size: {} bytes",
+            bytes.len()
+        )));
+    }
+    Ok(())
+}
+
+pub fn flash_firmware_guarded(bytes: &[u8], expected_product_id: Option<&str>) -> Result<()> {
+    check_image_size(bytes)?;
+
+    // Check the Product ID guard before switching to LDROM, so a refused
+    // flash leaves the device running its current firmware.
+    if let Some(want) = expected_product_id {
+        let mut device = open_device()?;
+        let df = read_dataflash_from(&mut device)?;
+        if df.len() < 320 {
+            return Err(FirmwareError::Other("dataflash too short".into()));
+        }
+        let pid = String::from_utf8_lossy(&df[316..320]).into_owned();
+        if pid != want {
+            return Err(FirmwareError::Other(format!(
+                "refusing to flash: connected device is {pid}, firmware is for {want}"
+            )));
+        }
+    }
+
+    ensure_ldrom_mode()?;
+
+    // NToolbox retries the ENTIRE WriteFirmware (0xC3 command + full stream)
+    // for 15 s on any failure. Do the same: aborting mid-stream leaves a
+    // partially programmed APROM (apparent brick), while the LDROM updater
+    // cleanly restarts an interrupted update on the next attempt.
+    let deadline = std::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        match write_firmware_stream(bytes) {
+            Ok(()) => break,
+            Err(e) => {
+                if std::time::Instant::now() >= deadline {
+                    return Err(e);
+                }
+                thread::sleep(Duration::from_secs(1));
+            }
+        }
+    }
 
     // Restart and wait for the device to come back in APROM mode. The LDROM
     // may drop USB briefly while finalizing the flash, making a single-shot
@@ -381,35 +412,53 @@ pub fn recovery_flash(
     expected_product_id: Option<&str>,
     on_progress: impl Fn(&str),
 ) -> Result<()> {
-    // Phase 1: wait for the device (and the right one).
-    on_progress("waiting for device — unplug and replug it, or hold a button while plugging in");
+    // Deterministic validation up front: the wait→flash loop below exists
+    // for transient device flapping; a bad image would otherwise loop forever
+    // with the sidecar permanently suspended.
+    check_image_size(bytes)?;
+    // A bricked device can flap on and off the bus at any point — including
+    // between device-found and flash-start. Loop the whole wait→flash cycle:
+    // the LDROM updater erases and restarts an interrupted update cleanly on
+    // the next attempt (verified in the hardware recovery experiments).
     loop {
-        match open_device() {
-            Ok(mut device) => match read_dataflash_from(&mut device) {
-                Ok(df) => {
-                    if df.len() >= 320 {
-                        let pid = String::from_utf8_lossy(&df[316..320]).into_owned();
-                        if let Some(want) = expected_product_id {
-                            if pid != want {
-                                on_progress(&format!("found {pid}, need {want} — still waiting"));
-                                thread::sleep(Duration::from_secs(2));
-                                continue;
+        // Phase 1: wait for the device (and the right one).
+        on_progress("waiting for device — unplug and replug it, or hold a button while plugging in");
+        loop {
+            match open_device() {
+                Ok(mut device) => match read_dataflash_from(&mut device) {
+                    Ok(df) => {
+                        if df.len() >= 320 {
+                            let pid = String::from_utf8_lossy(&df[316..320]).into_owned();
+                            if let Some(want) = expected_product_id {
+                                if pid != want {
+                                    on_progress(&format!("found {pid}, need {want} — still waiting"));
+                                    thread::sleep(Duration::from_secs(2));
+                                    continue;
+                                }
                             }
+                            on_progress(&format!("device {pid} found"));
+                            drop(device);
+                            break;
                         }
-                        on_progress(&format!("device {pid} found"));
-                        drop(device);
-                        break;
                     }
-                }
+                    Err(_) => thread::sleep(Duration::from_millis(500)),
+                },
                 Err(_) => thread::sleep(Duration::from_millis(500)),
-            },
-            Err(_) => thread::sleep(Duration::from_millis(500)),
+            }
+        }
+
+        // Phase 2: flash with retries and verify the reboot. On failure
+        // (e.g. the device flapped away mid-flash) go back to waiting.
+        on_progress("flashing…");
+        match flash_firmware_guarded(bytes, expected_product_id) {
+            Ok(()) => {
+                on_progress("flash complete, device rebooted into flashed firmware");
+                return Ok(());
+            }
+            Err(e) => {
+                on_progress(&format!("flash attempt failed: {e} — waiting for the device again"));
+                thread::sleep(Duration::from_secs(1));
+            }
         }
     }
-
-    // Phase 2: flash with retries and verify the reboot.
-    on_progress("flashing…");
-    flash_firmware_guarded(bytes, expected_product_id)?;
-    on_progress("flash complete, device rebooted into flashed firmware");
-    Ok(())
 }

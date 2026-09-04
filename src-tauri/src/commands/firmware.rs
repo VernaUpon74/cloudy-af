@@ -13,6 +13,14 @@ use crate::firmware::patch::{apply_patch, parse_patch, rollback_patch};
 use crate::firmware::state::{FirmwareState, OpenFirmware};
 use crate::firmware::stock::{line_for_definition, line_for_product, load_library, match_build, MatchKind};
 
+/// Serializes every command that talks to the device directly (flashes AND
+/// dataflash reads). Two concurrent flashes interleave 0x35/0xC3 traffic and
+/// brick the device — this is what the single-instance plugin cannot prevent
+/// (two windows of the SAME instance can start a flash each), and a dataflash
+/// read dispatched in the same millisecond a flash starts can still land
+/// inside the stream.
+static FLASH_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn backup_path(app: &AppHandle, handle: &str) -> Option<PathBuf> {
     app.path().config_dir().ok().map(|d| d.join(format!("cloudy-af/firmware-backups/{}.bin", handle)))
 }
@@ -250,6 +258,7 @@ pub async fn download_stock(
     app: AppHandle,
     state: State<'_, FirmwareState>,
 ) -> Result<Value, String> {
+    let _guard = FLASH_MUTEX.lock().await;
     let df = read_dataflash().map_err(|e| e.to_string())?;
     if df.len() < 320 {
         return Err("dataflash too short for product id".to_string());
@@ -427,11 +436,13 @@ pub async fn close_firmware(
 
 #[tauri::command]
 pub async fn read_device_dataflash() -> Result<Vec<u8>, String> {
+    let _guard = FLASH_MUTEX.lock().await;
     read_dataflash().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn read_device_product_id() -> Result<String, String> {
+    let _guard = FLASH_MUTEX.lock().await;
     read_product_id().map_err(|e| e.to_string())
 }
 
@@ -476,6 +487,7 @@ pub async fn flash_firmware_to_device(
     // The HID sidecar polls the device for configuration; suspend it so it
     // cannot interleave commands into the flash stream.
     let _ = crate::suspend_sidecar(&sidecar).await;
+    let _flash_guard = FLASH_MUTEX.lock().await;
     let result = tauri::async_runtime::spawn_blocking(move || {
         flash_guarded_for_image(&app, &encrypted, &definition)
     })
@@ -487,6 +499,7 @@ pub async fn flash_firmware_to_device(
 
 #[tauri::command]
 pub async fn restart_device_cmd() -> Result<(), String> {
+    let _guard = FLASH_MUTEX.lock().await;
     restart_device().map_err(|e| e.to_string())
 }
 
@@ -503,6 +516,7 @@ pub async fn undo_firmware_changes(
     let backup = backup.ok_or_else(|| "No original firmware backup available".to_string())?;
     let bytes = std::fs::read(&backup).map_err(|e| e.to_string())?;
     let _ = crate::suspend_sidecar(&sidecar).await;
+    let _flash_guard = FLASH_MUTEX.lock().await;
     let result = tauri::async_runtime::spawn_blocking(move || {
         flash_firmware_guarded(&bytes, None).map_err(|e| e.to_string())
     })
@@ -530,6 +544,7 @@ pub async fn recovery_flash(
     let bytes = std::fs::read(&path).map_err(|e| format!("cannot read {path}: {e}"))?;
     let app2 = app.clone();
     let _ = crate::suspend_sidecar(&sidecar).await;
+    let _flash_guard = FLASH_MUTEX.lock().await;
     let result = tauri::async_runtime::spawn_blocking(move || {
         crate::firmware::flasher::recovery_flash(&bytes, expected_product_id.as_deref(), |msg| {
             let _ = app2.emit("recovery-progress", msg);

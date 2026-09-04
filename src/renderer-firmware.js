@@ -245,6 +245,7 @@ async function doFlashFirmware() {
         return;
     }
     setStatus('Flashing firmware to device…');
+    flashInProgress = true; // stop recovery-tab Product ID polling during the flash
     try {
         await flashFirmwareToDevice(currentHandle);
         setStatus($('#fw-status').text() + ' — flashed');
@@ -253,6 +254,8 @@ async function doFlashFirmware() {
         console.error('flashFirmware failed', err);
         alert(err.toString());
         setStatus('Flash failed');
+    } finally {
+        flashInProgress = false;
     }
 }
 
@@ -265,6 +268,7 @@ async function doUndoChanges() {
         return;
     }
     setStatus('Restoring original firmware…');
+    flashInProgress = true;
     try {
         await undoFirmwareChanges(currentHandle);
         setStatus('Original firmware restored');
@@ -272,6 +276,8 @@ async function doUndoChanges() {
         console.error('undoFirmwareChanges failed', err);
         alert(err.toString());
         setStatus('Restore failed');
+    } finally {
+        flashInProgress = false;
     }
 }
 
@@ -298,12 +304,100 @@ function initTabs() {
 // ---------------------------------------------------------------------------
 
 let recoveryPath = null;
+let recoveryKind = null;    // 'rescue' (stock) | 'af' (ArcticFox build) | 'custom'
 let recoveryBusy = false;
+let flashInProgress = false; // firmware-editor flash/undo in progress (shared HID bus)
+let detectedPid = null;
+let pidAuto = false;         // pid input was auto-filled (may be overwritten)
+let deviceLib = null;        // parsed resources/firmware/devices.json
+let lastFlashWasRescue = false;
 
 function recoveryLog(msg) {
     const $log = $('#recovery-log');
     $log.append(document.createTextNode(new Date().toLocaleTimeString() + '  ' + msg + '\n'));
     $log.scrollTop($log[0].scrollHeight);
+}
+
+async function loadDeviceLib() {
+    try {
+        const libPath = await resolveResourcePath('firmware/devices.json');
+        deviceLib = JSON.parse(await readTextFile(libPath));
+    } catch (err) {
+        console.error('could not load firmware library', err);
+    }
+}
+
+function lineForPid(pid) {
+    if (!deviceLib || !pid) {
+        return null;
+    }
+    for (const [name, line] of Object.entries(deviceLib.lines)) {
+        if (line.product_ids.includes(pid)) {
+            return name;
+        }
+    }
+    return null;
+}
+
+// Newest bundled ArcticFox build for a device line (build ids end in YYMMDD).
+function latestAfBuildForLine(line) {
+    const builds = (deviceLib.builds || []).filter(b => b.line === line);
+    builds.sort((a, b) => b.id.localeCompare(a.id));
+    return builds[0] || null;
+}
+
+function setPidGuard(pid) {
+    $('#recovery-pid').val(pid);
+    pidAuto = true;
+}
+
+// Auto-select the image appropriate for the detected device:
+//  - detected device with a bundled stock rescue image -> that image
+//    (after the original firmware is restored, ArcticFox can be flashed);
+//  - detected device without one -> the newest bundled ArcticFox build for
+//    its line (AF images are universal within a device line);
+//  - no device detected yet -> the single bundled rescue default, guarded
+//    by its Product ID so it can never land on a wrong device.
+async function autoSelectRecoveryImage() {
+    if (!deviceLib || recoveryBusy) {
+        return;
+    }
+    if (recoveryPath && recoveryKind === 'custom') {
+        return; // user picked a file explicitly; don't override
+    }
+    try {
+        const rescue = (deviceLib.rescue || []).find(r => detectedPid && r.product_ids.includes(detectedPid))
+            || (!detectedPid && (deviceLib.rescue || [])[0]) || null;
+        if (rescue) {
+            recoveryPath = await resolveResourcePath('firmware/' + rescue.file);
+            recoveryKind = 'rescue';
+            $('#recovery-path').text(rescue.label + ' (' + rescue.file + ')');
+            if (!detectedPid && rescue.product_ids.length === 1 && (!$('#recovery-pid').val() || pidAuto)) {
+                setPidGuard(rescue.product_ids[0]);
+            }
+        } else {
+            // No bundled stock image for the detected device. Do NOT fall back
+            // to ArcticFox here: a bricked/looping device does not boot AF
+            // directly (established on hardware — see test-fixtures/rescue/
+            // README.md); it must get the original manufacturer firmware
+            // first. And never keep a stale auto-selected image around — with
+            // the guard auto-filled to the device's own Product ID, a leftover
+            // Pico image would flash onto a non-Pico device.
+            if (recoveryKind !== 'custom') {
+                recoveryPath = null;
+                recoveryKind = null;
+                $('#recovery-path').text(
+                    'no bundled stock image for ' + (detectedPid || 'this device') +
+                    ' — choose the original manufacturer firmware file'
+                );
+                $('#recovery-start').prop('disabled', true);
+            }
+            return;
+        }
+        $('#recovery-start').prop('disabled', recoveryBusy);
+    } catch (err) {
+        console.error('could not resolve bundled image', err);
+    }
 }
 
 async function refreshRecoveryDevices() {
@@ -321,6 +415,46 @@ async function refreshRecoveryDevices() {
     } catch (err) {
         // hidapi unavailable; leave list as-is
     }
+    // Detect the device's Product ID so the right images auto-select. Skip
+    // while any flash is running: a 0x35 dataflash read interleaved into a
+    // 0xC3 firmware stream corrupts the flash (brick risk).
+    if (!recoveryBusy && !flashInProgress) {
+        try {
+            const pid = (await readDeviceProductId()).replace(/\0+$/, '').trim();
+            if (!/^[A-Z0-9]{4}$/.test(pid)) {
+                return; // garbage read while the device flaps — not a Product ID
+            }
+            if (pid !== detectedPid) {
+                detectedPid = pid;
+                recoveryLog('detected device Product ID: ' + pid);
+                if (!$('#recovery-pid').val() || pidAuto) {
+                    setPidGuard(pid);
+                }
+                await autoSelectRecoveryImage();
+            }
+        } catch (err) {
+            // no device, or dataflash unreadable while it flaps — ignore
+        }
+    }
+}
+
+async function runRecoveryFlash() {
+    const pid = ($('#recovery-pid').val() || '').trim();
+    const wasRescue = recoveryKind === 'rescue';
+    recoveryBusy = true;
+    $('#recovery-start').prop('disabled', true);
+    recoveryLog('recovery started: ' + recoveryPath);
+    try {
+        await recoveryFlash(recoveryPath, pid || null);
+        recoveryLog('SUCCESS — device rebooted into the flashed firmware');
+        lastFlashWasRescue = wasRescue;
+    } catch (err) {
+        recoveryLog('FAILED: ' + err.toString());
+        lastFlashWasRescue = false;
+    } finally {
+        recoveryBusy = false;
+        $('#recovery-start').prop('disabled', !recoveryPath);
+    }
 }
 
 $('#recovery-choose').click(async () => {
@@ -328,12 +462,17 @@ $('#recovery-choose').click(async () => {
         const path = await openFileDialog([{ name: 'Firmware', extensions: ['bin'] }]);
         if (path) {
             recoveryPath = path;
+            recoveryKind = 'custom';
             $('#recovery-path').text(path);
             $('#recovery-start').prop('disabled', recoveryBusy);
         }
     } catch (err) {
         console.error('openFileDialog failed', err);
     }
+});
+
+$('#recovery-pid').on('input', () => {
+    pidAuto = false; // manual edit wins over auto-detection
 });
 
 $('#recovery-start').click(async () => {
@@ -350,22 +489,34 @@ $('#recovery-start').click(async () => {
     if (!confirmed) {
         return;
     }
-    recoveryBusy = true;
-    $('#recovery-start').prop('disabled', true);
-    recoveryLog('recovery started');
-    try {
-        await recoveryFlash(recoveryPath, pid || null);
-        recoveryLog('SUCCESS — device rebooted into the flashed firmware');
-    } catch (err) {
-        recoveryLog('FAILED: ' + err.toString());
-    } finally {
-        recoveryBusy = false;
-        $('#recovery-start').prop('disabled', !recoveryPath);
+    await runRecoveryFlash();
+    // After restoring the original manufacturer firmware the device is ready
+    // for ArcticFox — offer the matching bundled build right away.
+    if (lastFlashWasRescue) {
+        recoveryLog('original firmware restored — the device can now receive ArcticFox');
+        const line = lineForPid(detectedPid || pid);
+        const af = latestAfBuildForLine(line);
+        if (!af) {
+            recoveryLog('no bundled ArcticFox build for this device line; use the Firmware Editor');
+            return;
+        }
+        if (confirm(`Original firmware restored.\n\nFlash ArcticFox build ${af.id} to the device now?`)) {
+            try {
+                recoveryPath = await resolveResourcePath('firmware/' + af.file);
+                recoveryKind = 'af'; // AF follow-up is not a stock-rescue image
+                $('#recovery-path').text('ArcticFox ' + af.id + ' (' + af.file + ')');
+                recoveryLog('flashing ArcticFox ' + af.id + '…');
+                await runRecoveryFlash();
+            } catch (err) {
+                recoveryLog('ArcticFox flash setup failed: ' + err.toString());
+            }
+        }
     }
 });
 
 onRecoveryProgress(msg => recoveryLog(msg));
 setInterval(refreshRecoveryDevices, 2000);
+loadDeviceLib().then(() => autoSelectRecoveryImage());
 refreshRecoveryDevices();
 
 $('#open-firmware').click(doOpenFirmware);

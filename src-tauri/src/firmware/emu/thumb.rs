@@ -53,6 +53,8 @@ pub enum Instr {
     Ldm { rn: u8, list: u8 },
     /// Conditional branch; `off` is the sign-extended byte offset from pc+4.
     BCond { cond: u8, off: i32 },
+    /// CBZ/CBNZ: branch on (non-)zero register; `off` is (i:imm5:0) from pc+4.
+    Cbz { nonzero: bool, rn: u8, off: i32 },
     /// 32-bit branch-with-link; decoded in Cpu::step (needs the second halfword).
     Bl { off: i32 },
     /// Supervisor call; a no-op in this harness.
@@ -117,6 +119,13 @@ pub fn decode(hw: u16) -> Option<Instr> {
     if hw >> 8 == 0xB0 { // 1011 0000 x imm7  SP adjust
         return Some(Instr::AdjSp { sub: (hw >> 7) & 1 == 1, imm: (hw & 0x7F) as u8 });
     }
+    if (hw & 0xFD00) == 0xB100 || (hw & 0xFD00) == 0xB900 {
+        // CBZ/CBNZ: 1011 op i 0 imm5 Rn; offset = (i:imm5:0) from pc+4.
+        // Compilers emit these for short null checks — needed for real code.
+        let i = ((hw >> 9) & 1) as i32;
+        let imm5 = ((hw >> 3) & 0x1F) as i32;
+        return Some(Instr::Cbz { nonzero: (hw >> 11) & 1 == 1, rn: (hw & 7) as u8, off: (i << 6) | (imm5 << 1) });
+    }
     // Group D (stack ops, multi load/store, branches, misc). Same placement
     // reasoning as group C: these top-bit patterns (0xB2xx+, 0xB4xx..0xBFxx,
     // 0xC000+, 0xD000+) do not overlap the group-B guards checked above.
@@ -133,7 +142,13 @@ pub fn decode(hw: u16) -> Option<Instr> {
         return Some(Instr::Extend { op: ((hw >> 6) & 3) as u8, rd: (hw & 7) as u8, rm: ((hw >> 3) & 7) as u8 });
     }
     if hw >> 8 == 0xBE { return Some(Instr::Bkpt { imm: (hw & 0xFF) as u8 }); }
-    if hw >> 8 == 0xBF || hw == 0xB660 { return Some(Instr::Nop); } // hints + CPS
+    if hw >> 8 == 0xBF { return Some(Instr::Nop); } // hint space (NOP/WFI/...)
+    if hw >> 5 == 0b1011_0110_011 && hw & 0x8 == 0 {
+        // CPS (all im/A/I/F variants, e.g. CPSIE i = 0xB662, CPSID i = 0xB672).
+        // PRIMASK is not modelled, so this is a NOP — but it must decode,
+        // otherwise real render code faults as Undefined.
+        return Some(Instr::Nop);
+    }
     if hw >> 12 == 0b1100 {
         let rn = ((hw >> 8) & 7) as u8; let list = (hw & 0xFF) as u8;
         return Some(if (hw >> 11) & 1 == 0 { Instr::Stm { rn, list } } else { Instr::Ldm { rn, list } });

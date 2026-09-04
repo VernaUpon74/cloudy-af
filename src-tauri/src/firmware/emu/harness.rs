@@ -66,6 +66,11 @@ pub struct Harness {
     pub cpu: Cpu,
     pub bus: Bus,
     pub desc: Descriptor,
+    /// Bottom of the allowed stack region: the canary lives here, and sp is
+    /// never allowed to dip below it.
+    stack_bottom: u32,
+    /// Address of the stack canary (0xDEAD_C0DE), re-checked after every run.
+    canary_addr: u32,
 }
 
 impl Harness {
@@ -80,11 +85,17 @@ impl Harness {
         bus.allow_region(ram_top - 0x1000..ram_top); // stack
         let mut cpu = Cpu::new();
         cpu.sp = ram_top - 16; // 8-aligned
-        bus.write_u32(cpu.sp - 4, 0xDEAD_C0DE)
+        // The canary sits at the BOTTOM of the stack region, not just below
+        // the frame: normal prologue pushes clobber anything near the initial
+        // sp, while a write reaching the region bottom means the stack was
+        // effectively exhausted. (Writes past the bottom fault via the ACL.)
+        let stack_bottom = ram_top - 0x1000;
+        let canary_addr = stack_bottom;
+        bus.write_u32(canary_addr, 0xDEAD_C0DE)
             .expect("canary write lands inside the stack allow region");
         cpu.lr = RETURN_SENTINEL | 1;
         cpu.r[..4].copy_from_slice(&desc.args);
-        Self { cpu, bus, desc }
+        Self { cpu, bus, desc, stack_bottom, canary_addr }
     }
 
     /// Run the render entry point once and unpack the display buffer.
@@ -93,11 +104,31 @@ impl Harness {
     pub fn run_frame(&mut self, budget: u64) -> Result<Frame, EmuError> {
         self.cpu.pc = self.desc.render_entry & !1;
         self.cpu.lr = RETURN_SENTINEL | 1;
+        self.cpu.min_sp = self.cpu.sp;
         self.cpu.run_until(&mut self.bus, RETURN_SENTINEL, budget)?;
         if !self.bus.acl_violations.is_empty() {
             return Err(EmuError::Descriptor(format!(
                 "ACL violations: {:?}\n{}",
                 self.bus.acl_violations,
+                self.cpu.debug_dump()
+            )));
+        }
+        // Stack-exhaustion checks. The canary catches writes that reach the
+        // region bottom (allowed by the ACL, so otherwise silent); the min-sp
+        // check catches the stack pointer dipping below the region without a
+        // store (e.g. `sub sp, #big` followed by a return).
+        if self.cpu.min_sp < self.stack_bottom {
+            return Err(EmuError::Descriptor(format!(
+                "stack pointer bottomed out at {:#010x} (region bottom {:#010x})\n{}",
+                self.cpu.min_sp,
+                self.stack_bottom,
+                self.cpu.debug_dump()
+            )));
+        }
+        let canary = self.bus.read_u32(self.canary_addr)?;
+        if canary != 0xDEAD_C0DE {
+            return Err(EmuError::Descriptor(format!(
+                "stack canary corrupted ({canary:#010x}) — stack usage reached the region bottom\n{}",
                 self.cpu.debug_dump()
             )));
         }
@@ -151,7 +182,7 @@ mod tests {
         "render_entry": "0x00000080",
         "display_buffer": { "start": "0x20001000", "end": "0x20001400", "width": 64, "height": 128 },
         "ram_globals": [ { "start": "0x20000000", "end": "0x20000100" } ],
-        "ram_size": 8192,
+        "ram_size": 32768,
         "args": [0, 0, 0, 0]
     }"#;
 
@@ -218,6 +249,48 @@ mod tests {
         let mut h = Harness::new(&img, d);
         let err = h.run_frame(100_000).unwrap_err();
         assert!(matches!(err, EmuError::Descriptor(_)));
+    }
+
+    #[test]
+    fn test_run_frame_catches_stack_canary_corruption() {
+        // Store directly to the bottom of the stack region (0x20007000 with
+        // ram_size 32768): allowed by the ACL, but it clobbers the canary.
+        let mut img = vec![0u8; 0x100];
+        let code: [u16; 4] = [
+            0x4901, // 0x80: ldr r1, [pc, #4]  ; base=align(0x84,4)=0x84, +4=0x88 -> &stack_bottom
+            0x2055, // 0x82: movs r0, #0x55
+            0x6008, // 0x84: str r0, [r1, #0]
+            0x4770, // 0x86: bx lr
+        ];
+        for (i, hw) in code.iter().enumerate() {
+            img[0x80 + i * 2..0x80 + i * 2 + 2].copy_from_slice(&hw.to_le_bytes());
+        }
+        img[0x88..0x8C].copy_from_slice(&(RAM_BASE + 0x7000).to_le_bytes());
+        let d = load_descriptor(DESC_JSON).unwrap();
+        let mut h = Harness::new(&img, d);
+        let err = h.run_frame(100_000).unwrap_err();
+        match err {
+            EmuError::Descriptor(msg) => assert!(msg.contains("canary"), "unexpected: {msg}"),
+            other => panic!("expected Descriptor error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_run_frame_catches_stack_pointer_underflow() {
+        // 9x sub sp, #508: sp ends 4572 below the initial sp, past the 4080
+        // bytes of headroom above the region bottom — with no store at all.
+        let mut img = vec![0u8; 0x100];
+        for i in 0..9 {
+            img[0x80 + i * 2..0x82 + i * 2].copy_from_slice(&0xB0FFu16.to_le_bytes()); // sub sp, #508
+        }
+        img[0x92..0x94].copy_from_slice(&0x4770u16.to_le_bytes()); // bx lr
+        let d = load_descriptor(DESC_JSON).unwrap();
+        let mut h = Harness::new(&img, d);
+        let err = h.run_frame(100_000).unwrap_err();
+        match err {
+            EmuError::Descriptor(msg) => assert!(msg.contains("stack pointer"), "unexpected: {msg}"),
+            other => panic!("expected Descriptor error, got {other:?}"),
+        }
     }
 
     #[test]

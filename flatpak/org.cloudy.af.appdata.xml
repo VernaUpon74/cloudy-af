@@ -34,6 +34,11 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
+    <release version="1.16.1" date="2026-09-04">
+      <description>
+        <p>Fixed a firmware-flash race that could brick devices (single-instance enforcement, whole-upload retry, sidecar crash fix). Recovery tab now auto-loads the bundled original manufacturer firmware and offers the matching ArcticFox build afterwards.</p>
+      </description>
+    </release>
     <release version="1.16.0" date="2026-09-03">
       <description>
         <p>Added Firmware Editor Recovery tab, support for all 47 ArcticFox-compatible device Product IDs, in-app VandalProof firmware decryption, and bundled stock firmware library. Fixed STM32-line firmware opening and Flatpak resource bundling.</p>

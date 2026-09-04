@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.16.1 — 2026-09-04
+
+### Fixed
+- **Bricked-device flash race (root cause of a real brick)**: the app no longer allows concurrent instances. A second launch now focuses the existing window instead of spawning a parallel instance whose auto-reconnecting HID sidecar could interleave config commands into another instance's firmware flash stream and corrupt the image.
+- A process-wide flash mutex now serializes every command that touches the device directly (flash, undo, recovery, dataflash/Product ID reads, restart), closing the same interleaving race between two windows of the SAME instance (e.g. Recovery tab waiting for a device while the editor flashes).
+- **Firmware flash write now retries the whole upload** (command + full stream, 15 s window) on failure, matching NToolbox's `WriteFirmware` behavior; previously a persistent mid-stream error aborted the upload and left a partially programmed APROM. Also added NToolbox's 100 ms settle delay between the dataflash boot-flag write and the restart command.
+- **Recovery flash now survives device flapping**: the wait-for-device → flash cycle repeats until the flash completes instead of failing on the first drop, and deterministic errors (bad image size) abort immediately instead of looping forever.
+- **HID sidecar crash** (`free(): invalid pointer` in node-hid when the device disappears mid-read, e.g. while rebooting into LDROM): the sidecar now pauses node-hid's reader thread before closing the device handle.
+- **Firmware emulation harness** (pre-flash gate): CBZ/CBNZ and all CPS variants now decode (real compiler output faulted as Undefined), the BL second halfword is validated, and stack-exhaustion is caught by a canary at the stack-region bottom plus minimum-sp tracking.
+
+### Changed
+- **Recovery tab now auto-loads the bundled original manufacturer firmware** for the detected device (iStick Pico V1.00 is bundled; more can be added to `resources/firmware/devices.json`) instead of requiring file selection, and pre-fills the Product ID guard. A bricked device must be flashed with stock firmware first — ArcticFox flashed directly onto a bricked device keeps the boot loop (re-verified on hardware 2026-09-04), so devices without a bundled stock image ask for the manufacturer file rather than falling back to AF. After a successful stock recovery flash it offers to flash the matching bundled ArcticFox build immediately. Choosing a file manually still overrides the auto-selection.
+
 ## 1.16.0 — 2026-09-03
 
 ### Added

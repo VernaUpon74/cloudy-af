@@ -20,7 +20,7 @@ const SYNTH_DESC: &str = r#"{
     "render_entry": "0x00000000",
     "display_buffer": { "start": "0x20001000", "end": "0x20001400", "width": 64, "height": 128 },
     "ram_globals": [ { "start": "0x20000000", "end": "0x20000100" } ],
-    "ram_size": 8192,
+    "ram_size": 32768,
     "args": [0, 0, 0, 0]
 }"#;
 
