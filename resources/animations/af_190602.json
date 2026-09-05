@@ -1,0 +1,15 @@
+{
+  "build": "af_190602",
+  "render_entry": "0x00008cd1",
+  "display_buffer": {
+    "start": "0x20002758",
+    "end": "0x20002b58",
+    "width": 64,
+    "height": 128
+  },
+  "ram_globals": [
+    { "start": "0x20000000", "end": "0x20000e00" },
+    { "start": "0x20002c00", "end": "0x20002d00" }
+  ],
+  "args": [0, 0, 0, 0]
+}
