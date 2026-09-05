@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.16.2 — 2026-09-04
+
+### Fixed
+- **Emergency Recovery flash now accepts encrypted `.bin` files**: the recovery LDROM updater expects plaintext, so any selected firmware (VandalProof/ArcticFox/Joyetech or already-decrypted) is decrypted before streaming to the device.
+
+### Added
+- **Bundled decrypted firmware images** in `resources/firmware/decrypted/` for the four supported builds (`af_170222`, `af_180913`, `af_190602`, `af_211009`), making it easier to inspect or patch firmware without manual decryption.
+
+### Changed
+- Shortened the Emergency Recovery tab explanation in the Firmware Editor.
+
 ## 1.16.1 — 2026-09-04
 
 ### Fixed

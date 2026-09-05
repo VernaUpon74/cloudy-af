@@ -6,7 +6,7 @@ use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
 use crate::firmware::definition::{parse_definition, FirmwareDefinition};
-use crate::firmware::encryption::{encrypt, EncryptionType};
+use crate::firmware::encryption::{decrypt, encrypt, EncryptionType};
 use crate::firmware::flasher::{flash_firmware_guarded, read_dataflash, read_product_id, restart_device};
 use crate::firmware::loader::{load_firmware, FirmwareImage};
 use crate::firmware::patch::{apply_patch, parse_patch, rollback_patch};
@@ -533,6 +533,10 @@ pub async fn list_hid_devices() -> Result<Vec<crate::firmware::flasher::DeviceIn
 
 /// Emergency recovery: wait for the device, flash the given image file,
 /// restart, and verify. Progress is reported via `recovery-progress` events.
+///
+/// The recovery LDROM updater expects a plaintext firmware image. If the user
+/// selects an encrypted ArcticFox/Joyetech/VandalProof package, decrypt it
+/// before streaming it to the device.
 #[tauri::command]
 pub async fn recovery_flash(
     app: AppHandle,
@@ -542,11 +546,12 @@ pub async fn recovery_flash(
 ) -> Result<(), String> {
     use tauri::Emitter;
     let bytes = std::fs::read(&path).map_err(|e| format!("cannot read {path}: {e}"))?;
+    let (plain, _enc) = decrypt(&bytes).map_err(|e| format!("cannot decrypt {path}: {e}"))?;
     let app2 = app.clone();
     let _ = crate::suspend_sidecar(&sidecar).await;
     let _flash_guard = FLASH_MUTEX.lock().await;
     let result = tauri::async_runtime::spawn_blocking(move || {
-        crate::firmware::flasher::recovery_flash(&bytes, expected_product_id.as_deref(), |msg| {
+        crate::firmware::flasher::recovery_flash(&plain, expected_product_id.as_deref(), |msg| {
             let _ = app2.emit("recovery-progress", msg);
         })
         .map_err(|e| e.to_string())

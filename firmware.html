@@ -65,21 +65,17 @@
         <div id="tab-recovery" style="display: none; padding: 12px;">
             <h3>Emergency Recovery</h3>
             <p>
-                Flashes a firmware image to a device that does not boot normally.
-                The flasher waits for the device to enumerate (bricked devices may
-                flap on and off the USB bus), checks the Product ID, streams the
-                image, restarts the device and verifies it comes back.
+                Flashes firmware to a device stuck in a boot loop. The flasher
+                waits for the device to enumerate, checks the Product ID,
+                streams the image, restarts and verifies it boots.
             </p>
             <p>
-                A bricked device must be flashed with the <strong>original
-                manufacturer firmware first</strong> — ArcticFox flashed directly
-                onto a bricked device keeps the boot loop. The bundled original
-                firmware is selected automatically for the detected device
-                (iStick Pico V1.00 for the Pico; iStick Pico 25 V1.05 serves as
-                the stock loop-breaker for the other Eleaf Nuvoton devices). After the original firmware is restored, the device can
-                receive ArcticFox: you will be offered the matching bundled
-                ArcticFox build right away. If no stock image is bundled for your
-                device, choose the manufacturer firmware file manually.
+                <strong>Flash stock first.</strong> A bricked device must be
+                restored with the original manufacturer firmware before
+                ArcticFox can boot. The bundled stock image is selected
+                automatically; after it succeeds you will be offered the
+                matching ArcticFox build. If no stock image is bundled for
+                your device, choose the manufacturer firmware file manually.
             </p>
             <div class="form-group">
                 <label>Recovery image (.bin):</label>

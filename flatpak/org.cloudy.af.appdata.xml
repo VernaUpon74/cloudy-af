@@ -34,6 +34,11 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
+    <release version="1.16.2" date="2026-09-04">
+      <description>
+        <p>Emergency recovery now accepts encrypted ArcticFox firmware files and decrypts them before flashing. Bundled decrypted firmware images for inspection and patching. Shortened recovery tab instructions.</p>
+      </description>
+    </release>
     <release version="1.16.1" date="2026-09-04">
       <description>
         <p>Fixed a firmware-flash race that could brick devices (single-instance enforcement, whole-upload retry, sidecar crash fix). Recovery tab now auto-loads the bundled original manufacturer firmware and offers the matching ArcticFox build afterwards.</p>

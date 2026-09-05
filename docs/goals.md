@@ -4,6 +4,11 @@ Loose ends carried over from the firmware read-back Phase 1 plan
 (`docs/superpowers/plans/2026-08-19-firmware-readback-phase1.md`, completed
 2026-08-27, gate B).
 
+- [x] FIRST PRIORITY: Firmware flasher only successfully flashes decrypted .bin files,
+      fails with unencrypted .bin firmware files. Add decrypt-on-bin-select. Also, bundle 
+      decrypted fw versions into project for ease of use. Shorten explanation on Emergency Recovery page
+
+
 - [x] Commit the (currently untracked) plan file
       `docs/superpowers/plans/2026-08-19-firmware-readback-phase1.md` as
       `docs: firmware read-back phase 1 plan`. (done: `3c1c6f3`)

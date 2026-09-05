@@ -32,6 +32,19 @@ fn test_bundled_builds_present_and_decryptable() {
 }
 
 #[test]
+fn test_bundled_decrypted_builds_present_and_loadable() {
+    let dir = resources().join("firmware/decrypted");
+    let defs = defs();
+    for build in ["af_170222.bin", "af_180913.bin", "af_190602.bin", "af_211009.bin"] {
+        let path = dir.join(build);
+        let img = load_firmware(&path, &defs).unwrap_or_else(|e| panic!("{build}: {e}"));
+        assert!(img.bytes.len() > 30_000, "{build} too small");
+        assert_eq!(img.encryption, crate::firmware::encryption::EncryptionType::None,
+            "{build} should be plaintext");
+    }
+}
+
+#[test]
 fn test_devices_json_parses() {
     let raw = std::fs::read_to_string(resources().join("firmware/devices.json")).unwrap();
     let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
