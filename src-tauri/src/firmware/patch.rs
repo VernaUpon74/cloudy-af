@@ -65,7 +65,7 @@ pub fn parse_patch(xml: &str, id: &str) -> Result<Patch> {
                 pending_text.clear();
             }
             Ok(quick_xml::events::Event::Text(e)) => {
-                pending_text.push_str(&e.unescape().unwrap_or_default());
+                pending_text.push_str(&e.html_content().unwrap_or_default());
             }
             Ok(quick_xml::events::Event::End(e)) => match e.name().as_ref() {
                 b"Description" => {

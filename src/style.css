@@ -655,9 +655,15 @@ h6 {
 
 .shortcut-grid .shortcut-cell table td.c1,
 .shortcut-grid .shortcut-cell table td.s1 {
-    width: 120px;
+    width: 64px;
+}
+
+.shortcut-grid .shortcut-cell table td.c2 {
+    width: auto;
 }
 
 .shortcut-grid .shortcut-cell table td select {
-    min-width: 170px;
+    min-width: 120px;
+    width: 100%;
+    box-sizing: border-box;
 }

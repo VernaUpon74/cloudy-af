@@ -160,7 +160,7 @@ pub fn parse_definition(xml: &str) -> Result<Vec<FirmwareDefinition>> {
             }
             Ok(Event::Text(e)) => {
                 if current.is_some() {
-                    pending_text = Some(e.unescape().unwrap_or_default().to_string());
+                    pending_text = Some(e.html_content().unwrap_or_default().to_string());
                 }
             }
             Ok(Event::End(e)) => match e.name().as_ref() {
