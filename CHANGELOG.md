@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.17.0 — 2026-09-06
+
+### Added
+- **Small & Medium main-screen skins** for 64×128 displays: Appearance → Main Screen Skin now offers all five ArcticFox skins, and the Screen Layout page shows only the active mode's fields with a caption naming it (NToolbox-style), replacing the old manual mode tab bar.
+
+### Changed
+- **Controls → Shortcuts (VW & TC) rearranged into a 2×2 grid**: In Standby, In Menu, In Edit and In Profile Select each get their own titled table (the shared "In Menu | In Edit" table was split into two), matching NToolbox's layout.
+- **Puff Cut-Off steps in whole seconds**: the spinner moves by 1 s and fractional values read from the device are rounded to the nearest second on load, so the field never shows decimal points. The device still stores 0.1 s units internally.
+
 ## 1.16.2 — 2026-09-04
 
 ### Fixed

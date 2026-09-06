@@ -34,6 +34,11 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
+    <release version="1.17.0" date="2026-09-06">
+      <description>
+        <p>Controls Shortcuts (VW/TC) rearranged into a NToolbox-style 2x2 grid; Puff Cut-Off now steps in whole seconds. Screen Layout page shows only the active skin's fields, with all five ArcticFox skins (Small/Medium added for 64x128 displays).</p>
+      </description>
+    </release>
     <release version="1.16.2" date="2026-09-04">
       <description>
         <p>Emergency recovery now accepts encrypted ArcticFox firmware files and decrypts them before flashing. Bundled decrypted firmware images for inspection and patching. Shortened recovery tab instructions.</p>

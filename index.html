@@ -471,21 +471,14 @@
             </div>
 
             <div class="subview" id="view-screen-layout" style="display:none">
-              <div class="tab-group" id="screen-layout">
-                <div class="tab-item" data-view="screen-layout-classic" data-lang="Skin.Classic">
-                  Classic
-                </div>
-                <div class="tab-item" data-view="screen-layout-circle" data-lang="Skin.Circle">
-                  Circle
-                </div>
-                <div class="tab-item" data-view="screen-layout-foxy" data-lang="Skin.Foxy">
-                  Foxy
-                </div>
-                <div class="tab-item" data-view="screen-layout-small" data-lang="Skin.Small">
-                  Small
-                </div>
-                <div class="tab-item" data-view="screen-layout-medium" data-lang="Skin.Medium">
-                  Medium
+              <!-- NToolbox-style: the Layout page shows fields only for the active
+                   screen mode (selected via Appearance → Main Screen Skin). The old
+                   manual five-mode tab bar is gone; the single subview below is
+                   switched by uiScreenLayoutView() from config.MainScreenSkin. -->
+              <div class="mode-bar" id="layout-mode-bar" style="display:none">
+                <div class="layout-mode-label">
+                  <span data-lang="Screen.Layout.ActiveModeLabel">Active mode:</span>
+                  <strong id="layout-mode-name"></strong>
                 </div>
               </div>
 
@@ -1758,414 +1751,414 @@
             </div>
             <div class="subview" id="view-controls-shortcutsvw" style="display:none">
               <div style="height: 12px"></div>
-              <h5 style="padding-left:12px">In Standby</h5>
-              <table id="table-controls-shortcuts-vw-standby">
-                <tr>
-                  <td class="c1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
-                  <td class="c2">
-                    <select class="fox-val" id="ShortcutsVW0InStandby">
-                      <option value="0" data-lang="ClickActions.None">None</option>                      
-                      <option disabled>──────────</option>
-                      <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
-                      <option disabled>──────────</option>
-                      <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
-                      <option value="1" data-lang="ClickActions.Edit">Edit</option>
-                      <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
-                      <option value="9" data-lang="ClickActions.">ProfileEdit</option>
-                      <option disabled>──────────</option>
-                      <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
-                      <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                      <option disabled>──────────</option>
-                      <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
-                      <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
-                      <option disabled>──────────</option>
-                      <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
-                      <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
-                      <option disabled>──────────</option>
-                      <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
-                      <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
-                      <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
-                      <option disabled>──────────</option>
-                      <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
-                      <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
-                      <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
-                      <option disabled>──────────</option>
-                      <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
-                      <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
-                      <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
-                    </select>
-                  </td>
-                  <td class="c3"></td>
-                  <td class="c4"></td>
-                </tr>
-                <tr>
-                  <td class="c1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
-                  <td class="c2">
-                    <select class="fox-val" id="ShortcutsVW1InStandby">
-                      <option value="0" data-lang="ClickActions.None">None</option>                      
-                      <option disabled>──────────</option>
-                      <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
-                      <option disabled>──────────</option>
-                      <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
-                      <option value="1" data-lang="ClickActions.Edit">Edit</option>
-                      <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
-                      <option value="9" data-lang="ClickActions.">ProfileEdit</option>
-                      <option disabled>──────────</option>
-                      <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
-                      <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                      <option disabled>──────────</option>
-                      <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
-                      <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
-                      <option disabled>──────────</option>
-                      <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
-                      <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
-                      <option disabled>──────────</option>
-                      <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
-                      <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
-                      <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
-                      <option disabled>──────────</option>
-                      <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
-                      <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
-                      <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
-                      <option disabled>──────────</option>
-                      <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
-                      <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
-                      <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
-                    </select>
-                  </td>
-                  <td class="c3"></td>
-                  <td class="c4"></td>
-                </tr>
-                <tr>
-                  <td class="c1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
-                  <td class="c2">
-                    <select class="fox-val" id="ShortcutsVW2InStandby">
-                      <option value="0" data-lang="ClickActions.None">None</option>                      
-                      <option disabled>──────────</option>
-                      <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
-                      <option disabled>──────────</option>
-                      <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
-                      <option value="1" data-lang="ClickActions.Edit">Edit</option>
-                      <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
-                      <option value="9" data-lang="ClickActions.">ProfileEdit</option>
-                      <option disabled>──────────</option>
-                      <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
-                      <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                      <option disabled>──────────</option>
-                      <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
-                      <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
-                      <option disabled>──────────</option>
-                      <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
-                      <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
-                      <option disabled>──────────</option>
-                      <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
-                      <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
-                      <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
-                      <option disabled>──────────</option>
-                      <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
-                      <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
-                      <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
-                      <option disabled>──────────</option>
-                      <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
-                      <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
-                      <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
-                    </select>
-                  </td>
-                  <td class="c3"></td>
-                  <td class="c4"></td>
-                </tr>
-              </table>
-              <table id="table-controls-shortcuts-vw-menu">
-                <tr>
-                  <td class="s1"></td>
-                  <td class="s2"><h5 data-lang="Controls.Shortcuts.InMenuLabel">In Menu</h5></td>
-                  <td class="s3"><h5 data-lang="Controls.Shortcuts.InEditLabel">In Edit</h5></td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
-                  <td class="s2">
-                    <select class="fox-val" id="ShortcutsVW0InMenu">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.MenuBack">Back</option>
-                      <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
-                    </select>
-                  </td>
-                  <td class="s3">
-                    <select class="fox-val" id="ShortcutsVW0InEditMain">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
-                  <td class="s2">
-                    <select class="fox-val" id="ShortcutsVW1InMenu">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.MenuBack">Back</option>
-                      <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
-                    </select>
-                  </td>
-                  <td class="s3">
-                    <select class="fox-val" id="ShortcutsVW1InEditMain">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
-                  <td class="s2">
-                    <select class="fox-val" id="ShortcutsVW2InMenu">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.MenuBack">Back</option>
-                      <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
-                    </select>
-                  </td>
-                  <td class="s3">
-                    <select class="fox-val" id="ShortcutsVW2InEditMain">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                    </select>
-                  </td>
-                </tr>
-              </table>
-              <h5 style="padding-left: 12px" data-lang="Controls.Shortcuts.InSelectorLabel">In Profile Select</h5>
-              <table id="table-controls-shortcuts-vw-menu">
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
-                  <td class="s4">
-                    <select class="fox-val" id="ShortcutsVW0InSelector">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
-                  <td class="s4">
-                    <select class="fox-val" id="ShortcutsVW1InSelector">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
-                  <td class="s4">
-                    <select class="fox-val" id="ShortcutsVW2InSelector">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
-                    </select>
-                  </td>
-                </tr>
-              </table>
+              <div class="shortcut-grid">
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InStandbyLabel">In Standby</h5>
+                  <table id="table-controls-shortcuts-vw-standby">
+                                  <tr>
+                                    <td class="c1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
+                                    <td class="c2">
+                                      <select class="fox-val" id="ShortcutsVW0InStandby">
+                                        <option value="0" data-lang="ClickActions.None">None</option>                      
+                                        <option disabled>──────────</option>
+                                        <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
+                                        <option disabled>──────────</option>
+                                        <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
+                                        <option value="1" data-lang="ClickActions.Edit">Edit</option>
+                                        <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
+                                        <option value="9" data-lang="ClickActions.">ProfileEdit</option>
+                                        <option disabled>──────────</option>
+                                        <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
+                                        <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                        <option disabled>──────────</option>
+                                        <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
+                                        <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
+                                        <option disabled>──────────</option>
+                                        <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
+                                        <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
+                                        <option disabled>──────────</option>
+                                        <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
+                                        <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
+                                        <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
+                                        <option disabled>──────────</option>
+                                        <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
+                                        <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
+                                        <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
+                                        <option disabled>──────────</option>
+                                        <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
+                                        <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
+                                        <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
+                                      </select>
+                                    </td>
+                                    <td class="c3"></td>
+                                    <td class="c4"></td>
+                                  </tr>
+                                  <tr>
+                                    <td class="c1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
+                                    <td class="c2">
+                                      <select class="fox-val" id="ShortcutsVW1InStandby">
+                                        <option value="0" data-lang="ClickActions.None">None</option>                      
+                                        <option disabled>──────────</option>
+                                        <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
+                                        <option disabled>──────────</option>
+                                        <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
+                                        <option value="1" data-lang="ClickActions.Edit">Edit</option>
+                                        <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
+                                        <option value="9" data-lang="ClickActions.">ProfileEdit</option>
+                                        <option disabled>──────────</option>
+                                        <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
+                                        <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                        <option disabled>──────────</option>
+                                        <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
+                                        <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
+                                        <option disabled>──────────</option>
+                                        <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
+                                        <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
+                                        <option disabled>──────────</option>
+                                        <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
+                                        <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
+                                        <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
+                                        <option disabled>──────────</option>
+                                        <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
+                                        <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
+                                        <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
+                                        <option disabled>──────────</option>
+                                        <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
+                                        <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
+                                        <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
+                                      </select>
+                                    </td>
+                                    <td class="c3"></td>
+                                    <td class="c4"></td>
+                                  </tr>
+                                  <tr>
+                                    <td class="c1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
+                                    <td class="c2">
+                                      <select class="fox-val" id="ShortcutsVW2InStandby">
+                                        <option value="0" data-lang="ClickActions.None">None</option>                      
+                                        <option disabled>──────────</option>
+                                        <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
+                                        <option disabled>──────────</option>
+                                        <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
+                                        <option value="1" data-lang="ClickActions.Edit">Edit</option>
+                                        <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
+                                        <option value="9" data-lang="ClickActions.">ProfileEdit</option>
+                                        <option disabled>──────────</option>
+                                        <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
+                                        <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                        <option disabled>──────────</option>
+                                        <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
+                                        <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
+                                        <option disabled>──────────</option>
+                                        <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
+                                        <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
+                                        <option disabled>──────────</option>
+                                        <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
+                                        <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
+                                        <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
+                                        <option disabled>──────────</option>
+                                        <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
+                                        <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
+                                        <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
+                                        <option disabled>──────────</option>
+                                        <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
+                                        <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
+                                        <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
+                                      </select>
+                                    </td>
+                                    <td class="c3"></td>
+                                    <td class="c4"></td>
+                                  </tr>
+                                </table>
+                </div>
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InMenuLabel">In Menu</h5>
+                  <table id="table-controls-shortcuts-vw-menu">
+                  <tr><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s2">
+                                      <select class="fox-val" id="ShortcutsVW0InMenu">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.MenuBack">Back</option>
+                                        <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
+                                      </select>
+                                    </td></tr>
+                  <tr><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s2">
+                                      <select class="fox-val" id="ShortcutsVW1InMenu">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.MenuBack">Back</option>
+                                        <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
+                                      </select>
+                                    </td></tr>
+                  <tr><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s2">
+                                      <select class="fox-val" id="ShortcutsVW2InMenu">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.MenuBack">Back</option>
+                                        <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
+                                      </select>
+                                    </td></tr>
+                  </table>
+                </div>
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InEditLabel">In Edit</h5>
+                  <table id="table-controls-shortcuts-vw-edit">
+                  <tr><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s3">
+                                      <select class="fox-val" id="ShortcutsVW0InEditMain">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                      </select>
+                                    </td></tr>
+                  <tr><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s3">
+                                      <select class="fox-val" id="ShortcutsVW1InEditMain">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                      </select>
+                                    </td></tr>
+                  <tr><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s3">
+                                      <select class="fox-val" id="ShortcutsVW2InEditMain">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                      </select>
+                                    </td></tr>
+                  </table>
+                </div>
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InSelectorLabel">In Profile Select</h5>
+                  <table id="table-controls-shortcuts-vw-selector">
+                                  <tr>
+                                    <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
+                                    <td class="s4">
+                                      <select class="fox-val" id="ShortcutsVW0InSelector">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                  <tr>
+                                    <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
+                                    <td class="s4">
+                                      <select class="fox-val" id="ShortcutsVW1InSelector">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                  <tr>
+                                    <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
+                                    <td class="s4">
+                                      <select class="fox-val" id="ShortcutsVW2InSelector">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                </table>
+                </div>
+              </div>
             </div>
 
             <div class="subview" id="view-controls-shortcutstc" style="display:none">
               <div style="height: 12px"></div>
-              <h5 style="padding-left:12px">In Standby</h5>
-              <table id="table-controls-shortcuts-tc-standby">
-                <tr>
-                  <td class="c1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
-                  <td class="c2">
-                    <select class="fox-val" id="ShortcutsTC0InStandby">
-                      <option value="0" data-lang="ClickActions.None">None</option>                      
-                      <option disabled>──────────</option>
-                      <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
-                      <option disabled>──────────</option>
-                      <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
-                      <option value="1" data-lang="ClickActions.Edit">Edit</option>
-                      <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
-                      <option value="9" data-lang="ClickActions.">ProfileEdit</option>
-                      <option disabled>──────────</option>
-                      <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
-                      <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                      <option disabled>──────────</option>
-                      <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
-                      <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
-                      <option disabled>──────────</option>
-                      <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
-                      <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
-                      <option disabled>──────────</option>
-                      <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
-                      <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
-                      <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
-                      <option disabled>──────────</option>
-                      <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
-                      <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
-                      <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
-                      <option disabled>──────────</option>
-                      <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
-                      <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
-                      <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
-                    </select>
-                  </td>
-                  <td class="c3"></td>
-                  <td class="c4"></td>
-                </tr>
-                <tr>
-                  <td class="c1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
-                  <td class="c2">
-                    <select class="fox-val" id="ShortcutsTC1InStandby">
-                      <option value="0" data-lang="ClickActions.None">None</option>                      
-                      <option disabled>──────────</option>
-                      <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
-                      <option disabled>──────────</option>
-                      <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
-                      <option value="1" data-lang="ClickActions.Edit">Edit</option>
-                      <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
-                      <option value="9" data-lang="ClickActions.">ProfileEdit</option>
-                      <option disabled>──────────</option>
-                      <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
-                      <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                      <option disabled>──────────</option>
-                      <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
-                      <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
-                      <option disabled>──────────</option>
-                      <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
-                      <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
-                      <option disabled>──────────</option>
-                      <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
-                      <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
-                      <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
-                      <option disabled>──────────</option>
-                      <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
-                      <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
-                      <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
-                      <option disabled>──────────</option>
-                      <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
-                      <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
-                      <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
-                    </select>
-                  </td>
-                  <td class="c3"></td>
-                  <td class="c4"></td>
-                </tr>
-                <tr>
-                  <td class="c1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
-                  <td class="c2">
-                    <select class="fox-val" id="ShortcutsTC2InStandby">
-                      <option value="0" data-lang="ClickActions.None">None</option>                      
-                      <option disabled>──────────</option>
-                      <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
-                      <option disabled>──────────</option>
-                      <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
-                      <option value="1" data-lang="ClickActions.Edit">Edit</option>
-                      <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
-                      <option value="9" data-lang="ClickActions.">ProfileEdit</option>
-                      <option disabled>──────────</option>
-                      <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
-                      <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                      <option disabled>──────────</option>
-                      <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
-                      <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
-                      <option disabled>──────────</option>
-                      <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
-                      <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
-                      <option disabled>──────────</option>
-                      <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
-                      <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
-                      <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
-                      <option disabled>──────────</option>
-                      <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
-                      <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
-                      <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
-                      <option disabled>──────────</option>
-                      <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
-                      <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
-                      <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
-                    </select>
-                  </td>
-                  <td class="c3"></td>
-                  <td class="c4"></td>
-                </tr>
-              </table>
-              <table id="table-controls-shortcuts-tc-menu">
-                <tr>
-                  <td class="s1"></td>
-                  <td class="s2"><h5 data-lang="Controls.Shortcuts.InMenuLabel">In Menu</h5></td>
-                  <td class="s3"><h5 data-lang="Controls.Shortcuts.InEditLabel">In Edit</h5></td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
-                  <td class="s2">
-                    <select class="fox-val" id="ShortcutsTC0InMenu">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.MenuBack">Back</option>
-                      <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
-                    </select>
-                  </td>
-                  <td class="s3">
-                    <select class="fox-val" id="ShortcutsTC0InEditMain">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
-                  <td class="s2">
-                    <select class="fox-val" id="ShortcutsTC1InMenu">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.MenuBack">Back</option>
-                      <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
-                    </select>
-                  </td>
-                  <td class="s3">
-                    <select class="fox-val" id="ShortcutsTC1InEditMain">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
-                  <td class="s2">
-                    <select class="fox-val" id="ShortcutsTC2InMenu">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.MenuBack">Back</option>
-                      <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
-                    </select>
-                  </td>
-                  <td class="s3">
-                    <select class="fox-val" id="ShortcutsTC2InEditMain">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                    </select>
-                  </td>
-                </tr>
-              </table>
-              <h5 style="padding-left: 12px" data-lang="Controls.Shortcuts.InSelectorLabel">In Profile Select</h5>
-              <table id="table-controls-shortcuts-tc-menu">
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
-                  <td class="s4">
-                    <select class="fox-val" id="ShortcutsTC0InSelector">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
-                  <td class="s4">
-                    <select class="fox-val" id="ShortcutsTC1InSelector">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
-                  <td class="s4">
-                    <select class="fox-val" id="ShortcutsTC2InSelector">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
-                    </select>
-                  </td>
-                </tr>
-              </table>
+              <div class="shortcut-grid">
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InStandbyLabel">In Standby</h5>
+                  <table id="table-controls-shortcuts-tc-standby">
+                                  <tr>
+                                    <td class="c1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
+                                    <td class="c2">
+                                      <select class="fox-val" id="ShortcutsTC0InStandby">
+                                        <option value="0" data-lang="ClickActions.None">None</option>                      
+                                        <option disabled>──────────</option>
+                                        <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
+                                        <option disabled>──────────</option>
+                                        <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
+                                        <option value="1" data-lang="ClickActions.Edit">Edit</option>
+                                        <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
+                                        <option value="9" data-lang="ClickActions.">ProfileEdit</option>
+                                        <option disabled>──────────</option>
+                                        <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
+                                        <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                        <option disabled>──────────</option>
+                                        <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
+                                        <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
+                                        <option disabled>──────────</option>
+                                        <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
+                                        <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
+                                        <option disabled>──────────</option>
+                                        <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
+                                        <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
+                                        <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
+                                        <option disabled>──────────</option>
+                                        <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
+                                        <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
+                                        <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
+                                        <option disabled>──────────</option>
+                                        <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
+                                        <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
+                                        <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
+                                      </select>
+                                    </td>
+                                    <td class="c3"></td>
+                                    <td class="c4"></td>
+                                  </tr>
+                                  <tr>
+                                    <td class="c1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
+                                    <td class="c2">
+                                      <select class="fox-val" id="ShortcutsTC1InStandby">
+                                        <option value="0" data-lang="ClickActions.None">None</option>                      
+                                        <option disabled>──────────</option>
+                                        <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
+                                        <option disabled>──────────</option>
+                                        <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
+                                        <option value="1" data-lang="ClickActions.Edit">Edit</option>
+                                        <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
+                                        <option value="9" data-lang="ClickActions.">ProfileEdit</option>
+                                        <option disabled>──────────</option>
+                                        <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
+                                        <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                        <option disabled>──────────</option>
+                                        <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
+                                        <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
+                                        <option disabled>──────────</option>
+                                        <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
+                                        <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
+                                        <option disabled>──────────</option>
+                                        <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
+                                        <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
+                                        <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
+                                        <option disabled>──────────</option>
+                                        <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
+                                        <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
+                                        <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
+                                        <option disabled>──────────</option>
+                                        <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
+                                        <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
+                                        <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
+                                      </select>
+                                    </td>
+                                    <td class="c3"></td>
+                                    <td class="c4"></td>
+                                  </tr>
+                                  <tr>
+                                    <td class="c1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
+                                    <td class="c2">
+                                      <select class="fox-val" id="ShortcutsTC2InStandby">
+                                        <option value="0" data-lang="ClickActions.None">None</option>                      
+                                        <option disabled>──────────</option>
+                                        <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
+                                        <option disabled>──────────</option>
+                                        <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
+                                        <option value="1" data-lang="ClickActions.Edit">Edit</option>
+                                        <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
+                                        <option value="9" data-lang="ClickActions.">ProfileEdit</option>
+                                        <option disabled>──────────</option>
+                                        <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
+                                        <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                        <option disabled>──────────</option>
+                                        <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
+                                        <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
+                                        <option disabled>──────────</option>
+                                        <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
+                                        <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
+                                        <option disabled>──────────</option>
+                                        <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
+                                        <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
+                                        <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
+                                        <option disabled>──────────</option>
+                                        <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
+                                        <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
+                                        <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
+                                        <option disabled>──────────</option>
+                                        <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
+                                        <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
+                                        <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
+                                      </select>
+                                    </td>
+                                    <td class="c3"></td>
+                                    <td class="c4"></td>
+                                  </tr>
+                                </table>
+                </div>
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InMenuLabel">In Menu</h5>
+                  <table id="table-controls-shortcuts-tc-menu">
+                  <tr><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s2">
+                                      <select class="fox-val" id="ShortcutsTC0InMenu">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.MenuBack">Back</option>
+                                        <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
+                                      </select>
+                                    </td></tr>
+                  <tr><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s2">
+                                      <select class="fox-val" id="ShortcutsTC1InMenu">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.MenuBack">Back</option>
+                                        <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
+                                      </select>
+                                    </td></tr>
+                  <tr><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s2">
+                                      <select class="fox-val" id="ShortcutsTC2InMenu">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.MenuBack">Back</option>
+                                        <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
+                                      </select>
+                                    </td></tr>
+                  </table>
+                </div>
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InEditLabel">In Edit</h5>
+                  <table id="table-controls-shortcuts-tc-edit">
+                  <tr><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s3">
+                                      <select class="fox-val" id="ShortcutsTC0InEditMain">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                      </select>
+                                    </td></tr>
+                  <tr><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s3">
+                                      <select class="fox-val" id="ShortcutsTC1InEditMain">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                      </select>
+                                    </td></tr>
+                  <tr><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s3">
+                                      <select class="fox-val" id="ShortcutsTC2InEditMain">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                      </select>
+                                    </td></tr>
+                  </table>
+                </div>
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InSelectorLabel">In Profile Select</h5>
+                  <table id="table-controls-shortcuts-tc-selector">
+                                  <tr>
+                                    <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
+                                    <td class="s4">
+                                      <select class="fox-val" id="ShortcutsTC0InSelector">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                  <tr>
+                                    <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
+                                    <td class="s4">
+                                      <select class="fox-val" id="ShortcutsTC1InSelector">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                  <tr>
+                                    <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
+                                    <td class="s4">
+                                      <select class="fox-val" id="ShortcutsTC2InSelector">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                </table>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2226,7 +2219,7 @@
                 <tr data-lang-title="Tooltips.MaxPuffTime">
                   <td class="c1" data-lang="Advanced.Settings.PuffCutOffLabel">Puff Cut-Off</td>
                   <td class="c2">
-                    <input class="fox-val" type="number" min="1" max="60" step="0.1" id="PuffCutOff"> <span data-lang="SecondsLabel">s</span>
+                    <input class="fox-val" type="number" min="1" max="60" step="1" id="PuffCutOff"> <span data-lang="SecondsLabel">s</span>
                   </td>
                   <td class="c3"></td>
                   <td class="c4"></td>

@@ -4,7 +4,7 @@
 > The project is Cloudy AF (originally Arcticfox Config), a Linux desktop configuration utility for vape battery mods that run the ArcticFox firmware. It is a community fork that modernizes the decade-old Electron-based app into a Tauri desktop application, packaged as a Flatpak.
 
   This fork reworks hobbyquaker's Electron-based Linux/macOS [project](https://github.com/hobbyquaker/arcticfox-config) as a Rust [Tauri](https://tauri.app/) desktop app, packaging it as a sandboxed [Flatpak](https://flatpak.org) image for Linux, permission-controllable (through [Flatseal](https://github.com/tchx84/Flatseal)), because current npm is a minefield, Wine USB passthrough is a headache, and so is creating Windows VMs.
-  The fork also adds quality-of-life improvements such as window scaling, an eternally dark UI, Freedom Unit selection that works (original defaulted to Celsius and capped F at 400), Autofire as a multi-click/shortcut option, device auto-reconnect, and a "Lite" appearance mode for small devices.
+  The fork also adds quality-of-life improvements such as window scaling, an eternally dark UI, Freedom Unit selection that works (original defaulted to Celsius and capped F at 400), Autofire as a multi-click/shortcut option, device auto-reconnect, a "Lite" appearance mode for small devices with all five ArcticFox skins available on large displays, and a 2×2 Shortcuts layout.
 
 ![demo](demo.png)
 ![Screenshot](Screenshot.png)
@@ -293,6 +293,8 @@ Notable changes include:
 - Autofire added to multi-click / shortcut dropdowns
 - Device auto-reconnect on unexpected disconnect
 - Lite mode support in Appearance settings
+- All five ArcticFox main-screen skins (Small/Medium included) with an NToolbox-style active-mode Layout page
+- Shortcuts (VW/TC) arranged as a 2×2 grid; Puff Cut-Off steps in whole seconds
 - Hover tooltips on all settings rows (specific vape-function descriptions where available)
 - Dependency security updates (`highcharts` 9.x, `xml2js` 0.6.2, local `put` replacement)
 - Firmware Editor: open/edit/patch/flash ArcticFox firmware images (all encryption schemes, incl. VandalProof), with an emergency recovery flasher

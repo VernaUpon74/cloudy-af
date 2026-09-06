@@ -150,20 +150,34 @@ function uiInitTabs() {
 
 function uiScreenLayoutView(skin) {
     // 96x16 displays use Classic (0) and Lite (1); Lite uses the Small layout tab.
+    // Large (64x128) displays expose all five skins: Classic(0), Circle(1), Foxy(2),
+    // Small(3), Medium(4). NToolbox-style: only the active mode's fields are shown.
     const isSmallDisplay = config && config.DisplaySize === 1;
     const names = isSmallDisplay
         ? ['classic', 'small']
         : ['classic', 'circle', 'foxy', 'small', 'medium'];
-    const name = names[skin] || 'classic';
-    $('.tab-group#screen-layout .tab-item').removeClass('active');
-    $('[data-view="screen-layout-' + name + '"]').addClass('active');
+    const skinVal = Number(skin) || 0;
+    const name = names[skinVal] || 'classic';
+
+    // Show only the active mode's subview. The manual mode tab bar is gone; this is
+    // the sole driver, kept in sync with Appearance → Main Screen Skin.
     $('.view-container.view-screen-layout .subsubview').hide();
     $('.view-container.view-screen-layout #view-screen-layout-' + name).show();
+
+    // Reflect the active mode in a small caption so the user knows which mode's
+    // fields are being edited.
+    const skinLabels = isSmallDisplay
+        ? ['Skin.Classic', 'Skin.Lite']
+        : ['Skin.Classic', 'Skin.Circle', 'Skin.Foxy', 'Skin.Small', 'Skin.Medium'];
+    const label = skinLabels[skinVal] || 'Skin.Classic';
+    $('#layout-mode-name').text(_(label));
+    $('#layout-mode-bar').show();
 }
 
 // DEVIATION: The original fork had a fixed Classic/Circle/Foxy skin dropdown.
-// For 96x16 displays ArcticFox uses value 1 for the "Lite" skin, so we repopulate
-// the dropdown dynamically and relabel the Small layout tab accordingly.
+// ArcticFox exposes five main-screen skins (Classic, Circle, Foxy, Small, Medium);
+// 96x16 displays instead use value 1 for the "Lite" skin. The Layout page reflects
+// the active skin (NToolbox-style) and no longer offers a manual mode tab bar.
 function uiUpdateSkinOptions() {
     const $skin = $('#MainScreenSkin');
     const isSmallDisplay = config && config.DisplaySize === 1;
@@ -175,17 +189,19 @@ function uiUpdateSkinOptions() {
         $skin.append('<option value="0" data-lang="Skin.Classic">' + _('Skin.Classic') + '</option>');
         $skin.append('<option value="1" data-lang="Skin.Circle">' + _('Skin.Circle') + '</option>');
         $skin.append('<option value="2" data-lang="Skin.Foxy">' + _('Skin.Foxy') + '</option>');
+        $skin.append('<option value="3" data-lang="Skin.Small">' + _('Skin.Small') + '</option>');
+        $skin.append('<option value="4" data-lang="Skin.Medium">' + _('Skin.Medium') + '</option>');
     }
 
-    // Show/hide layout tabs that don't apply to this display size.
-    $('[data-view="screen-layout-circle"]').toggle(!isSmallDisplay);
-    $('[data-view="screen-layout-foxy"]').toggle(!isSmallDisplay);
-    $('[data-view="screen-layout-medium"]').toggle(!isSmallDisplay);
-    const $smallTab = $('[data-view="screen-layout-small"]');
+    // Hide layout subviews that don't apply to this display size. (The classic
+    // subview is the fallback and is always shown; Small applies to both, but is
+    // labelled Lite on 96x16 displays.)
+    const smallSub = $('.view-container.view-screen-layout #view-screen-layout-small');
+    $('.view-container.view-screen-layout #view-screen-layout-circle').toggle(!isSmallDisplay);
+    $('.view-container.view-screen-layout #view-screen-layout-foxy').toggle(!isSmallDisplay);
+    $('.view-container.view-screen-layout #view-screen-layout-medium').toggle(!isSmallDisplay);
     if (isSmallDisplay) {
-        $smallTab.show().attr('data-lang', 'Skin.Lite').html(_('Skin.Lite'));
-    } else {
-        $smallTab.hide();
+        smallSub.show();
     }
 }
 
