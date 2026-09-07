@@ -225,8 +225,12 @@ body,
     flex-direction: column !important;
     width: var(--base-width, 536px) !important;
     height: var(--base-content-height, 551px) !important;
-    transform: scale(var(--content-scale, 1)) !important;
-    transform-origin: center center !important;
+    /* `zoom` (WebKit-supported) re-lays-out and re-rasterizes text at the
+       final size, so scaled UI text stays crisp. The previous
+       `transform: scale(var(--content-scale))` upscaled a 1x raster,
+       which blurred text (most visible on the Advanced -> Settings page)
+       at the fractional fit factors computed by updateContentZoom(). */
+    zoom: var(--content-scale, 1);
     overflow: hidden !important;
 }
 
