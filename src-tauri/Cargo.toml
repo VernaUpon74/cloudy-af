@@ -17,6 +17,12 @@ tauri-build = { version = "2.2.0", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# NOTE (ADR-007): release builds MUST enable tauri/custom-protocol, e.g.
+#   cargo build --release --features tauri/custom-protocol
+# Plain `cargo build --release` leaves the frontend assets un-embedded
+# (dev mode -> loads http://localhost:1420) and the flatpak then fails at
+# startup with "GDBus.Error:org.freedesktop.portal.Error.NotAllowed".
+# `npm run build:native` / `tauri build` handle this automatically.
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-os = "2"
