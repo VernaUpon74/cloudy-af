@@ -55,7 +55,7 @@ pub fn load_descriptor(json: &str) -> Result<Descriptor, EmuError> {
     serde_json::from_str(json).map_err(|e| EmuError::Descriptor(e.to_string()))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Frame {
     pub width: usize,
     pub height: usize,
@@ -82,14 +82,17 @@ impl Harness {
             bus.allow_region(g.start..g.end);
         }
         let ram_top = RAM_BASE + ram_size as u32;
-        bus.allow_region(ram_top - 0x1000..ram_top); // stack
+        // Real charge-screen render code uses deep call stacks; give it 8 KiB
+        // instead of 4 KiB so nested push.w {r4..fp,lr} + local frames fit.
+        let stack_size = 0x2000;
+        bus.allow_region(ram_top - stack_size..ram_top); // stack
         let mut cpu = Cpu::new();
-        cpu.sp = ram_top - 16; // 8-aligned
+        cpu.sp = ram_top - 0x100; // 8-aligned, leave headroom for large pop.w frames
         // The canary sits at the BOTTOM of the stack region, not just below
         // the frame: normal prologue pushes clobber anything near the initial
         // sp, while a write reaching the region bottom means the stack was
         // effectively exhausted. (Writes past the bottom fault via the ACL.)
-        let stack_bottom = ram_top - 0x1000;
+        let stack_bottom = ram_top - stack_size;
         let canary_addr = stack_bottom;
         bus.write_u32(canary_addr, 0xDEAD_C0DE)
             .expect("canary write lands inside the stack allow region");
@@ -253,8 +256,11 @@ mod tests {
 
     #[test]
     fn test_run_frame_catches_stack_canary_corruption() {
-        // Store directly to the bottom of the stack region (0x20007000 with
-        // ram_size 32768): allowed by the ACL, but it clobbers the canary.
+        // Store directly to the bottom of the stack region. Harness::new uses a
+        // 0x2000-byte stack at the top of RAM, so with ram_size 32768 the bottom
+        // and canary sit at RAM_BASE + 0x8000 - 0x2000 = 0x20006000. Allowed by
+        // the ACL, but the store clobbers the canary -> must fault.
+        let stack_bottom = RAM_BASE + 0x8000 - 0x2000;
         let mut img = vec![0u8; 0x100];
         let code: [u16; 4] = [
             0x4901, // 0x80: ldr r1, [pc, #4]  ; base=align(0x84,4)=0x84, +4=0x88 -> &stack_bottom
@@ -265,7 +271,7 @@ mod tests {
         for (i, hw) in code.iter().enumerate() {
             img[0x80 + i * 2..0x80 + i * 2 + 2].copy_from_slice(&hw.to_le_bytes());
         }
-        img[0x88..0x8C].copy_from_slice(&(RAM_BASE + 0x7000).to_le_bytes());
+        img[0x88..0x8C].copy_from_slice(&stack_bottom.to_le_bytes());
         let d = load_descriptor(DESC_JSON).unwrap();
         let mut h = Harness::new(&img, d);
         let err = h.run_frame(100_000).unwrap_err();
@@ -277,13 +283,15 @@ mod tests {
 
     #[test]
     fn test_run_frame_catches_stack_pointer_underflow() {
-        // 9x sub sp, #508: sp ends 4572 below the initial sp, past the 4080
-        // bytes of headroom above the region bottom — with no store at all.
+        // Repeated `sub sp, #508` with no store at all. The 0x2000-byte stack's
+        // headroom above the region bottom is 0x2000 - 0x100 (initial sp at
+        // ram_top - 0x100) = 0x1F00 = 7936 bytes. 16 subs = 8128 bytes exceeds it,
+        // so sp dips below the region bottom and must fault on min_sp.
         let mut img = vec![0u8; 0x100];
-        for i in 0..9 {
+        for i in 0..16 {
             img[0x80 + i * 2..0x82 + i * 2].copy_from_slice(&0xB0FFu16.to_le_bytes()); // sub sp, #508
         }
-        img[0x92..0x94].copy_from_slice(&0x4770u16.to_le_bytes()); // bx lr
+        img[0xA0..0xA2].copy_from_slice(&0x4770u16.to_le_bytes()); // bx lr
         let d = load_descriptor(DESC_JSON).unwrap();
         let mut h = Harness::new(&img, d);
         let err = h.run_frame(100_000).unwrap_err();

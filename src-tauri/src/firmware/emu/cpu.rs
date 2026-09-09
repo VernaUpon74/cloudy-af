@@ -2,11 +2,99 @@
 //! and a budgeted run loop.
 
 use super::bus::Bus;
-use super::thumb::{decode, Instr};
+use super::thumb::{decode, decode32, DpOp, DpRegOp, Instr, Thumb2};
 use super::EmuError;
 use std::collections::VecDeque;
 
 const TRACE_CAP: usize = 32;
+
+/// Variable-shift shifter (register-controlled amount, 0..255) with carry-out.
+fn shift_reg(value: u32, stype: u8, amount: u32, carry_in: bool) -> (u32, bool) {
+    match stype {
+        0 => {
+            // LSL
+            if amount == 0 {
+                (value, carry_in)
+            } else if amount < 32 {
+                (value << amount, (value >> (32 - amount)) & 1 == 1)
+            } else if amount == 32 {
+                (0, value & 1 == 1)
+            } else {
+                (0, false)
+            }
+        }
+        1 => {
+            // LSR
+            if amount == 0 || amount == 32 {
+                (0, value >> 31 != 0)
+            } else if amount < 32 {
+                (value >> amount, (value >> (amount - 1)) & 1 == 1)
+            } else {
+                (0, false)
+            }
+        }
+        2 => {
+            // ASR
+            if amount >= 32 {
+                (((value as i32) >> 31) as u32, value >> 31 != 0)
+            } else {
+                let v = ((value as i32) >> amount) as u32;
+                (v, (v >> (amount - 1)) & 1 == 1)
+            }
+        }
+        _ => {
+            // ROR (amount 0 = no shift; RRX is not encodable here)
+            if amount == 0 {
+                (value, carry_in)
+            } else {
+                let v = value.rotate_right(amount & 31);
+                (v, v >> 31 != 0)
+            }
+        }
+    }
+}
+
+/// Barrel shifter with carry-out (Thumb-2 DpReg forms). `stype`:
+/// 0=LSL, 1=LSR, 2=ASR, 3=ROR/RRX. Encoding amount 0 means LSR/ASR #32 or RRX.
+fn shift_c(value: u32, stype: u8, amount: u8, carry_in: bool) -> (u32, bool) {
+    let a = amount as u32;
+    match stype {
+        0 => {
+            if a == 0 {
+                (value, carry_in)
+            } else if a < 32 {
+                (value << a, (value >> (32 - a)) & 1 == 1)
+            } else {
+                (0, false)
+            }
+        }
+        1 => {
+            let s = if a == 0 { 32 } else { a };
+            if s == 32 {
+                (0, value >> 31 != 0)
+            } else if s < 32 {
+                (value >> s, (value >> (s - 1)) & 1 == 1)
+            } else {
+                (0, false)
+            }
+        }
+        2 => {
+            let s = if a == 0 { 32 } else { a };
+            let v = ((value as i32) >> s.min(31)) as u32;
+            let c = if s >= 32 { value >> 31 != 0 } else { (v >> (s - 1)) & 1 == 1 };
+            (v, c)
+        }
+        _ => {
+            if a == 0 {
+                // RRX
+                ((value >> 1) | ((carry_in as u32) << 31), value & 1 == 1)
+            } else {
+                let v = value.rotate_right(a & 31);
+                (v, v >> 31 != 0)
+            }
+        }
+    }
+}
 
 pub struct Cpu {
     pub r: [u32; 13],
@@ -67,24 +155,30 @@ impl Cpu {
         let pc = self.pc;
         let hw = bus.read_u16(pc)?;
         if hw >> 11 == 0b11110 {
-            // BL: 32-bit. decode() is pure and cannot see the second
-            // halfword, so intercept here and skip the decode call.
+            // 32-bit prefix: either BL (11110) or other 32-bit Thumb-2.
+            // Read the second halfword to decide which family it is.
             let hw2 = bus.read_u16(pc.wrapping_add(2))?;
-            // The second halfword must be 11 J1 1 J2 imm11. Anything else
-            // means the 0xF0xx prefix was not a BL (or the instruction stream
-            // is misaligned) — fail loud instead of branching to garbage.
-            if hw2 & 0xD000 != 0xD000 {
-                return Err(EmuError::Undefined { pc, instr: hw });
+            // BL encoding: hw2 bits 15,14,12 are all 1 (11J1 1 J2 imm11).
+            if hw2 & 0xD000 == 0xD000 {
+                let s = (hw >> 10) & 1;
+                let j1 = (hw2 >> 13) & 1;
+                let j2 = (hw2 >> 11) & 1;
+                let i1 = (!(j1 ^ s)) & 1;
+                let i2 = (!(j2 ^ s)) & 1;
+                let imm25 = ((s as u32) << 24) | ((i1 as u32) << 23) | ((i2 as u32) << 22)
+                    | (((hw & 0x3FF) as u32) << 12) | (((hw2 & 0x7FF) as u32) << 1);
+                let off = ((imm25 << 7) as i32) >> 7; // sign-extend 25 bits
+                return self.execute(bus, Instr::Bl { off });
             }
-            let s = (hw >> 10) & 1;
-            let j1 = (hw2 >> 13) & 1;
-            let j2 = (hw2 >> 11) & 1;
-            let i1 = (!(j1 ^ s)) & 1;
-            let i2 = (!(j2 ^ s)) & 1;
-            let imm25 = ((s as u32) << 24) | ((i1 as u32) << 23) | ((i2 as u32) << 22)
-                | (((hw & 0x3FF) as u32) << 12) | (((hw2 & 0x7FF) as u32) << 1);
-            let off = ((imm25 << 7) as i32) >> 7; // sign-extend 25 bits
-            return self.execute(bus, Instr::Bl { off });
+            // Otherwise: 32-bit data-processing or other 32-bit Thumb-2.
+            let instr = decode32(hw, hw2).ok_or(EmuError::Undefined { pc, instr: hw })?;
+            return self.execute(bus, instr);
+        }
+        if hw >> 11 == 0b11101 || hw >> 11 == 0b11111 {
+            // Other 32-bit Thumb-2 instructions.
+            let hw2 = bus.read_u16(pc.wrapping_add(2))?;
+            let instr = decode32(hw, hw2).ok_or(EmuError::Undefined { pc, instr: hw })?;
+            return self.execute(bus, instr);
         }
         let instr = decode(hw).ok_or(EmuError::Undefined { pc, instr: hw })?;
         self.execute(bus, instr)
@@ -468,6 +562,306 @@ impl Cpu {
                 }
                 self.pc = self.pc.wrapping_add(2);
             }
+            Instr::Thumb2(Thumb2::Stmdb { list }) => {
+                // 32-bit PUSH: STMDB sp!, {list}. list bits 0..14 = r0..r14.
+                let count = list.count_ones();
+                let mut addr = self.sp.wrapping_sub(4 * count);
+                self.sp = addr;
+                for i in 0..15u16 {
+                    if list >> i & 1 == 1 {
+                        bus.write_u32(addr, self.reg(i as u8))?;
+                        addr = addr.wrapping_add(4);
+                    }
+                }
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::Ldmia { list }) => {
+                // 32-bit POP: LDMIA sp!, {list}. list bits 0..14 = r0..r14,
+                // bit 15 = pc (pop.w {..., pc} returns; the word is consumed
+                // from the stack either way).
+                let mut addr = self.sp;
+                let mut new_pc = None;
+                for i in 0..16u16 {
+                    if list >> i & 1 == 1 {
+                        let v = bus.read_u32(addr)?;
+                        if i == 15 {
+                            new_pc = Some(v & !1);
+                        } else {
+                            self.set_reg(i as u8, v);
+                        }
+                        addr = addr.wrapping_add(4);
+                    }
+                }
+                self.sp = addr;
+                self.pc = new_pc.unwrap_or_else(|| self.pc.wrapping_add(4));
+            }
+            Instr::Thumb2(Thumb2::StmIA { rn, list }) => {
+                // STMIA Rn, {list}: ascending word stores from Rn, NO
+                // writeback (the W=0 store-multiple form, e.g.
+                // `stm.w sp, {r7, sl}` = E88D 0480). list bits 0..14 = r0..r14.
+                let mut addr = self.reg(rn);
+                for i in 0..15u16 {
+                    if list >> i & 1 == 1 {
+                        bus.write_u32(addr, self.reg(i as u8))?;
+                        addr = addr.wrapping_add(4);
+                    }
+                }
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::DpImm { op, rd, rn, set_flags, imm }) => {
+                // 32-bit data-processing with modified immediate.
+                // MOV (immediate) is the ORR encoding with Rn = 1111; the
+                // Rn operand is not read (no PC-relative OR); result = imm.
+                let lhs = if rn == 15 && matches!(op, DpOp::Orr) { 0 } else { self.reg(rn) };
+                let (result, carry, overflow) = match op {
+                    DpOp::And => (lhs & imm, (lhs & imm) >> 31 != 0, false),
+                    DpOp::Orr => (lhs | imm, (lhs | imm) >> 31 != 0, false),
+                    DpOp::Eor => (lhs ^ imm, (lhs ^ imm) >> 31 != 0, false),
+                    DpOp::Bic => (lhs & !imm, (lhs & !imm) >> 31 != 0, false),
+                    DpOp::Add => {
+                        let r = lhs.wrapping_add(imm);
+                        let c = (lhs as u64 + imm as u64) > 0xFFFF_FFFF;
+                        let v = ((lhs ^ r) & (imm ^ r)) >> 31 != 0;
+                        (r, c, v)
+                    }
+                    DpOp::Sub => {
+                        let r = lhs.wrapping_sub(imm);
+                        let c = lhs >= imm;
+                        let v = ((lhs ^ imm) & (lhs ^ r)) >> 31 != 0;
+                        (r, c, v)
+                    }
+                    DpOp::Rsb => {
+                        let r = imm.wrapping_sub(lhs);
+                        let c = imm >= lhs;
+                        let v = ((imm ^ lhs) & (imm ^ r)) >> 31 != 0;
+                        (r, c, v)
+                    }
+                };
+                if rd != 15 {
+                    self.set_reg(rd, result);
+                }
+                if set_flags {
+                    self.n = (result >> 31) != 0;
+                    self.z = result == 0;
+                    self.c = carry;
+                    self.v = overflow;
+                }
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::DpReg { op, rd, rn, rm, stype, amount, set_flags }) => {
+                // 32-bit data-processing (shifted register). MOV/MVN are the
+                // ORR/ORN encodings with Rn = 1111: the Rn operand is not
+                // read (no PC read), result = shifted Rm / its complement.
+                let (shifted, sh_carry) = shift_c(self.reg(rm), stype, amount, self.c);
+                // MOV/MVN (Orr/Orn with rn = 15) do not read the Rn operand.
+                let lhs = if rn == 15 && matches!(op, DpRegOp::Orr | DpRegOp::Orn) { 0 } else { self.reg(rn) };
+                let (result, carry, overflow) = match op {
+                    DpRegOp::And => (lhs & shifted, sh_carry, false),
+                    DpRegOp::Bic => (lhs & !shifted, sh_carry, false),
+                    DpRegOp::Orr => (lhs | shifted, sh_carry, false),
+                    DpRegOp::Orn => (lhs | !shifted, sh_carry, false),
+                    DpRegOp::Eor => (lhs ^ shifted, sh_carry, false),
+                    DpRegOp::Add => {
+                        let lhs = self.reg(rn);
+                        let s = lhs as i64 + shifted as i64;
+                        (lhs.wrapping_add(shifted), s > u32::MAX as i64, s > i32::MAX as i64 || s < i32::MIN as i64)
+                    }
+                    DpRegOp::Adc => {
+                        let lhs = self.reg(rn);
+                        let cin = self.c as i64;
+                        let s = lhs as i64 + shifted as i64 + cin;
+                        (lhs.wrapping_add(shifted).wrapping_add(cin as u32), s > u32::MAX as i64, s > i32::MAX as i64 || s < i32::MIN as i64)
+                    }
+                    DpRegOp::Sub => {
+                        let lhs = self.reg(rn);
+                        let d = lhs as i64 - shifted as i64;
+                        (lhs.wrapping_sub(shifted), d >= 0, d > i32::MAX as i64 || d < i32::MIN as i64)
+                    }
+                    DpRegOp::Sbc => {
+                        let lhs = self.reg(rn);
+                        let borrow = 1 - self.c as i64;
+                        let d = lhs as i64 - shifted as i64 - borrow;
+                        (lhs.wrapping_sub(shifted).wrapping_sub(borrow as u32), d >= 0, d > i32::MAX as i64 || d < i32::MIN as i64)
+                    }
+                };
+                if rd != 15 {
+                    self.set_reg(rd, result);
+                }
+                if set_flags {
+                    self.n = (result >> 31) != 0;
+                    self.z = result == 0;
+                    self.c = carry;
+                    self.v = overflow;
+                }
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::MovShiftReg { rd, rn, rm, stype, set_flags }) => {
+                // 32-bit MOV (register) with register-controlled shift:
+                // Rd = Rn shifted by Rm[7:0]. No V flag.
+                let amount = self.reg(rm) & 0xFF;
+                let (result, carry) = shift_reg(self.reg(rn), stype, amount, self.c);
+                self.set_reg(rd, result);
+                if set_flags {
+                    self.n = (result >> 31) != 0;
+                    self.z = result == 0;
+                    self.c = carry;
+                }
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::Movw { rd, imm16 }) => {
+                self.set_reg(rd, imm16 as u32);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::Movt { rd, imm16 }) => {
+                let v = (self.reg(rd) & 0xFFFF) | ((imm16 as u32) << 16);
+                self.set_reg(rd, v);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::B { off }) => {
+                // 32-bit unconditional branch B.W; same offset encoding as BL.
+                self.pc = (self.pc as i32).wrapping_add(4).wrapping_add(off) as u32;
+            }
+            Instr::Thumb2(Thumb2::LdrLitW { rt, imm }) => {
+                // 32-bit LDR (literal) T3: base is (pc+4) aligned to 4.
+                let base = (self.pc.wrapping_add(4)) & !3;
+                let addr = base.wrapping_add(imm as u32);
+                let v = bus.read_u32(addr)?;
+                self.set_reg(rt, v);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::Mul { rd, rn, rm, ra, sub }) => {
+                // 32-bit MUL / MLA / MLS. Result = Ra +/- Rn*Rm (Ra = 15: MUL).
+                let prod = self.reg(rn).wrapping_mul(self.reg(rm));
+                let acc = self.reg(ra);
+                let result = if ra == 15 {
+                    prod
+                } else if sub {
+                    acc.wrapping_sub(prod)
+                } else {
+                    prod.wrapping_add(acc)
+                };
+                self.set_reg(rd, result);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::LdrhImm { rt, rn, imm }) => {
+                // 32-bit LDRH (immediate): halfword load, zero-extended. No flags.
+                let addr = self.reg(rn).wrapping_add(imm as u32);
+                let v = bus.read_u16(addr)?;
+                self.set_reg(rt, v as u32);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::StrImm { rt, rn, imm }) => {
+                // 32-bit STR (immediate): word store. No flags.
+                let addr = self.reg(rn).wrapping_add(imm as u32);
+                bus.write_u32(addr, self.reg(rt))?;
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::StrbT4 { rt, rn, imm, pre, sub }) => {
+                // 32-bit STRB with writeback: pre => mem8[Rn ± imm] = Rt, Rn ±=
+                // imm; post => mem8[Rn] = Rt, Rn ±= imm. No flags.
+                let base = self.reg(rn);
+                let addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
+                if pre {
+                    bus.write_u8(addr, (self.reg(rt) & 0xFF) as u8)?;
+                    self.set_reg(rn, addr);
+                } else {
+                    bus.write_u8(base, (self.reg(rt) & 0xFF) as u8)?;
+                    self.set_reg(rn, addr);
+                }
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::LdrbT4 { rt, rn, imm, pre, sub }) => {
+                // 32-bit LDRB with writeback: same addressing as StrbT4, byte
+                // load zero-extended into Rt. No flags.
+                let base = self.reg(rn);
+                let addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
+                let v = bus.read_u8(if pre { addr } else { base })?;
+                self.set_reg(rn, addr);
+                self.set_reg(rt, v as u32);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::Sdiv { rd, rn, rm }) => {
+                // Signed divide, truncated toward zero. Divide-by-zero yields
+                // 0; INT_MIN / -1 yields INT_MIN (ARMv7-M saturation rule).
+                let a = self.reg(rn) as i32;
+                let b = self.reg(rm) as i32;
+                let q = if b == 0 { 0 } else { a.wrapping_div(b) };
+                self.set_reg(rd, q as u32);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::Udiv { rd, rn, rm }) => {
+                // Unsigned divide. Divide-by-zero yields 0 (ARMv7-M).
+                let a = self.reg(rn);
+                let b = self.reg(rm);
+                let q = if b == 0 { 0 } else { a / b };
+                self.set_reg(rd, q);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::LdrbImm { rt, rn, imm }) => {
+                // 32-bit LDRB (immediate): byte load, zero-extended. No flags.
+                let addr = self.reg(rn).wrapping_add(imm as u32);
+                let v = bus.read_u8(addr)?;
+                self.set_reg(rt, v as u32);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::StrbImm { rt, rn, imm }) => {
+                // 32-bit STRB (immediate) T3: byte store. No flags.
+                let addr = self.reg(rn).wrapping_add(imm as u32);
+                bus.write_u8(addr, (self.reg(rt) & 0xFF) as u8)?;
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::StrhImm { rt, rn, imm }) => {
+                // 32-bit STRH (immediate) T3: halfword store. No flags.
+                let addr = self.reg(rn).wrapping_add(imm as u32);
+                bus.write_u16(addr, (self.reg(rt) & 0xFFFF) as u16)?;
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::LdrImm { rt, rn, imm }) => {
+                // 32-bit LDR (immediate): word load. No flags.
+                let addr = self.reg(rn).wrapping_add(imm as u32);
+                let v = bus.read_u32(addr)?;
+                self.set_reg(rt, v);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::Sbfx { rd, rn, lsbit, width }) => {
+                // Sign-extending bit-field extract: take `width` bits of Rn
+                // starting at `lsbit`, sign-extend to 32 bits. No flags.
+                let v = self.reg(rn);
+                let mask = if width >= 32 { u32::MAX } else { (1u32 << width) - 1 };
+                let field = (v >> lsbit) & mask;
+                let sign = 1u32 << (width - 1);
+                let result = (field ^ sign).wrapping_sub(sign);
+                self.set_reg(rd, result);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::Ubfx { rd, rn, lsbit, width }) => {
+                // Zero-extending bit-field extract: take `width` bits of Rn
+                // starting at `lsbit`, zero-extend to 32 bits. No flags.
+                let v = self.reg(rn);
+                let mask = if width >= 32 { u32::MAX } else { (1u32 << width) - 1 };
+                self.set_reg(rd, (v >> lsbit) & mask);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::LdrStrReg { load, size, rt, rn, rm, shift }) => {
+                // 32-bit LDR/STR (register): positive LSL offset, no writeback.
+                // Byte offset = Rm << shift. No flags.
+                let addr = self.reg(rn).wrapping_add(self.reg(rm) << shift);
+                if load {
+                    let v = match size {
+                        1 => bus.read_u8(addr)? as u32,
+                        2 => bus.read_u16(addr)? as u32,
+                        _ => bus.read_u32(addr)?,
+                    };
+                    self.set_reg(rt, v);
+                } else {
+                    match size {
+                        1 => bus.write_u8(addr, (self.reg(rt) & 0xFF) as u8)?,
+                        2 => bus.write_u16(addr, (self.reg(rt) & 0xFFFF) as u16)?,
+                        _ => bus.write_u32(addr, self.reg(rt))?,
+                    }
+                }
+                self.pc = self.pc.wrapping_add(4);
+            }
             Instr::BCond { cond, off } => {
                 if self.cond_true(cond) {
                     self.pc = (self.pc as i32).wrapping_add(4).wrapping_add(off) as u32;
@@ -511,6 +905,10 @@ impl Cpu {
                     1 => (v << 8 & 0xFF00_FF00) | (v >> 8 & 0x00FF_00FF),
                     _ => (v as u16).swap_bytes() as i16 as i32 as u32,
                 };
+                self.pc = self.pc.wrapping_add(2);
+            }
+            Instr::Pld { .. } => {
+                // PLD is a hint; no-op in emulator.
                 self.pc = self.pc.wrapping_add(2);
             }
             Instr::Nop => {
@@ -1129,5 +1527,133 @@ mod tests {
         let mut bus = Bus::new(flash, 0x1000);
         let mut cpu = Cpu::new();
         assert!(matches!(cpu.step(&mut bus), Err(EmuError::Undefined { pc: 0, instr: 0xF000 })));
+    }
+
+    #[test]
+    fn test_tst_w_dpimm_executes() {
+        // `tst.w r3, #0x40` (hw1 0xF013, hw2 0x0F40) from af_190602 0x8c8a:
+        // sets Z when (r3 & 0x40) == 0, clears it otherwise. No register write.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xF013u16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0x0F40u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[3] = 0x40;
+        cpu.step(&mut bus).unwrap();
+        assert!(!cpu.z);
+        assert_eq!(cpu.pc, 4);
+        cpu.pc = 0;
+        cpu.r[3] = 0x00;
+        cpu.step(&mut bus).unwrap();
+        assert!(cpu.z);
+    }
+
+    #[test]
+    fn test_mov_w_dpimm_does_not_read_pc() {
+        // `mov.w sl, #3` (hw1 0xF04F, hw2 0x0A03) from af_190602 0x8df2:
+        // ORR with Rn = 1111 is the MOV alias — the Rn operand is NOT read,
+        // so the result is the immediate, not (pc+4) | imm.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xF04Fu16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0x0A03u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[10], 3, "mov.w sl, #3 must be 3, not pc|3");
+        assert_eq!(cpu.pc, 4);
+    }
+
+    #[test]
+    fn test_bic_w_asr31_executes() {
+        // bic.w r1, r0, r0, asr #31 (EA20 71E0, af_190602 0x13cde):
+        // r1 = r0 & ~(r0 asr 31) — i.e. r0 clamped to non-negative.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xEA20u16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0x71E0u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[0] = 5;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[1], 5);
+        cpu.pc = 0;
+        cpu.r[0] = 0x8000_0000;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[1], 0);
+    }
+
+    #[test]
+    fn test_lsl_w_mov_alias_executes() {
+        // lsl.w sb, sl, #0xc (EA4F 390A): MOV alias, Rn = 1111 operand is
+        // not read — result is the shifted Rm only.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xEA4Fu16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0x390Au16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[10] = 1;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[9], 0x1000);
+    }
+
+    #[test]
+    fn test_pop_w_pc_transfers_and_consumes_word() {
+        // pop.w {r4, pc} = e8bd 8010: bit 15 of the list is the pc. The pc
+        // word must be popped from the stack (sp advances past it) AND
+        // execution must transfer to it — falling through would corrupt the
+        // stack by 4 bytes on every function return (found by the
+        // af_190602 layer-4 gate as a drift of sp up to ram_top).
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xe8bdu16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0x8010u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.sp = RAM_BASE + 0x100;
+        bus.write_u32(RAM_BASE + 0x100, 0x11223344).unwrap(); // r4
+        bus.write_u32(RAM_BASE + 0x104, 0x215 | 1).unwrap();  // pc (thumb bit)
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[4], 0x11223344);
+        assert_eq!(cpu.pc, 0x214);
+        assert_eq!(cpu.sp, RAM_BASE + 0x108);
+    }
+
+    #[test]
+    fn test_stm_w_no_writeback_stores_ascending() {
+        // `stm.w sp, {r7, sl}` = e88d 0480 (Capstone-verified, af_190602
+        // 0x8e02): STMIA with NO writeback. Decoding this as STMDB sp!
+        // (the old behavior) moved sp down 8 bytes and stored the words at
+        // the wrong addresses, corrupting a stack slot read later as a
+        // format character.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xe88du16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0x0480u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.sp = RAM_BASE + 0x100;
+        cpu.r[7] = 1;
+        cpu.r[10] = 0x1f;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read_u32(RAM_BASE + 0x100).unwrap(), 1);   // r7
+        assert_eq!(bus.read_u32(RAM_BASE + 0x104).unwrap(), 0x1f); // sl
+        assert_eq!(cpu.sp, RAM_BASE + 0x100); // no writeback
+        assert_eq!(cpu.pc, 4);
+    }
+
+    #[test]
+    fn test_strb_t4_pre_indexed_subtract() {
+        // `strb r7, [lr, #-1]!` = F80E 7D01 (Capstone-verified, af_190602
+        // 0x13d10): pre-indexed byte store with negative offset and writeback.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xF80Eu16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0x7D01u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.lr = RAM_BASE + 0x101;
+        cpu.r[7] = 0xAB;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read_u8(RAM_BASE + 0x100).unwrap(), 0xAB);
+        assert_eq!(cpu.lr, RAM_BASE + 0x100); // lr - 1 written back
     }
 }
