@@ -162,7 +162,7 @@ fn test_two_frames_differ_via_phase() {
     assert!(Harness::frames_differ(&f1, &f2));
 }
 
-/// LAYER-4 PRE-FLASH GATE. Requires:
+/// LAYER-5 PRE-FLASH GATE. Requires:
 ///   - resources/animations/af_190602.json (Phase 3 RE output)
 ///   - AF_fw/decrypted/af_190602.dec.bin (gitignored RE artifact)
 /// Both absent in CI/other machines -> skip. Run explicitly before flashing
@@ -198,5 +198,179 @@ fn test_af_190602_render_gate() {
         let on = frame.pixels.iter().filter(|&&px| px != 0).count();
         assert_eq!(on, 409, "frame {frame_no}: on-pixel count drifted");
         prev = Some(frame);
+    }
+}
+
+/// Uniform reference-apply shims for the effect table (width 64, height 128
+/// per the af_190602 descriptor's display_buffer).
+fn apply_gradient(buf: &mut [u8], phase: u32) {
+    crate::firmware::anim::effects::gradient_fade_apply(buf, 64, 128, phase);
+}
+fn apply_center(buf: &mut [u8], phase: u32) {
+    crate::firmware::anim::effects::center_pulse_apply(buf, 64, phase);
+}
+fn apply_diagonal(buf: &mut [u8], phase: u32) {
+    crate::firmware::anim::effects::diagonal_sweep_apply(buf, 64, phase);
+}
+
+/// Run the emulator from `entry` until the return sentinel, like
+/// `Harness::run_frame` but with an explicit entry point (the stock render
+/// entry is not the only way into the patched code path).
+fn run_at(h: &mut Harness, entry: u32, budget: u64) {
+    use crate::firmware::emu::harness::RETURN_SENTINEL;
+    h.cpu.pc = entry & !1;
+    h.cpu.lr = RETURN_SENTINEL | 1;
+    h.cpu
+        .run_until(&mut h.bus, RETURN_SENTINEL, budget)
+        .unwrap_or_else(|e| panic!("run_at {entry:#x}: {e}\n{}", h.cpu.debug_dump()));
+    assert!(
+        h.bus.acl_violations.is_empty(),
+        "ACL violations: {:?}",
+        h.bus.acl_violations
+    );
+}
+
+/// LAYER-5 PRE-FLASH GATE: patched af_190602 animates each effect in the emu.
+/// Requires the same artifacts as the layer-4 gate.
+///
+/// Drive pattern: prime the display buffer with the real charge-screen render
+/// (timeout bit clear), then raise the timeout bit 0x20000 in the
+/// display-status word [0x20002c30+4] (the bit the hook at 0x9a16 tests) and
+/// call the clock renderer FUN_00009a10 directly — the host of the patched
+/// gate — four times. RE (af_190602-dispatcher-analy.md §7.1) shows the
+/// timeout branch at 0x9a20 reaches the pop-only screen-off path at 0x9b48
+/// only when status bit 19 (0x80000) is also set (bmi.w at 0x9a24); with
+/// both bits set the stock code draws nothing, so the framebuffer evolves
+/// purely by the cave's clearing fade: after call k the raw buffer must
+/// equal the reference fade of the primed buffer at phase k, and the phase
+/// global must read k.
+#[test]
+#[ignore]
+fn test_af_190602_animation_frames() {
+    use std::path::Path;
+
+    use crate::firmware::anim::asm::AnimError;
+    use crate::firmware::anim::effects::{
+        build_center_pulse_patch, build_diagonal_sweep_patch, build_gradient_fade_patch,
+        CONFIG_CENTER_PULSE, CONFIG_DIAGONAL_SWEEP, CONFIG_GRADIENT_FADE,
+    };
+    use crate::firmware::emu::harness::dump_pgm;
+
+    const CLOCK_RENDERER: u32 = 0x9a10; // FUN_00009a10, host of the hook
+    const PHASE_GLOBAL: u32 = 0x2000_2cf8; // descriptor animation.phase_global
+    // Display-status word [0x20002c30 + 4] (composer literal 0xb698 /
+    // clock-renderer literal 0x9b4c, RE doc §7.1); bit 0x20000 = timed out.
+    const STATUS_WORD: u32 = 0x2000_2c34;
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let desc_path = root.join("resources/animations/af_190602.json");
+    let img_path = root.join("AF_fw/decrypted/af_190602.dec.bin");
+    if !desc_path.exists() || !img_path.exists() {
+        eprintln!("descriptor or decrypted image missing; skipping gate");
+        return;
+    }
+    let desc_json = std::fs::read_to_string(&desc_path).unwrap();
+    let stock_img = std::fs::read(&img_path).unwrap();
+
+    let table: [(
+        &str,
+        fn(&str) -> Result<Patch, AnimError>,
+        u8,
+        fn(&mut [u8], u32),
+    ); 3] = [
+        ("gradient", build_gradient_fade_patch, CONFIG_GRADIENT_FADE, apply_gradient),
+        ("center", build_center_pulse_patch, CONFIG_CENTER_PULSE, apply_center),
+        ("diagonal", build_diagonal_sweep_patch, CONFIG_DIAGONAL_SWEEP, apply_diagonal),
+    ];
+
+    for (name, build, config, apply) in table {
+        let mut img = stock_img.clone();
+        let mut patch = build(&desc_json).unwrap();
+        let mut log = HashMap::new();
+        apply_patch(&mut img, &mut patch, &mut log).unwrap();
+
+        let mut h = Harness::new(&img, load_descriptor(&desc_json).unwrap());
+        let buf_start = h.desc.display_buffer.range.start;
+        let buf_len =
+            (h.desc.display_buffer.range.end - h.desc.display_buffer.range.start) as usize;
+        let read_buf = |h: &Harness| -> Vec<u8> {
+            (0..buf_len as u32)
+                .map(|i| h.bus.read_u8(buf_start + i).unwrap())
+                .collect()
+        };
+
+        // Prime: stock charge screen with the timeout bit clear.
+        let prime = h.run_frame(5_000_000).unwrap_or_else(|e| {
+            panic!("{name} prime: {e}\n{}", h.cpu.debug_dump())
+        });
+        let primed = read_buf(&h);
+
+        // Raise the timeout bits the stock dim/idle path needs: 0x20000 makes
+        // the hook's `beq` fall through at 0x9a20; 0x80000 (status bit 19)
+        // makes the `bmi.w 0x9b48` take the pop-only screen-off branch —
+        // without it the code continues to FUN_0000993C, which draws a
+        // different idle screen (RE doc §7.1 glossed over this condition).
+        // Then select this effect (the descriptor stub defaults to Gradient
+        // Fade) and drive the hook host directly.
+        let status = h.bus.read_u32(STATUS_WORD).unwrap_or(0);
+        h.bus.write_u32(STATUS_WORD, status | 0x20000 | 0x80000).unwrap();
+        let cfg_addr = h.desc.stubs[0].addr;
+        h.bus.set_stub(cfg_addr, config as u32);
+
+        let (w, hh) = (h.desc.display_buffer.width, h.desc.display_buffer.height);
+        let unpack = |raw: &[u8]| crate::firmware::emu::harness::unpack_block1(raw, w, hh);
+        let mut prev = prime.clone();
+        for k in 1..=4u32 {
+            run_at(&mut h, CLOCK_RENDERER, 5_000_000);
+            let phase = h.bus.read_u32(PHASE_GLOBAL).unwrap();
+            assert_eq!(phase, k, "{name}: phase global must count cave runs");
+            let got = read_buf(&h);
+            // The emulator is cumulative: each cave run fades the buffer left
+            // by the previous run, so the reference must replay phases
+            // 1..=k, not just phase k.
+            let mut expect = primed.clone();
+            for p in 1..=phase {
+                apply(&mut expect, p);
+            }
+            let first_diffs: Vec<String> = got
+                .iter()
+                .zip(expect.iter())
+                .enumerate()
+                .filter(|(_, (g, e))| g != e)
+                .take(5)
+                .map(|(i, (g, e))| format!("{i:#x}: got {g:#x} want {e:#x}"))
+                .collect();
+            assert_eq!(
+                got, expect,
+                "{name}: frame {k} must equal the reference fade of the primed buffer (diffs: {})",
+                first_diffs.join(", ")
+            );
+            // Consecutive phases may map to the same bands (e.g. Gradient
+            // Fade only shifts bands every 4 phases); the frames must differ
+            // exactly when the cumulative reference fade says they should.
+            let mut expect_prev = primed.clone();
+            for p in 1..phase {
+                apply(&mut expect_prev, p);
+            }
+            if Harness::frames_differ(&unpack(&expect_prev), &unpack(&expect)) {
+                assert!(
+                    Harness::frames_differ(&prev, &unpack(&got)),
+                    "{name}: animation must change frames (phase {phase})"
+                );
+            }
+            prev = unpack(&got);
+        }
+
+        // NOTE: no "final frame must differ from prime" assert — where the
+        // stock charge screen actually has pixels (strips 0-1) and which
+        // bands an effect clears in phases 1-4 are effect properties, not
+        // emulator properties (Center Pulse leaves the top strips untouched
+        // for these phases; the exact per-phase buffer equality above is
+        // the actual gate).
+
+        let final_on = prev.pixels.iter().filter(|&&px| px != 0).count();
+        dump_pgm(&prime, Path::new(&format!("/tmp/af_anim_{name}_prime.pgm"))).unwrap();
+        dump_pgm(&prev, Path::new(&format!("/tmp/af_anim_{name}_f4.pgm"))).unwrap();
+        eprintln!("{name}: ok, final on-pixels = {final_on}");
     }
 }

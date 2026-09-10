@@ -52,7 +52,9 @@ pub enum Instr {
     /// LDM rn!, {list}: load ascending, writeback unless rn in list. No flags.
     Ldm { rn: u8, list: u8 },
     /// Conditional branch; `off` is the sign-extended byte offset from pc+4.
-    BCond { cond: u8, off: i32 },
+    /// `wide` marks the 32-bit B<c>.W (T3) form, which advances pc by 4 when
+    /// not taken (the 16-bit form advances by 2).
+    BCond { cond: u8, off: i32, wide: bool },
     /// CBZ/CBNZ: branch on (non-)zero register; `off` is (i:imm5:0) from pc+4.
     Cbz { nonzero: bool, rn: u8, off: i32 },
     /// 32-bit branch-with-link; decoded in Cpu::step (needs the second halfword).
@@ -358,7 +360,7 @@ pub fn decode(hw: u16) -> Option<Instr> {
         if cond == 0b1111 { return Some(Instr::Svc { imm: (hw & 0xFF) as u8 }); }
         if cond == 0b1110 { return None; }
         let off = ((hw & 0xFF) as i32) << 24 >> 23; // sign-extend imm8<<1
-        return Some(Instr::BCond { cond, off });
+        return Some(Instr::BCond { cond, off, wide: false });
     }
     if hw >> 11 == 0b11110 { // BL prefix; second halfword at pc+2
         // decode() is pure; BL needs the second halfword, so Cpu::step
@@ -669,6 +671,32 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         }));
     }
 
+    // 32-bit CONDITIONAL branch B<c>.W (T3): hw1 = 11110 S cond imm6,
+    // hw2 = 1 0 J2 0 J1 imm11 (bit 15 must be 1, bit 14 = 0, bit 12 = 0 —
+    // bit 12 = 1 is T4/BL space). Offset = S:J1:J2:imm6:imm11:'0'
+    // sign-extended from bit 20, with J1 = hw2 bit 11 at offset bit 19 and
+    // J2 = hw2 bit 13 at offset bit 18, NO EOR-with-S transforms (unlike
+    // T4/BL). Verified against Capstone on all 223 instances in af_190602
+    // plus synthetic S/J1/J2/imm6/imm11 probes (see
+    // `test_decode32_conditional_bw`); the T3 base is pc+4 with NO 4-byte
+    // align (unlike T4/BL/literals). af_190602 0x9a24 `bmi.w 0x9b48` =
+    // F100 8090. Must precede the T4 arm, which matches on hw2[15:14]=10
+    // alone and would otherwise swallow T3 (its imm10 field overlaps cond).
+    if op1 == 0b11110 && hw2 & 0xD000 == 0x8000 {
+        let cond = ((hw1 >> 6) & 0xF) as u8;
+        if cond >= 0b1110 {
+            return None; // undefined, like the 16-bit B<cond> encoding
+        }
+        let s = ((hw1 >> 10) & 1) as u32;
+        let imm21 = (s << 20)
+            | ((((hw2 >> 11) & 1) as u32) << 19) // J1 (hw2 bit 11)
+            | ((((hw2 >> 13) & 1) as u32) << 18) // J2 (hw2 bit 13)
+            | (((hw1 & 0x3F) as u32) << 12)
+            | (((hw2 & 0x7FF) as u32) << 1);
+        let off = ((imm21 << 11) as i32) >> 11; // sign-extend 21 bits
+        return Some(Instr::BCond { cond, off, wide: true });
+    }
+
     // 32-bit unconditional branch B.W: hw1 = 11110 S imm10, hw2 = 10 J1 1 J2 imm11.
     // (BL uses hw2 = 11 J1 1 J2 imm11 and is intercepted in Cpu::step.)
     // Must be checked before data-processing because B.W and DpImm share the
@@ -748,6 +776,67 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_decode32_conditional_bw() {
+        // B<c>.W (T3) vectors, all Capstone-verified (python capstone,
+        // CS_MODE_THUMB, target = pc+4 + off with NO 4-byte align). The real
+        // one: af_190602 0x9a24 `bmi.w 0x9b48` = F100 8090 -> cond MI,
+        // off 0x120, wide.
+        match decode32(0xF100, 0x8090).unwrap() {
+            Instr::BCond { cond, off, wide } => {
+                assert_eq!(cond, 0b0100);
+                assert_eq!(off, 0x120);
+                assert!(wide);
+            }
+            other => panic!("expected BCond, got {other:?}"),
+        }
+        // J1 = hw2 bit 11 -> offset bit 19; J2 = hw2 bit 13 -> offset bit
+        // 18; imm6 -> bits 17:12; S sign-extends from bit 20. No EOR
+        // transforms (unlike T4/BL).
+        for (hw1, hw2, off) in [
+            (0xF100, 0x8800, 0x80000),            // J1=1 (bit 11)
+            (0xF100, 0xA000, 0x40000),            // J2=1 (bit 13)
+            (0xF100, 0xA800, 0xC0000),            // J1+J2
+            (0xF100 | 1, 0x8000, 0x1000),     // imm6=1
+            (0xF100, 0x8091, 0x122),              // imm11+1
+            (0xF500, 0x8090, -0xFFEE0),           // S=1 alone
+            (0xF500, 0x8890, -0x7FEE0),           // S=1, J1=1
+            (0xF500, 0xA090, -0xBFEE0),           // S=1, J2=1
+            (0xF500, 0xA890, -0x3FEE0),           // S=1, J1+J2
+        ] {
+            match decode32(hw1, hw2).unwrap() {
+                Instr::BCond { cond, off: o, wide } => {
+                    assert_eq!(cond, 0b0100, "cond for {hw1:#x} {hw2:#x}");
+                    assert_eq!(o, off, "off for {hw1:#x} {hw2:#x}");
+                    assert!(wide, "wide for {hw1:#x} {hw2:#x}");
+                }
+                other => panic!("expected BCond, got {other:?}"),
+            }
+        }
+        // cond 0b1110/0b1111 is undefined (like the 16-bit encoding).
+        assert!(decode32(0xF100 | (0b1110 << 6), 0x8090).is_none());
+    }
+
+    #[test]
+    fn test_bcond_wide_not_taken_advances_four() {
+        // B<c>.W (T3) not-taken must skip BOTH halfwords; the 16-bit form
+        // skips one. Regression: af_190602 0x9a24 `bmi.w 0x9b48` not taken
+        // used to fall into the second halfword (0x9a26) and run garbage.
+        use crate::firmware::emu::bus::Bus;
+        use crate::firmware::emu::cpu::Cpu;
+        // bmi.w +0x120 (00 f1 90 80) at 0, then 16-bit beq +0 (00 d0) at 4.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..6].copy_from_slice(&[0x00, 0xf1, 0x90, 0x80, 0x00, 0xd0]);
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.n = false; // MI false -> not taken
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.pc, 4, "T3 not-taken must advance 4");
+        // 16-bit beq at 4, Z clear -> not taken, advance 2.
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.pc, 6, "16-bit not-taken must advance 2");
+    }
 
     #[test]
     fn test_decode32_push_w_lr() {

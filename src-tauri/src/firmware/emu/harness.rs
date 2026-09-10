@@ -27,6 +27,13 @@ pub struct DisplayBuffer {
 }
 
 #[derive(Debug, serde::Deserialize)]
+pub struct Stub {
+    #[serde(deserialize_with = "de_hex")]
+    pub addr: u32,
+    pub value: u32,
+}
+
+#[derive(Debug, serde::Deserialize)]
 pub struct Descriptor {
     pub build: String,
     #[serde(deserialize_with = "de_hex")]
@@ -38,6 +45,11 @@ pub struct Descriptor {
     pub ram_size: usize, // 0 -> default 0x8000
     #[serde(default)]
     pub args: [u32; 4], // r0..r3 at entry
+    /// MMIO stubs: reads at `addr` return `value`, writes are dropped.
+    /// Used for the animation config byte (dataflash-mapped) so patched
+    /// firmware runs in the emulator without a dataflash model.
+    #[serde(default)]
+    pub stubs: Vec<Stub>,
 }
 
 /// Deserialize a u32 from a string: "0x20001000" hex or "536879104" decimal.
@@ -80,6 +92,9 @@ impl Harness {
         bus.allow_region(desc.display_buffer.range.start..desc.display_buffer.range.end);
         for g in &desc.ram_globals {
             bus.allow_region(g.start..g.end);
+        }
+        for s in &desc.stubs {
+            bus.set_stub(s.addr, s.value);
         }
         let ram_top = RAM_BASE + ram_size as u32;
         // Real charge-screen render code uses deep call stacks; give it 8 KiB

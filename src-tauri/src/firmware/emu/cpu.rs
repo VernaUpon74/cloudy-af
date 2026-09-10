@@ -898,11 +898,12 @@ impl Cpu {
                 }
                 self.pc = self.pc.wrapping_add(4);
             }
-            Instr::BCond { cond, off } => {
+            Instr::BCond { cond, off, wide } => {
                 if self.cond_true(cond) {
                     self.pc = (self.pc as i32).wrapping_add(4).wrapping_add(off) as u32;
                 } else {
-                    self.pc = self.pc.wrapping_add(2);
+                    // 16-bit form occupies 2 bytes; B<c>.W (T3) occupies 4.
+                    self.pc = self.pc.wrapping_add(if wide { 4 } else { 2 });
                 }
             }
             Instr::Cbz { nonzero, rn, off } => {

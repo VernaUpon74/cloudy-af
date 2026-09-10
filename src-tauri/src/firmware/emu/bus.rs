@@ -52,6 +52,12 @@ impl Bus {
     /// let a multi-byte access index past the end of a backing vec.
     fn resolve(&self, addr: u32, size: u8) -> Result<Region, EmuError> {
         let size = size as u64;
+        // An explicit stub defines the address: reads return the stubbed
+        // value, writes are dropped (e.g. a config byte in dataflash that
+        // the memory map does not otherwise model).
+        if self.stubs.contains_key(&addr) {
+            return Ok(Region::Peripheral);
+        }
         if addr >= FLASH_BASE && (addr - FLASH_BASE) as u64 + size <= self.flash.len() as u64 {
             Ok(Region::Flash((addr - FLASH_BASE) as usize))
         } else if addr >= RAM_BASE && (addr - RAM_BASE) as u64 + size <= self.ram.len() as u64 {
