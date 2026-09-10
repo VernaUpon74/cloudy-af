@@ -144,11 +144,16 @@ fn parse_hex(s: &str) -> Result<usize> {
 /// patch can be rolled back later. If another patch has already modified an
 /// offset, the existing rollback entry is preserved.
 pub fn apply_patch(
-    firmware: &mut [u8],
+    firmware: &mut Vec<u8>,
     patch: &mut Patch,
     rollback_log: &mut HashMap<usize, u8>,
 ) -> Result<()> {
     for m in &patch.modifications {
+        // Modifications past the stock image end land in an erased-APROM code
+        // cave: grow the image (0xFF = erased flash) to cover them.
+        if m.offset >= firmware.len() {
+            firmware.resize(m.offset + 1, 0xFF);
+        }
         let current = firmware[m.offset];
         if let Some(expected) = m.original {
             if current != expected {
@@ -265,5 +270,20 @@ mod tests {
         let conflicts = find_conflicts(&[patch_a, patch_b]);
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].2, 0x10);
+    }
+
+    #[test]
+    fn test_apply_patch_grows_image_into_cave() {
+        // A modification past the stock image end (erased-APROM code cave)
+        // grows the image with 0xFF padding instead of panicking.
+        let xml = r#"<Patch Name="C"><Data>0x40: * - 0xAB</Data></Patch>"#;
+        let mut patch = parse_patch(xml, "c").unwrap();
+        let mut firmware = vec![0u8; 0x20];
+        let mut log = HashMap::new();
+        apply_patch(&mut firmware, &mut patch, &mut log).unwrap();
+        assert_eq!(firmware.len(), 0x41);
+        assert_eq!(firmware[0x40], 0xAB);
+        assert!(firmware[0x20..0x40].iter().all(|b| *b == 0xFF));
+        assert_eq!(log[&0x40], 0xFF);
     }
 }

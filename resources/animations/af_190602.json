@@ -11,5 +11,22 @@
     { "start": "0x20000000", "end": "0x20000e00" },
     { "start": "0x20002c00", "end": "0x20002d00" }
   ],
-  "args": [0, 0, 0, 0]
+  "args": [0, 0, 0, 0],
+  "animation": {
+    "hook_site": "0x9a16",
+    "hook_resume": "0x9a1a",
+    "code_cave": { "start": "0x1c7ec", "size": 2048 },
+    "config_byte_addr": "0x1f7f0",
+    "phase_global": "0x20002cf8",
+    "status_word_addr": "0x20002c34",
+    "status_base_addr": "0x20002c30",
+    "effects": {
+      "gradient_fade": 2,
+      "center_pulse": 3,
+      "diagonal_sweep": 4
+    }
+  },
+  "stubs": [
+    { "addr": "0x1f7f0", "value": 2 }
+  ]
 }

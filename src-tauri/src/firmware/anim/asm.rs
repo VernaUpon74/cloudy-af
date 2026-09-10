@@ -35,7 +35,7 @@ pub struct Asm {
     code: Vec<u8>,
     labels: HashMap<String, u32>,
     fixups: Vec<Fixup>,
-    pool: Vec<(String, u32)>,
+    pool: Vec<(String, PoolVal)>,
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +43,14 @@ enum Fixup {
     B11 { offset: u32, label: String },
     BCond8 { offset: u32, label: String, cond: u8 },
     LdrLit8 { offset: u32, label: String, rt: u8 },
+}
+
+/// A literal-pool entry: a plain word, or the absolute address of another
+/// pool entry's word (for taking the address of a pooled data block).
+#[derive(Debug, Clone)]
+enum PoolVal {
+    Word(u32),
+    AddrOf(String),
 }
 
 impl Asm {
@@ -140,6 +148,10 @@ impl Asm {
         self.emit(0x4000 | (((rm & 0x7) as u16) << 3) | (rdn & 0x7) as u16)
     }
 
+    pub fn eors(&mut self, rdn: u8, rm: u8) -> &mut Self {
+        self.emit(0x4040 | (((rm & 0x7) as u16) << 3) | (rdn & 0x7) as u16)
+    }
+
     pub fn lsls(&mut self, rd: u8, rm: u8, imm5: u8) -> &mut Self {
         self.emit((((imm5 & 0x1F) as u16) << 6) | (((rm & 0x7) as u16) << 3) | (rd & 0x7) as u16)
     }
@@ -195,10 +207,46 @@ impl Asm {
         self
     }
 
+    /// Emit a raw halfword (an encoding the builder has no helper for).
+    pub fn raw16(&mut self, hw: u16) -> &mut Self {
+        self.emit(hw)
+    }
+
+    /// Emit a raw 32-bit Thumb-2 instruction pair, e.g. the `tst.w r2,
+    /// #0x20000` replayed at the cave entry.
+    pub fn raw32(&mut self, hw1: u16, hw2: u16) -> &mut Self {
+        self.emit(hw1);
+        self.emit(hw2)
+    }
+
+    /// `movs rd, rm` (low registers) — register copy, encoded as `lsls rd,
+    /// rm, #0`.
+    pub fn movs_reg(&mut self, rd: u8, rm: u8) -> &mut Self {
+        self.emit((((rm & 0x7) as u16) << 3) | (rd & 0x7) as u16)
+    }
+
+    /// 32-bit unconditional branch (B.W) to an absolute address — for
+    /// returning from the cave to the fixed `hook_resume` site.
+    pub fn b_abs(&mut self, target: u32) -> &mut Self {
+        let from = self.base + self.code.len() as u32;
+        let [h1, h2] = bw_pair(from, target);
+        self.emit(h1);
+        self.emit(h2)
+    }
+
     /// Add a 32-bit word to the literal pool. The same `label` is used with
     /// `ldr_lit` to load the address of this word.
     pub fn pool_word(&mut self, label: &str, value: u32) -> &mut Self {
-        self.pool.push((label.to_string(), value));
+        self.pool.push((label.to_string(), PoolVal::Word(value)));
+        self
+    }
+
+    /// Add a word to the literal pool whose value is the absolute address of
+    /// another pool entry's word, resolved in `finish`. Use with `ldr_lit` to
+    /// get a data pointer into a pooled block (e.g. a LUT) into a register.
+    pub fn pool_addr(&mut self, label: &str, target: &str) -> &mut Self {
+        self.pool
+            .push((label.to_string(), PoolVal::AddrOf(target.to_string())));
         self
     }
 
@@ -211,11 +259,28 @@ impl Asm {
             self.code.extend_from_slice(&0x46C0u16.to_le_bytes()); // nop
         }
 
-        // Append pool entries. Each label maps to the byte offset of its word.
+        // Pass 1: assign each label the offset of its first pool word.
+        // A label given multiple consecutive words keeps the FIRST: this is
+        // how multi-word blocks (e.g. a sine LUT) are pooled.
         let mut pool_offsets: HashMap<String, u32> = HashMap::new();
-        for (label, value) in &self.pool {
-            pool_offsets.insert(label.clone(), self.code.len() as u32);
-            self.code.extend_from_slice(&value.to_le_bytes());
+        for (i, (label, _)) in self.pool.iter().enumerate() {
+            pool_offsets
+                .entry(label.clone())
+                .or_insert(self.code.len() as u32 + 4 * i as u32);
+        }
+
+        // Pass 2: emit pool words (AddrOf resolves against pass 1).
+        for (_, value) in &self.pool {
+            let word = match value {
+                PoolVal::Word(w) => *w,
+                PoolVal::AddrOf(target) => {
+                    let off = pool_offsets
+                        .get(target)
+                        .ok_or_else(|| AsmError::UndefinedLabel(target.clone()))?;
+                    self.base + off
+                }
+            };
+            self.code.extend_from_slice(&word.to_le_bytes());
         }
 
         // Resolve fixups in place.
