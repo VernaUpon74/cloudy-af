@@ -311,5 +311,22 @@
   "Tooltips.BVO": "Battery Voltage Offset: per-battery calibration correction added to the measured voltage, in volts.",
   "Tooltips.PuffsCount": "Total number of puffs taken since the counters were last reset.",
   "Tooltips.TotalPuffsTime": "Total time spent firing, summed over all puffs since the counters were last reset.",
-  "Tooltips.PuffsTimeFormat": "How puff time is displayed: total seconds, or hours, minutes and seconds."
+  "Tooltips.PuffsTimeFormat": "How puff time is displayed: total seconds, or hours, minutes and seconds.",
+  "Tooltips.PuffTime": "Puff time shown.",
+  "Tooltips.ProfilesTab": "Vaping profiles — power, temperature control, preheat and coil settings for each profile.",
+  "Tooltips.ScreenTab": "Main screen layout — what each line shows, clock, logo and brightness.",
+  "Tooltips.ControlsTab": "Button behavior — fire, plus and minus clicks, shortcuts and wakeup actions.",
+  "Tooltips.SmartTab": "Smart mode — automatic power based on your recent puffs.",
+  "Tooltips.AdvancedTab": "Advanced settings — battery model, charging, USB, hardware and clock options.",
+  "Tooltips.StatsTab": "Usage statistics and device counters.",
+  "Tooltips.ConnectDownload": "Connect the device over USB and download its current configuration.",
+  "Tooltips.NewConfig": "Create a new configuration from firmware defaults.",
+  "Tooltips.OpenConfig": "Open an existing configuration file (.afc).",
+  "Tooltips.ConfigurationMenu": "Configuration menu — create new, open existing, or save the configuration.",
+  "Tooltips.DownloadFromDevice": "Read the configuration from the connected device into the editor.",
+  "Tooltips.UploadToDevice": "Write the current configuration to the connected device.",
+  "Tooltips.ResetSettings": "Reset the configuration to firmware defaults and upload it to the device.",
+  "Tooltips.DeviceMonitor": "Open the live Device Monitor — real-time graph of power, voltage, temperature and more.",
+  "Tooltips.FirmwareEditor": "Open the Firmware Editor — inspect and patch firmware images.",
+  "Tooltips.BatteryEdit": "Edit the battery discharge curve (percent versus voltage)."
 }
