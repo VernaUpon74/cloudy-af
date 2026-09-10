@@ -28,7 +28,7 @@ use crate::firmware::patch::{Patch, PatchModification};
 /// (`resources/re/af_190602-dispatcher-analy.md` §7.4). An image without
 /// these 4 bytes at `hook_site` is a different build (or already detoured)
 /// and must not receive an animation patch.
-pub const HOOK_SITE_STOCK_BYTES: [u8; 4] = [0xF4, 0x12, 0x3F, 0x00];
+pub const HOOK_SITE_STOCK_BYTES: [u8; 4] = [0x12, 0xf4, 0x00, 0x3f];
 
 /// Parse and validate the descriptor's `"animation"` block. Shared by the
 /// effect builders and the firmware-editor gate (`image_supports_animation`).
@@ -377,6 +377,23 @@ pub fn build_diagonal_sweep_patch(desc_json: &str) -> Result<Patch, AnimError> {
 mod tests {
     use super::*;
 
+    /// The bundled descriptor must accept the bundled real af_190602 image —
+    /// this is exactly the "Animations not available under Patches" gate.
+    /// Cwd for `cargo test` is the crate dir (src-tauri/).
+    #[test]
+    fn bundled_descriptor_accepts_bundled_af190602_image() {
+        let desc_json = std::fs::read_to_string("../resources/animations/af_190602.json")
+            .expect("read bundled descriptor");
+        let anim = load_animation_desc(&desc_json).expect("parse bundled descriptor");
+        let image = std::fs::read("../resources/firmware/decrypted/af_190602.bin")
+            .expect("read bundled decrypted af_190602 image");
+        assert!(
+            image_supports_animation(&image, &anim),
+            "bundled af_190602 image must pass the animation gate (hook site {:#x})",
+            anim.hook_site
+        );
+    }
+
     const DESC: &str = r#"{
         "build": "t",
         "render_entry": "0x0",
@@ -581,9 +598,9 @@ mod tests {
         assert!(image_supports_animation(&img, &anim));
 
         // Different build / already detoured at the hook site.
-        img[0x102] = 0x00;
+        img[0x101] = 0x00;
         assert!(!image_supports_animation(&img, &anim), "hook site tampered");
-        img[0x102] = 0x3F;
+        img[0x101] = HOOK_SITE_STOCK_BYTES[1];
 
         // Image too small to contain the hook site.
         assert!(!image_supports_animation(&img[..0x100], &anim));

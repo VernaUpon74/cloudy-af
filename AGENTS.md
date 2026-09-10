@@ -1,5 +1,36 @@
 # Cloudy AF — agent conventions
 
+## Task delegation
+
+Use local ollama models for subagent/task delegation whenever possible
+(`ollama serve` then`ollama run <model>` / the local API at `127.0.0.1:11434`); check
+`ollama list` for what's pulled. Currently useful: `qwen3-coder:30b`
+(coding), `gemma4:26b`, `llama3:70b`. Fall back to cloud CLIs (qwen, etc.)
+only when local models can't handle the task. Only use sustainable energy models.
+
+## node-hid native addon
+
+The sidecar's `node-hid` carries a local patch
+(`sidecar/patches/node-hid+2.2.0.patch`, applied by patch-package on
+`npm install`) that mutex-serializes `close()` against the AsyncWorker read
+thread — without it, closing the hidraw handle with a read in flight aborts
+(SIGABRT in HID_hidraw.node, "free(): invalid pointer"). The patch changes
+C++, so after any sidecar `npm install` the addon MUST be rebuilt with the
+toolbox node (v22, same ABI as the flatpak's `/app/bin/node`):
+
+```
+toolbox run -c arcticfox-build sh -c \
+  'export PATH=/usr/bin:$PATH LIBRARY_PATH=/tmp/fakelib:$LIBRARY_PATH && \
+   cd sidecar/node_modules/node-hid && \
+   node-gyp configure --nodedir=/tmp/node22-headers && \
+   make -C build HID_hidraw BUILDTYPE=Release'
+```
+
+(/tmp/node22-headers is the unpacked node-v22 headers tarball;
+/tmp/fakelib holds a `libusb-1.0.so` symlink to the runtime `.so.0` — the
+toolbox lacks the -devel package. The shipped binary is `build/Release/
+HID_hidraw.node`; the `HID.node` libusb variant is unused on Linux.)
+
 ## Version bumps
 
 Whenever README, CHANGELOG, or docs are updated for a change, bump the app
@@ -65,7 +96,7 @@ and extract-and-run doesn't put `usr/bin` on PATH. The working procedure
    `APPIMAGE_EXTRACT_AND_RUN=1 npm run tauri:build -- --bundles appimage`.
    The AppDir is single-use — NEVER re-run linuxdeploy on an already
    processed AppDir; regenerate instead. The AppDir is at
-   `src-tauri/target/release/bundle/appimage/appimage/cloudy-af.AppDir/`.
+   `src-tauri/target/release/bundle/appimage/Cloudy AF.AppDir/`.
 2. `cp -L /usr/bin/node "<AppDir>/usr/bin/node"` — must be `-L` (the RPM
    x86_64 binary). Do NOT use `~/.local/bin/node` (symlink into ~/.hermes;
    its foreign-arch siblings break appimagetool arch detection).
