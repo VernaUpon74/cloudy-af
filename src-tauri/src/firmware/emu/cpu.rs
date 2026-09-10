@@ -110,6 +110,13 @@ pub struct Cpu {
     /// the stack region to catch stack exhaustion even when no store landed
     /// below the region (e.g. `sub sp, #big` then return).
     pub min_sp: u32,
+    /// Remaining instructions of the active IT block; while > 0, each step
+    /// pops one condition nibble from `it_conds` (MSB first) and skips the
+    /// instruction if that condition fails. 0 = not in an IT block.
+    it_left: u8,
+    /// Up to 4 effective condition nibbles for the active IT block, packed
+    /// MSB-first; each consumed step shifts left by 4.
+    it_conds: u16,
 }
 
 impl Cpu {
@@ -125,6 +132,8 @@ impl Cpu {
             v: false,
             trace: VecDeque::new(),
             min_sp: u32::MAX,
+            it_left: 0,
+            it_conds: 0,
         }
     }
 
@@ -154,7 +163,7 @@ impl Cpu {
         }
         let pc = self.pc;
         let hw = bus.read_u16(pc)?;
-        if hw >> 11 == 0b11110 {
+        let (instr, size) = if hw >> 11 == 0b11110 {
             // 32-bit prefix: either BL (11110) or other 32-bit Thumb-2.
             // Read the second halfword to decide which family it is.
             let hw2 = bus.read_u16(pc.wrapping_add(2))?;
@@ -168,20 +177,48 @@ impl Cpu {
                 let imm25 = ((s as u32) << 24) | ((i1 as u32) << 23) | ((i2 as u32) << 22)
                     | (((hw & 0x3FF) as u32) << 12) | (((hw2 & 0x7FF) as u32) << 1);
                 let off = ((imm25 << 7) as i32) >> 7; // sign-extend 25 bits
-                return self.execute(bus, Instr::Bl { off });
+                (Instr::Bl { off }, 4)
+            } else {
+                // Otherwise: 32-bit data-processing or other 32-bit Thumb-2.
+                let instr = decode32(hw, hw2).ok_or(EmuError::Undefined { pc, instr: hw })?;
+                (instr, 4)
             }
-            // Otherwise: 32-bit data-processing or other 32-bit Thumb-2.
-            let instr = decode32(hw, hw2).ok_or(EmuError::Undefined { pc, instr: hw })?;
-            return self.execute(bus, instr);
-        }
-        if hw >> 11 == 0b11101 || hw >> 11 == 0b11111 {
+        } else if hw >> 11 == 0b11101 || hw >> 11 == 0b11111 {
             // Other 32-bit Thumb-2 instructions.
             let hw2 = bus.read_u16(pc.wrapping_add(2))?;
             let instr = decode32(hw, hw2).ok_or(EmuError::Undefined { pc, instr: hw })?;
-            return self.execute(bus, instr);
+            (instr, 4)
+        } else {
+            let instr = decode(hw).ok_or(EmuError::Undefined { pc, instr: hw })?;
+            (instr, 2)
+        };
+        // IT-block conditional execution: pop this instruction's condition
+        // and skip (no side effects, pc still advances) when it fails.
+        if self.it_left > 0 {
+            let c = ((self.it_conds >> 12) & 0xF) as u8;
+            self.it_conds <<= 4;
+            self.it_left -= 1;
+            if !self.cond_passes(c) {
+                self.pc = pc.wrapping_add(size);
+                return Ok(());
+            }
         }
-        let instr = decode(hw).ok_or(EmuError::Undefined { pc, instr: hw })?;
         self.execute(bus, instr)
+    }
+
+    /// ARM condition-code evaluation for IT blocks and (future) BCond arms.
+    fn cond_passes(&self, c: u8) -> bool {
+        let base = match c >> 1 {
+            0 => self.z,                        // eq / ne
+            1 => self.c,                        // cs / cc
+            2 => self.n,                        // mi / pl
+            3 => self.v,                        // vs / vc
+            4 => self.c && !self.z,             // hi / ls
+            5 => self.n == self.v,              // ge / lt
+            6 => !self.z && self.n == self.v,   // gt / le
+            _ => true,                          // al (0xF = nv is unpredictable)
+        };
+        base ^ (c & 1 == 1)
     }
 
     /// Step until `pc == stop_pc` (returns instructions executed) or the
@@ -608,16 +645,21 @@ impl Cpu {
                 }
                 self.pc = self.pc.wrapping_add(4);
             }
-            Instr::Thumb2(Thumb2::DpImm { op, rd, rn, set_flags, imm }) => {
+            Instr::Thumb2(Thumb2::DpImm { op, rd, rn, set_flags, imm, shifter_c }) => {
                 // 32-bit data-processing with modified immediate.
                 // MOV (immediate) is the ORR encoding with Rn = 1111; the
                 // Rn operand is not read (no PC-relative OR); result = imm.
                 let lhs = if rn == 15 && matches!(op, DpOp::Orr) { 0 } else { self.reg(rn) };
+                // Logical ops take their carry from the immediate's shifter
+                // carry-out: the rotated forms report it, the plain forms
+                // (i:imm3 == 0) PRESERVE the old C (ARM ARM ThumbExpandImm_C)
+                // — e.g. `tst.w r3, #0x40` must not clear C.
+                let logical_c = shifter_c.unwrap_or(self.c);
                 let (result, carry, overflow) = match op {
-                    DpOp::And => (lhs & imm, (lhs & imm) >> 31 != 0, false),
-                    DpOp::Orr => (lhs | imm, (lhs | imm) >> 31 != 0, false),
-                    DpOp::Eor => (lhs ^ imm, (lhs ^ imm) >> 31 != 0, false),
-                    DpOp::Bic => (lhs & !imm, (lhs & !imm) >> 31 != 0, false),
+                    DpOp::And => (lhs & imm, logical_c, false),
+                    DpOp::Orr => (lhs | imm, logical_c, false),
+                    DpOp::Eor => (lhs ^ imm, logical_c, false),
+                    DpOp::Bic => (lhs & !imm, logical_c, false),
                     DpOp::Add => {
                         let r = lhs.wrapping_add(imm);
                         let c = (lhs as u64 + imm as u64) > 0xFFFF_FFFF;
@@ -641,10 +683,7 @@ impl Cpu {
                     self.set_reg(rd, result);
                 }
                 if set_flags {
-                    self.n = (result >> 31) != 0;
-                    self.z = result == 0;
-                    self.c = carry;
-                    self.v = overflow;
+                    self.set_nzcv(result, carry, overflow);
                 }
                 self.pc = self.pc.wrapping_add(4);
             }
@@ -688,10 +727,7 @@ impl Cpu {
                     self.set_reg(rd, result);
                 }
                 if set_flags {
-                    self.n = (result >> 31) != 0;
-                    self.z = result == 0;
-                    self.c = carry;
-                    self.v = overflow;
+                    self.set_nzcv(result, carry, overflow);
                 }
                 self.pc = self.pc.wrapping_add(4);
             }
@@ -907,11 +943,31 @@ impl Cpu {
                 };
                 self.pc = self.pc.wrapping_add(2);
             }
-            Instr::Pld { .. } => {
-                // PLD is a hint; no-op in emulator.
+            Instr::Nop => {
                 self.pc = self.pc.wrapping_add(2);
             }
-            Instr::Nop => {
+            Instr::It { cond, mask } => {
+                // IT: set up conditional execution of the next 1-4
+                // instructions. Expansion rule (n = instruction count,
+                // field = T/E bits, 1=T): n = 4 - trailing_zeros(mask);
+                // field = !(mask >> (tz+1)) & ((1<<(n-1))-1); instruction k
+                // (k >= 2) takes bit (n-1-k) of field XORed with cond[0] —
+                // 1 → cond, 0 → cond^1. Verified against keystone for all
+                // 15 mask shapes × even/odd cond (see tests).
+                let tz = mask.trailing_zeros() as u8; // mask != 0 (decode)
+                let n = 4 - tz;
+                let field = (!mask >> (tz + 1)) & ((1u8 << (n - 1)) - 1);
+                // Pack the effective conditions MSB-first: slot 0 (bits 15:12)
+                // is the first instruction (always firstcond), slot k is the
+                // (k+1)-th.
+                let mut conds: u16 = (cond as u16) << 12;
+                for k in 1..n {
+                    let then = ((field >> (n - 1 - k)) & 1) ^ (cond & 1);
+                    let eff = if then == 1 { cond } else { cond ^ 1 };
+                    conds |= (eff as u16) << (12 - 4 * k);
+                }
+                self.it_conds = conds;
+                self.it_left = n;
                 self.pc = self.pc.wrapping_add(2);
             }
         }
@@ -945,6 +1001,12 @@ impl Cpu {
     fn set_nz(&mut self, r: u32) {
         self.n = r >> 31 != 0;
         self.z = r == 0;
+    }
+
+    fn set_nzcv(&mut self, r: u32, c: bool, v: bool) {
+        self.set_nz(r);
+        self.c = c;
+        self.v = v;
     }
 
     fn add_flags(&mut self, a: u32, b: u32, cin: bool) -> u32 {
@@ -1323,9 +1385,8 @@ mod tests {
 
     #[test]
     fn test_ldrsb_sign_extend() {
-        // 0x5608 = ldrsb r0, [r0, r1] -- wait: ldrsb rt,[rn,rm]: op=3: 0x5600|rm<<6|rn<<3|rt
-        // rm=1,rn=0,rt=0 -> 0x5600 + 0x40 = 0x5640? compute: 0101 011 0 001 000 000
-        //   = 0x5640. Use that.
+        // 0x5640 = ldrsb r0, [r0, r1]: op=3 encoding 0x5600 | rm<<6 | rn<<3 | rt
+        // with rm=1, rn=0, rt=0 → 0x5600 | 0x40.
         let mut flash = vec![0u8; 0x100];
         flash[0..2].copy_from_slice(&0x5640u16.to_le_bytes());
         let mut bus = Bus::new(flash, 0x1000);
@@ -1655,5 +1716,151 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(bus.read_u8(RAM_BASE + 0x100).unwrap(), 0xAB);
         assert_eq!(cpu.lr, RAM_BASE + 0x100); // lr - 1 written back
+    }
+}
+
+#[cfg(test)]
+mod it_tests {
+    use super::*;
+    use crate::firmware::emu::bus::{Bus, RAM_BASE};
+
+    fn run(hws: &[u16], setup: impl Fn(&mut Cpu)) -> Cpu {
+        let mut flash = vec![0u8; 0x100];
+        for (i, hw) in hws.iter().enumerate() {
+            flash[i * 2..i * 2 + 2].copy_from_slice(&hw.to_le_bytes());
+        }
+        let mut bus = Bus::new(flash, 0x1000);
+        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
+        let mut cpu = Cpu::new();
+        setup(&mut cpu);
+        while cpu.pc < (hws.len() as u32) * 2 {
+            cpu.step(&mut bus).unwrap();
+        }
+        cpu
+    }
+
+    #[test]
+    fn test_ite_ne_executes_one_arm() {
+        // The exact block from af_190602 0x8c8e (Capstone-verified):
+        //   ite ne ; movne r2, #0xb7 ; moveq r2, #0x87
+        // Before IT support both arms ran and 0x87 always won.
+        let hws = [0xBF14, 0x22B7, 0x2287];
+        let mut cpu = run(&hws, |c| c.z = false); // ne passes
+        assert_eq!(cpu.r[2], 0xB7);
+        cpu = run(&hws, |c| c.z = true); // eq passes
+        assert_eq!(cpu.r[2], 0x87);
+    }
+
+    #[test]
+    fn test_it_skip_has_no_side_effects_and_no_fault() {
+        // it ne ; ldrb r0, [r1]  — with Z set (eq), the load is skipped:
+        // no fault on the unmapped address, r0 untouched.
+        let hws = [0xBF18, 0x7808]; // it ne ; ldrb r0, [r1]
+        let cpu = run(&hws, |c| {
+            c.z = true;
+            c.r[1] = 0xDEAD_0000;
+        });
+        assert_eq!(cpu.r[0], 0);
+        assert_eq!(cpu.pc, 4);
+    }
+
+    #[test]
+    fn test_it_block_with_32bit_instruction() {
+        // it ne ; mov.w r0, #7 (F04F 0007: imm8 = 7, Rd = r0).
+        let hws = [0xBF18, 0xF04F, 0x0007];
+        let mut cpu = run(&hws, |c| c.z = false);
+        assert_eq!(cpu.r[0], 7);
+        cpu = run(&hws, |c| c.z = true);
+        assert_eq!(cpu.r[0], 0); // skipped
+    }
+
+    #[test]
+    fn test_cond_passes_table() {
+        let mut cpu = Cpu::new();
+        cpu.n = true; cpu.z = true; cpu.c = false; cpu.v = true;
+        let cases = [
+            (0x0, true), (0x1, false),          // eq / ne
+            (0x2, false), (0x3, true),          // cs / cc
+            (0x4, true), (0x5, false),          // mi / pl
+            (0x6, true), (0x7, false),          // vs / vc
+            (0x8, false), (0x9, true),          // hi / ls
+            (0xA, true), (0xB, false),          // ge (N==V) / lt
+            (0xC, false), (0xD, true),          // gt / le
+            (0xE, true),                        // al
+        ];
+        for (cond, want) in cases {
+            assert_eq!(cpu.cond_passes(cond), want, "cond {cond:#x}");
+        }
+    }
+
+    #[test]
+    fn test_it_expansion_matches_keystone() {
+        // (hw, expected effective conditions) — expected values derived from
+        // keystone-assembled IT shapes for cond=eq (0) and cond=ne (1):
+        // T keeps cond, E inverts it.
+        let eq = 0u8;
+        let ne = 1u8;
+        let cases: &[(u16, &[u8])] = &[
+            (0xBF08, &[eq]),                          // it eq
+            (0xBF0C, &[eq, eq ^ 1]),                  // ite eq
+            (0xBF04, &[eq, eq]),                      // itt eq
+            (0xBF0A, &[eq, eq ^ 1, eq]),              // itet eq
+            (0xBF02, &[eq, eq, eq]),                  // ittt eq
+            (0xBF09, &[eq, eq ^ 1, eq, eq]),          // itett eq
+            (0xBF01, &[eq, eq, eq, eq]),              // itttt eq
+            (0xBF0D, &[eq, eq ^ 1, eq ^ 1, eq]),      // iteet eq
+            (0xBF18, &[ne]),                          // it ne
+            (0xBF14, &[ne, ne ^ 1]),                  // ite ne
+            (0xBF1C, &[ne, ne]),                      // itt ne
+            (0xBF1A, &[ne, ne, ne ^ 1]),              // itte ne
+            (0xBF19, &[ne, ne, ne ^ 1, ne ^ 1]),      // ittee ne
+            (0xBF1F, &[ne, ne, ne, ne]),              // itttt ne
+            (0xBF13, &[ne, ne ^ 1, ne ^ 1, ne]),      // iteet ne
+        ];
+        for &(hw, want) in cases {
+            let mut flash = vec![0u8; 0x40];
+            flash[0..2].copy_from_slice(&hw.to_le_bytes());
+            // Nop sled for the block body; each nop consumes one slot.
+            for i in 1..=4 {
+                flash[i * 2..i * 2 + 2].copy_from_slice(&0x46C0u16.to_le_bytes());
+            }
+            let mut bus = Bus::new(flash, 0x100);
+            let mut cpu = Cpu::new();
+            cpu.step(&mut bus).unwrap(); // the IT itself
+            // Exposed via the block's per-instruction conditions: run the
+            // nops and compare against a re-derivation from `want`.
+            for (k, &cond) in want.iter().enumerate() {
+                assert_eq!(cpu.it_left as usize, want.len() - k, "hw {hw:#x} slot {k}");
+                let c = ((cpu.it_conds >> 12) & 0xF) as u8;
+                assert_eq!(c, cond, "hw {hw:#x} slot {k}");
+                cpu.step(&mut bus).unwrap();
+            }
+            assert_eq!(cpu.it_left, 0, "hw {hw:#x} block must end");
+        }
+    }
+
+    #[test]
+    fn test_dpimm_logical_preserves_c_for_plain_imm() {
+        // tst.w r3, #0x40 (F013 0F40, af_190602 0x8c8a) with old C=1:
+        // the plain imm8 form must PRESERVE C (ARM ARM ThumbExpandImm_C).
+        // Before the fix the emulator set C = result>>31 = 0.
+        let hws = [0xF013, 0x0F40];
+        let cpu = run(&hws, |c| {
+            c.r[3] = 0xFFFF_FFFF;
+            c.c = true;
+        });
+        assert!(!cpu.z && cpu.c, "tst.w #0x40 must preserve C");
+    }
+
+    #[test]
+    fn test_dpimm_logical_rotated_imm_reports_carry() {
+        // tst.w r3, #0x400 (F413 2F80, imm12 0xA80): rotated form sets
+        // C = bit31 of the expanded immediate = 0.
+        let hws = [0xF413, 0x2F80];
+        let cpu = run(&hws, |c| {
+            c.r[3] = 0x0400_0000;
+            c.c = true;
+        });
+        assert!(cpu.z && !cpu.c, "tst.w #0x400 must report shifter carry 0");
     }
 }

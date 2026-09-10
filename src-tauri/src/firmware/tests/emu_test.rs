@@ -191,6 +191,12 @@ fn test_af_190602_render_gate() {
             // assert difference in the effect tests (later phase).
             let _ = Harness::frames_differ(p, &frame);
         }
+        // Golden assertion: the stock charge screen renders 409 on-pixels per
+        // frame (eyeball-validated against a hardware capture). Catches any
+        // emulator regression that executes without faulting but renders
+        // garbage.
+        let on = frame.pixels.iter().filter(|&&px| px != 0).count();
+        assert_eq!(on, 409, "frame {frame_no}: on-pixel count drifted");
         prev = Some(frame);
     }
 }

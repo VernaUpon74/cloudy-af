@@ -65,39 +65,47 @@ pub enum Instr {
     Extend { op: u8, rd: u8, rm: u8 },
     /// Byte reverse; op: 0=REV,1=REV16,3=REVSH. No flags.
     Rev { op: u8, rd: u8, rm: u8 },
-    /// Preload Data (PLD); a hint to the cache. No flags.
-    Pld { rn: u8, imm: u8 },
     /// NOP and other hints (incl. CPS). No flags.
     Nop,
+    /// IT block: conditionally execute the next 1-4 instructions.
+    /// `cond` is the firstcond nibble, `mask` the IT[3:0] mask field.
+    It { cond: u8, mask: u8 },
     /// 32-bit Thumb-2 instructions decoded by `decode32`.
     Thumb2(Thumb2),
 }
 
-/// 32-bit Thumb-2 instructions needed by the real firmware render code.
-/// Expand a 12-bit Thumb-2 modified immediate to a 32-bit value.
-/// See ARM ARM A6.3.2 (ThumbExpandImm).
 /// Thumb modified-immediate expansion (ARM ARM ThumbExpandImm).
 /// imm12 = i : imm3 : imm8. With i:imm3 == 0 the four 0b00/01/10/11 patterns
 /// at bits 9:8 produce plain / 0x00XY00XY / 0xXY00XY00 / 0xXYXYXYXY forms;
 /// otherwise the value is 0b1xxxxxxx (0x80 | imm8[6:0]) rotated right by
 /// imm12[11:7]. Capstone-verified: 0xE80 -> 0x400, 0xC00 -> 0x8000,
 /// 0x780 -> 0x01000000, 0xC7F -> 0xFF00, 0x1A5 -> 0x00A500A5.
-fn thumb_expand_imm(imm12: u16) -> u32 {
+///
+/// Also returns the shifter carry-out (ThumbExpandImm_C): Some(c) for the
+/// rotated forms; None for the plain forms, where the caller must PRESERVE
+/// the old C flag (used by logical DpImm with set_flags).
+fn thumb_expand_imm_c(imm12: u16) -> (u32, Option<bool>) {
     let imm8 = (imm12 & 0xFF) as u32;
     if imm12 & 0xC00 == 0 {
-        match (imm12 >> 8) & 3 {
+        let v = match (imm12 >> 8) & 3 {
             0 => imm8,
             1 => (imm8 << 16) | imm8,
             2 => (imm8 << 24) | (imm8 << 8),
             _ => (imm8 << 24) | (imm8 << 16) | (imm8 << 8) | imm8,
-        }
+        };
+        (v, None)
     } else {
         let unrotated = 0x80 | (imm8 & 0x7F);
         let rot = ((imm12 >> 7) & 0x1F) as u32;
-        unrotated.rotate_right(rot)
+        let v = unrotated.rotate_right(rot); // rot >= 1 in this family
+        (v, Some(v >> 31 != 0))
     }
 }
 
+#[cfg(test)]
+fn thumb_expand_imm(imm12: u16) -> u32 {
+    thumb_expand_imm_c(imm12).0
+}
 
 /// The set is intentionally minimal; add variants only when the gate hits
 /// an undefined 32-bit encoding.
@@ -114,7 +122,10 @@ pub enum Thumb2 {
     StmIA { rn: u8, list: u16 },
     /// 32-bit data-processing with modified 12-bit immediate.
     /// `op` encodes the operation (AND/EOR/ORR/BIC/ADD/SUB/CMP/MOV).
-    DpImm { op: DpOp, rd: u8, rn: u8, set_flags: bool, imm: u32 },
+    /// `shifter_c` is the immediate's shifter carry-out for logical ops with
+    /// set_flags: Some(c) for the rotated forms, None = preserve old C for
+    /// the plain (i:imm3 == 0) forms (ARM ARM ThumbExpandImm_C).
+    DpImm { op: DpOp, rd: u8, rn: u8, set_flags: bool, imm: u32, shifter_c: Option<bool> },
     /// 32-bit unconditional branch (B.W). Same offset encoding as BL.
     B { off: i32 },
     /// 32-bit LDR (literal): LDR Rt, [PC, #imm12]. Rt bits 15:12, imm12 bits 11:0.
@@ -317,12 +328,21 @@ pub fn decode(hw: u16) -> Option<Instr> {
     if hw >> 8 == 0xB2 { // extend family
         return Some(Instr::Extend { op: ((hw >> 6) & 3) as u8, rd: (hw & 7) as u8, rm: ((hw >> 3) & 7) as u8 });
     }
-    if (hw & 0xF800) == 0xF000 { // PLD: 1111 0000 0 imm8 Rn
-        return Some(Instr::Pld { rn: (hw & 7) as u8, imm: ((hw >> 3) & 0x1F) as u8 });
-    }
     if hw >> 8 == 0xBE { return Some(Instr::Bkpt { imm: (hw & 0xFF) as u8 }); }
-    if hw >> 8 == 0xBF { return Some(Instr::Nop); } // hint space (NOP/WFI/...)
-    if (hw & 0xFF00) == 0x4600 { return Some(Instr::Nop); } // 0x46C0 etc used as padding/hints
+    if hw >> 8 == 0xBF {
+        // 0xBFxx: hint space (NOP/WFI/..., mask == 0) and IT blocks
+        // (mask != 0 → conditional execution of the next 1-4 instructions).
+        // IT expansion semantics verified against keystone for all 15 mask
+        // shapes × both condition parities (see cpu.rs tests).
+        let mask = (hw & 0xF) as u8;
+        if mask == 0 {
+            return Some(Instr::Nop);
+        }
+        return Some(Instr::It { cond: ((hw >> 4) & 0xF) as u8, mask });
+    }
+    // (Halfwords with high byte 0x46 already decoded as hi-reg ops above;
+    // halfwords with top five bits 11110 never reach this function — Cpu::step
+    // routes them to the 32-bit decode path first.)
     if hw >> 5 == 0b1011_0110_011 && hw & 0x8 == 0 {
         // CPS (all im/A/I/F variants, e.g. CPSIE i = 0xB662, CPSID i = 0xB672).
         // PRIMASK is not modelled, so this is a NOP — but it must decode,
@@ -691,7 +711,7 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         let rd = ((hw2 >> 8) & 0xF) as u8;
         let imm8 = (hw2 & 0xFF) as u16;
         let imm12 = (i << 11) | (imm3 << 8) | imm8;
-        let imm = thumb_expand_imm(imm12 as u16);
+        let (imm, shifter_c) = thumb_expand_imm_c(imm12 as u16);
 
         // op2 in bits 7:6 determines exact op within each class.
         let op2 = (hw1 >> 6) & 0b11;
@@ -707,7 +727,7 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
             (0b01, 0b11) => DpOp::Rsb,
             _ => return None,
         };
-        return Some(Instr::Thumb2(Thumb2::DpImm { op, rd, rn, set_flags: s, imm }));
+        return Some(Instr::Thumb2(Thumb2::DpImm { op, rd, rn, set_flags: s, imm, shifter_c }));
     }
 
     // 32-bit MOV (register, register-controlled shift): `lsl.w rd, rn, rm`.
@@ -790,12 +810,13 @@ mod tests {
         // Capstone-verified: bytes 13 f0 40 0f -> tst.w r3, #0x40.
         let i = decode32(0xF013, 0x0F40).unwrap();
         match i {
-            Instr::Thumb2(Thumb2::DpImm { op, rd, rn, set_flags, imm }) => {
+            Instr::Thumb2(Thumb2::DpImm { op, rd, rn, set_flags, imm, shifter_c }) => {
                 assert_eq!(op, DpOp::And);
                 assert_eq!(rd, 15); // TST: rd = 15
                 assert_eq!(rn, 3);
                 assert!(set_flags);
                 assert_eq!(imm, 0x40);
+                assert_eq!(shifter_c, None); // plain imm8 form preserves old C
             }
             _ => panic!("expected DpImm TST, got {:?}", i),
         }
@@ -942,8 +963,9 @@ mod tests {
         // cmp.w lr, #0x400 = F5BE 6F80 (af_190602 0x12c0c).
         let i = decode32(0xF5BE, 0x6F80).unwrap();
         match i {
-            Instr::Thumb2(Thumb2::DpImm { op, rd, rn, set_flags, imm }) => {
+            Instr::Thumb2(Thumb2::DpImm { op, rd, rn, set_flags, imm, shifter_c }) => {
                 assert_eq!((op, rd, rn, set_flags, imm), (DpOp::Sub, 15, 14, true, 0x400));
+                assert_eq!(shifter_c, Some(false)); // rotated form, bit31 = 0
             }
             _ => panic!("expected DpImm CMP, got {:?}", i),
         }
