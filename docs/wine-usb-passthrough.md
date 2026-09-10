@@ -21,6 +21,8 @@ WINEPREFIX=~/wine-ntoolbox \
   "/var/home/j/ArcticFox Stuff/NFE-Tools-v190703-21.46/NToolbox.exe"
 ```
 
+**Note:** If using a newer device like the Eleaf Rim C (VID `0x3434` / PID `0x0430`), ensure your runner supports direct `/dev/hidraw*` enumeration.
+
 First run auto-installs the runner's bundled `wine-mono` into the prefix
 (`drive_c/windows/mono/`), which NToolbox (.NET 4.0) needs.
 

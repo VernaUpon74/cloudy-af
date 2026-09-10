@@ -8,6 +8,7 @@ pub mod patch;
 pub mod state;
 pub mod stock;
 pub mod emu;
+pub mod anim;
 
 #[cfg(test)]
 mod tests;

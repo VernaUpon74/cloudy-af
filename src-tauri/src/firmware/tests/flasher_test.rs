@@ -346,16 +346,16 @@ fn test_screenshot_hardware() {
     let mut dev = flasher::open_device().expect("open failed");
     let raw = flasher::screenshot(&mut dev).expect("screenshot failed");
     assert_eq!(raw.len(), 0x400);
-    // Raw 1bpp rows, MSB first (GDI Format1bppIndexed). Screen is 64x128
-    // unless all bytes past the 96x16 buffer are zero.
+    // Raw 1bpp, vertical packing: byte (x + (y/8)*w) holds 8 vertical
+    // pixels at column x, bit y%8 (LSB = top). Screen is 64x128 unless all
+    // bytes past the 96x16 buffer are zero.
     let small = raw[192..].iter().all(|b| *b == 0);
     let (w, h) = if small { (96usize, 16usize) } else { (64usize, 128usize) };
-    let stride = (w + 7) / 8;
     let scale = 4usize;
     let mut img = vec![0u8; w * scale * h * scale * 3];
     for y in 0..h {
         for x in 0..w {
-            let bit = (raw[y * stride + x / 8] >> (7 - x % 8)) & 1;
+            let bit = (raw[x + (y / 8) * w] >> (y % 8)) & 1;
             let v = if bit == 1 { 255 } else { 0 };
             for dy in 0..scale { for dx in 0..scale {
                 let px = ((y * scale + dy) * w * scale + (x * scale + dx)) * 3;
@@ -540,8 +540,7 @@ fn test_flash_verbose_hardware() {
 #[ignore]
 fn test_flash_hidraw_direct_hardware() {
     // Bypass hidapi: talk to the LDROM device via /dev/hidraw directly.
-    use std::io::{Read, Write};
-    use crate::firmware::flasher as f;
+    use std::io::Write;
     // find the right hidraw node
     let mut node = None;
     for entry in std::fs::read_dir("/dev").unwrap() {
@@ -659,7 +658,7 @@ fn test_flash_recovery_loop_hardware() {
 #[ignore]
 fn test_restart_and_verify_hardware() {
     use crate::firmware::flasher as f;
-    let mut dev = f::open_device().expect("open failed");
+    let dev = f::open_device().expect("open failed");
     f::restart_device().expect("restart failed");
     drop(dev);
     std::thread::sleep(std::time::Duration::from_secs(5));
@@ -703,7 +702,7 @@ fn test_ldrom_dump_hardware() {
 
     println!("flashing payload ({} bytes)", payload.len());
     let mut attempt = 0;
-    'flash_retry: loop {
+    loop {
         attempt += 1;
         if attempt > 1 {
             // device likely dropped; go back to waiting for the Pico

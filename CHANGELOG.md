@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Zoom fit at startup**: the fit computation now measures the real content container and re-runs once web fonts and i18n text settle, fixing the tab bar being clipped under the header until the first window resize.
+
 ## 1.17.0 — 2026-09-06
 
 ### Added

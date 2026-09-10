@@ -3,14 +3,25 @@ use std::time::Duration;
 
 use super::{FirmwareError, Result};
 
-const VID: u16 = 0x0416;
-const PID: u16 = 0x5020;
+#[derive(Debug, Clone, Copy)]
+struct DeviceId {
+    vid: u16,
+    pid: u16,
+}
+
+const SUPPORTED_DEVICES: &[DeviceId] = &[
+    DeviceId { vid: 0x0416, pid: 0x5020 }, // Pico / Joyetech
+    DeviceId { vid: 0x3434, pid: 0x0430 }, // Eleaf Rim C
+];
 
 const CMD_READ_DATAFLASH: u8 = 0x35;
 const CMD_WRITE_DATAFLASH: u8 = 0x53;
 const CMD_WRITE_DATA: u8 = 0xC3;
 const CMD_RESTART: u8 = 0xB4;
 const CMD_SET_LOGO: u8 = 0xA5;
+const CMD_READ_MONITORING_DATA: u8 = 0x66;
+/// Monitoring telemetry payload size in bytes.
+const MONITORING_DATA_SIZE: usize = 64;
 
 const DATAFLASH_SIZE: usize = 2048;
 const REPORT_SIZE: usize = 64;
@@ -23,10 +34,12 @@ const LOGO_LENGTH: usize = 1024;
 /// Connect to the first bootloader HID interface found.
 pub fn open_device() -> Result<hidapi::HidDevice> {
     let api = hidapi::HidApi::new().map_err(|e| FirmwareError::Other(e.to_string()))?;
-    let device = api
-        .open(VID, PID)
-        .map_err(|e| FirmwareError::Other(format!("cannot open HID device: {e}")))?;
-    Ok(device)
+    for dev_id in SUPPORTED_DEVICES {
+        if let Ok(device) = api.open(dev_id.vid, dev_id.pid) {
+            return Ok(device);
+        }
+    }
+    Err(FirmwareError::Other("No supported HID device found".into()))
 }
 
 /// Information about one connected device.
@@ -43,7 +56,10 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>> {
     let api = hidapi::HidApi::new().map_err(|e| FirmwareError::Other(e.to_string()))?;
     let mut out = Vec::new();
     for d in api.device_list() {
-        if d.vendor_id() == VID && d.product_id() == PID {
+        let is_supported = SUPPORTED_DEVICES.iter().any(|id| 
+            d.vendor_id() == id.vid && d.product_id() == id.pid
+        );
+        if is_supported {
             out.push(DeviceInfo {
                 path: d.path().to_string_lossy().into_owned(),
                 serial: d.serial_number().unwrap_or_default().to_string(),
@@ -228,8 +244,20 @@ pub fn set_date_time(device: &mut hidapi::HidDevice, y: u16, mo: u8, d: u8, h: u
     write_all(device, &payload)
 }
 
-/// Read the Product ID string from dataflash (4 ASCII chars at offset 312 of
-/// the data area, i.e. raw offset 316 including the checksum prefix).
+/// Read the device monitoring telemetry (64 bytes), opening the device automatically.
+pub fn read_monitoring_data_auto() -> Result<Vec<u8>> {
+    let mut device = open_device()?;
+    read_monitoring_data(&mut device)
+}
+
+/// Read device monitoring telemetry (64 bytes).
+pub fn read_monitoring_data(device: &mut hidapi::HidDevice) -> Result<Vec<u8>> {
+    send_command(device, CMD_READ_MONITORING_DATA, 0, MONITORING_DATA_SIZE as i32)?;
+    read_exact(device, MONITORING_DATA_SIZE)
+}
+
+/// Read the product ID from dataflash bytes 316..320 (ASCII), opening the
+/// device automatically.
 pub fn read_product_id() -> Result<String> {
     let data = read_dataflash()?;
     if data.len() < 320 {
@@ -241,7 +269,7 @@ pub fn read_product_id() -> Result<String> {
 
 /// Switch the device to LDROM bootloader mode if needed.
 pub fn ensure_ldrom_mode() -> Result<()> {
-    let mut data = read_dataflash()?;
+    let data = read_dataflash()?;
     // Data area starts after the 4-byte checksum; BootFlagOffset is 9.
     const BOOT_FLAG: usize = 4 + 9;
     if data.len() <= BOOT_FLAG {

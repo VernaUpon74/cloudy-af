@@ -15,7 +15,7 @@ use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
 mod commands;
-mod firmware;
+pub mod firmware;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct IpcEvent {

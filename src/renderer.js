@@ -1036,8 +1036,13 @@ function updateContentZoom() {
     const footerHeight = footer.offsetHeight;
 
     const baseContentHeight = baseHeight - headerHeight - footerHeight;
-    const availableWidth = window.innerWidth;
-    const availableContentHeight = window.innerHeight - headerHeight - footerHeight;
+    // Measure the REAL flex container instead of reconstructing it from
+    // window.innerHeight - header - footer: transient header/footer heights
+    // (web fonts, i18n text) made the first estimate wrong, and with
+    // zoom-based layout an oversized wrapper gets clipped under the header
+    // until the next resize.
+    const availableWidth = content.clientWidth;
+    const availableContentHeight = content.clientHeight;
 
     const scale = Math.min(availableWidth / baseWidth, availableContentHeight / baseContentHeight);
     document.documentElement.style.setProperty('--base-width', `${baseWidth}px`);
@@ -1082,3 +1087,13 @@ uiInitStatsIcon();
 uiInitBootIcon();
 updateContentZoom();
 lockWindowAspectRatio();
+
+// Re-run once fonts and i18n text have settled: the header/footer heights at
+// first paint can differ from their final values, which would leave the
+// zoom-scaled wrapper mis-sized (tab bar clipped under the header) until the
+// next window resize.
+if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(updateContentZoom);
+}
+requestAnimationFrame(() => requestAnimationFrame(updateContentZoom));
+window.addEventListener('load', updateContentZoom);

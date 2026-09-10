@@ -25,16 +25,18 @@ Loose ends carried over from the firmware read-back Phase 1 plan
       screen; 0xC1 screenshot now responds). Stock v1.00 rescue kit staged in
       `test-fixtures/rescue/` (image + dataflash backup + README with the
       battery-out + Plus recovery procedure).
-- [ ] Screenshot capture quirks on AF: framebuffer reads all-zero when the
+- [x] Screenshot capture quirks on AF: framebuffer reads all-zero when the
       display is asleep (wake via button press and capture immediately);
       PNG packing in `test_screenshot_hardware` renders garbage at the top —
-      revisit in Phase 3 (screenshot verification).
+      Fixed in `flasher_test.rs` via correct 1bpp indexing.
 - [ ] Device Monitor: replicate NToolbox's live device-monitoring window
       (telemetry readouts). The firmware emulation harness
       (`src-tauri/src/firmware/emu/`, plan
       `docs/superpowers/plans/2026-08-28-firmware-emulation-harness.md`) is
       intended to help replicate its rendering. NToolbox runs locally for
       reference via Wine — see `docs/wine-usb-passthrough.md`.
+      Backend read (`read_monitoring_data`, cmd 0x66) implemented in
+      `flasher.rs`; the UI window is still pending.
 - [ ] Emulation harness gate: layers 1–3 done (plan
       `docs/superpowers/plans/2026-08-28-firmware-emulation-harness.md`).
       Layer 4 (`test_af_190602_render_gate`) unblocks when the Phase 3 RE
