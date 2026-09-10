@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.18.1 — 2026-09-10
 
 ### Added
 - **Timeout animation effects in the Firmware Editor's Patches tab**: Gradient Fade, Center Pulse and Diagonal Sweep are now listed as regular patches when an opened image matches a bundled animation descriptor (currently af_190602) — applicable and rollback-able like any other patch. Only one effect can be applied at a time since all three share one hook site and code cave; applying one rolls back the other. `resources/animations/` is now bundled with the app.
@@ -10,6 +10,7 @@
 ### Fixed
 - **Device Monitor crashing the HID sidecar**: each monitor sample used to suspend the sidecar — closing and reopening the hidraw handle every poll — which raced node-hid's read thread (SIGABRT, "free(): invalid pointer") and killed the sidecar, leaving the monitor non-functional. Samples now go through the sidecar's own `monitoring` request, which keeps the handle open.
 - **Firmware Editor "Download Stock" failing while the device was connected**: direct-from-Rust device reads (`download_stock`, `read_device_dataflash`, `read_device_product_id`, restart) did not suspend the sidecar, whose always-on hidraw reader thread consumed the device's response — the read then timed out. All four now suspend the sidecar for the duration (same guard pattern as flashing).
+- **Device Monitor temperature readings (wrong value and unit)**: Temperature and TemperatureSet were divided by 10 as if the firmware reported tenths, and the Fahrenheit→Celsius conversion was applied on top of that scaled value. The firmware reports whole degrees in the device's configured unit (NToolbox passes them to the chart unscaled; only PowerSet/V/A/Ω are scaled), so a 70 °F coil read as −13.9 °C. All three temperature sensors (including BoardTemperature, which also follows the device unit) now display the raw whole-degree value with the °C/°F label following the device setting, matching NToolbox's Device Monitor. Verified live against a °F-mode device.
 
 ## 1.18.0 — 2026-09-10
 

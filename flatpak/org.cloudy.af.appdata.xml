@@ -34,6 +34,11 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
+    <release version="1.18.1" date="2026-09-10">
+      <description>
+        <p>iStick Rim C support (STM32 line) and the full NFE device catalog (69 devices). Device Monitor no longer crashes the HID sidecar and streams live telemetry; "Download Stock" works while connected. Device Monitor temperature readings fixed: the firmware reports whole degrees, not tenths.</p>
+      </description>
+    </release>
     <release version="1.18.0" date="2026-09-10">
       <description>
         <p>Accessibility tooltips on every setting, written for screen-reader and low-vision users. Live Device Monitor under Advanced (NToolbox port). Charge-screen timeout animations (Gradient Fade, Center Pulse, Diagonal Sweep) as a firmware patch for af_190602, verified in an emulator before flashing. Fix for zoom fit at startup clipping the tab bar.</p>

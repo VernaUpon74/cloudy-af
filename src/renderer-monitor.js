@@ -36,20 +36,24 @@ const SENSORS = [
     { id: 'batteryPack', color: '#000000', unit: 'V', langKey: 'Monitor.BatteryPack', value: s => s.battery_pack > 0 ? s.battery_pack : null },
     { id: 'power', color: '#00ff00', unit: 'W', langKey: 'Monitor.Power', value: s => s.power }, // lime
     { id: 'powerSet', color: '#008000', unit: 'W', langKey: 'Monitor.PowerSet', value: s => s.power_set }, // green
-    { id: 'temperature', color: '#ff0000', unit: '°C', langKey: 'Monitor.Temperature', value: s => tempToC(s.temperature, s) }, // red
-    { id: 'temperatureSet', color: '#8b0000', unit: '°C', langKey: 'Monitor.TemperatureSet', value: s => tempToC(s.temperature_set, s) }, // dark red
+    { id: 'temperature', color: '#ff0000', unitOf: s => s.is_celsius ? '°C' : '°F', langKey: 'Monitor.Temperature', value: s => s.temperature }, // red
+    { id: 'temperatureSet', color: '#8b0000', unitOf: s => s.is_celsius ? '°C' : '°F', langKey: 'Monitor.TemperatureSet', value: s => s.temperature_set }, // dark red
     { id: 'outputCurrent', color: '#ffa500', unit: 'A', langKey: 'Monitor.OutputCurrent', value: s => s.output_current }, // orange
     { id: 'outputVoltage', color: '#87cefa', unit: 'V', langKey: 'Monitor.OutputVoltage', value: s => s.output_voltage }, // light sky blue
     { id: 'resistance', color: '#ee82ee', unit: 'Ω', langKey: 'Monitor.Resistance', value: s => s.resistance }, // violet
     { id: 'realResistance', color: '#8a2be2', unit: 'Ω', langKey: 'Monitor.RealResistance', value: s => s.real_resistance }, // blue violet
-    { id: 'boardTemperature', color: '#8b4513', unit: '°C', langKey: 'Monitor.BoardTemperature', value: s => s.board_temperature }, // saddle brown
+    { id: 'boardTemperature', color: '#8b4513', unitOf: s => s.is_celsius ? '°C' : '°F', langKey: 'Monitor.BoardTemperature', value: s => s.board_temperature }, // saddle brown
 ];
 
-// The firmware reports temperature in 0.1-degree steps, Celsius or Fahrenheit
-// depending on IsCelcius; normalize everything to Celsius for the chart.
-function tempToC(raw, sample) {
-    const t = raw / 10;
-    return sample.is_celsius ? t : (t - 32) / 1.8;
+// The firmware reports Temperature/TemperatureSet/BoardTemperature as WHOLE
+// degrees in the device's configured unit (IsCelcius) — NToolbox's
+// DeviceMonitorWindow passes them to the chart unscaled and only switches the
+// "°C"/"°F" label, and only PowerSet/V/A/Ω carry a documented scale factor.
+// Verified live against a device in °F mode (70 = 21 °C coil, 500 = 500 °F
+// setpoint, 104 = 40 °C charging board). So display raw, with the unit label
+// following the device setting via `unitOf`.
+function unitOf(sensor, sample) {
+    return sensor.unitOf ? sensor.unitOf(sample) : sensor.unit;
 }
 
 const POLL_MS = 100;
@@ -92,7 +96,7 @@ function updateLegend(sample) {
             $row.hide();
         } else {
             $row.show();
-            $('#val-' + s.id).text(v.toFixed(2) + ' ' + s.unit);
+            $('#val-' + s.id).text(v.toFixed(2) + ' ' + unitOf(s, sample));
         }
     });
 }

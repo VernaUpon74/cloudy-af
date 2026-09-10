@@ -1,6 +1,6 @@
 {
   "name": "cloudy-af",
-  "version": "1.18.0",
+  "version": "1.18.1",
   "private": true,
   "description": "Configuration Tool for Vape Battery Mods with Arcticfox Firmware.",
   "type": "module",

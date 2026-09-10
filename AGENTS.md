@@ -41,3 +41,67 @@ Gotcha: if step 2 is skipped or run without the feature flag, step 3 silently
 repackages the stale binary — the bundle gets new metadata with the OLD app.
 Symptom: installed version looks updated but behavior/UI is outdated, plus the
 portal error above.
+
+## Release artifacts
+
+Every version build must leave ALL artifacts in `builds/` (gitignored):
+
+- `builds/cloudy-af-<version>.flatpak` — the bundle (step 5 above)
+- `builds/cloudy-af-<version>` — the raw release binary:
+  `cp src-tauri/target/release/cloudy-af builds/cloudy-af-<version>`
+- `builds/Cloudy AF_<version>_amd64.AppImage` — when an AppImage is built
+  (see below)
+
+## AppImage builds
+
+The stock `tauri build --bundles appimage` output is NOT usable as-is: it
+bundles the system GL/EGL stack, which crashes WebKitWebProcess at exit on
+NVIDIA hosts (SEGV in libnvidia-gpucomp), it drops a broken `put` symlink
+into the sidecar node_modules, it lacks a `node` binary for the sidecar,
+and extract-and-run doesn't put `usr/bin` on PATH. The working procedure
+(all steps inside `toolbox run -c arcticfox-build`, from the repo root):
+
+1. Regenerate the AppDir (tauri's own linuxdeploy step fails — ignore it):
+   `APPIMAGE_EXTRACT_AND_RUN=1 npm run tauri:build -- --bundles appimage`.
+   The AppDir is single-use — NEVER re-run linuxdeploy on an already
+   processed AppDir; regenerate instead. The AppDir is at
+   `src-tauri/target/release/bundle/appimage/appimage/cloudy-af.AppDir/`.
+2. `cp -L /usr/bin/node "<AppDir>/usr/bin/node"` — must be `-L` (the RPM
+   x86_64 binary). Do NOT use `~/.local/bin/node` (symlink into ~/.hermes;
+   its foreign-arch siblings break appimagetool arch detection).
+3. Fix the `put` symlink tauri drops:
+   `rm -f "<AppDir>/usr/lib/Cloudy AF/sidecar/node_modules/put" && cp -r sidecar/put-replacement "<AppDir>/usr/lib/Cloudy AF/sidecar/node_modules/put"`.
+4. Run the extracted, patched linuxdeploy with the GL libs EXCLUDED (this is
+   the NVIDIA-webprocess fix — the AppImage must use the host's GL drivers):
+   ```
+   SQ=/var/home/j/.cache/tauri/squashfs-root
+   PATH=$SQ/usr/bin:$PATH LD_LIBRARY_PATH=$SQ/usr/lib:$LD_LIBRARY_PATH \
+     APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 \
+     $SQ/usr/bin/linuxdeploy --output appimage --plugin gtk \
+     --exclude-library "libGL*" --exclude-library "libEGL*" \
+     --exclude-library "libGLES*" --exclude-library "libgbm*" \
+     --exclude-library "libdrm*" \
+     --appdir "<AppDir>" -e target/release/cloudy-af \
+     -d "<AppDir>/Cloudy AF.desktop" -i "<AppDir>/Cloudy AF.png"
+   ```
+   `ARCH=x86_64` is required because node-hid prebuilds contain
+   foreign-arch ELFs. One-time prerequisite: replace the bundled strip with
+   the system one (it crashes on `.relr.dyn`):
+   `cp /usr/bin/strip $SQ/usr/bin/strip` (backup the bundled one first).
+5. Add a PATH hook so the runtime finds the bundled node: write
+   `<AppDir>/apprun-hooks/zz-cloudy-af.sh` (mode +x):
+   ```sh
+   APPDIR="${APPDIR:-"$(dirname "$(realpath "$0")")"}"
+   export PATH="$APPDIR/usr/bin:$PATH"
+   ```
+6. Repack:
+   `APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 $SQ/plugins/linuxdeploy-plugin-appimage/usr/bin/appimagetool "<AppDir>"`
+   → produces `Cloudy_AF-x86_64.AppImage`; copy it to
+   `builds/Cloudy AF_<version>_amd64.AppImage`.
+
+Verification on this host (no FUSE): run with
+`APPIMAGE_EXTRACT_AND_RUN=1 ./builds/...AppImage`. The main process shows in
+`ps` as plain `cloudy-af` (the runtime re-execs it); the sidecar appears as
+`node /tmp/appimage_extracted_*/usr/lib/Cloudy AF/sidecar/hid-bridge.js`.
+Both alive + empty stderr = good. On FUSE-equipped systems the AppImage runs
+directly without the env var.
