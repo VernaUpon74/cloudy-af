@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.18.2 — 2026-09-10
+
+### Fixed
+- **Sidecar crash (SIGABRT in node-hid) when opening the Firmware Editor or Device Monitor with a device plugged in**: node-hid 2.2.0's `close()` frees the hidraw handle while its read thread can still be blocked inside a read — closing at that moment aborts the whole sidecar ("free(): invalid pointer" in `HID_hidraw.node`). The bundled node-hid now carries a patch (`sidecar/patches/node-hid+2.2.0.patch`) that mutex-serializes `close()` against the read thread. Stress-tested live: 60 consecutive suspend/resume/monitoring cycles against a plugged-in device with no abort.
+- **Animations not available under Firmware Editor → Patches**: the animation gate rejected the bundled af_190602 image because the hook-site bytes were listed in display (halfword) order instead of the actual in-memory byte order, so no bundled descriptor ever matched an opened image. The gate now accepts the real image; a regression test loads the bundled descriptor against the decrypted af_190602 image.
+- **Configuration dropdown showing two down-arrows**: the EN label carried a literal `▾` on top of the CSS chevron used by every other dropdown; removed so only the shared style remains.
+
+### Added
+- **Device Monitor chart: hover/click any point for its exact value**: lines now show a shared tooltip with per-series values and a crosshair at the hovered timestamp, and the chart is restyled (dark theme, single toggle column on the left) as a Highcharts port matching NToolbox's Device Monitor.
+- **System dark/light theme detection**: the app now follows the OS `prefers-color-scheme` (light palette added) and switches live when the system theme changes — including the Device Monitor chart.
+
 ## 1.18.1 — 2026-09-10
 
 ### Added

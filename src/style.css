@@ -206,6 +206,25 @@ tr:active {
     --disabled-fg: #808080;
 }
 
+/* Light mode follows the system/desktop theme (detected at boot, reacts to
+   theme switches). WebKitGTK resolves prefers-color-scheme through the
+   xdg-desktop-portal color-scheme setting. */
+@media (prefers-color-scheme: light) {
+    :root {
+        --bg-color: #ffffff;
+        --fg-color: #1e1e1e;
+        --panel-color: #f3f3f3;
+        --border-color: #c8c8c8;
+        --accent-color: #006ab1;
+        --input-bg: #ffffff;
+        --input-fg: #1e1e1e;
+        --hover-bg: #e4e6f0;
+        --link-color: #006ab1;
+        --disabled-bg: #f0f0f0;
+        --disabled-fg: #8a8a8a;
+    }
+}
+
 html,
 body,
 .window,
@@ -535,7 +554,7 @@ hr {
 .list-group-item:focus,
 .list-group-item.active {
     background-color: var(--hover-bg) !important;
-    color: #ffffff !important;
+    color: var(--fg-color) !important;
 }
 
 label,
@@ -566,7 +585,7 @@ h6 {
 
 #configuration-menu-dropdown li:hover {
     background-color: var(--hover-bg) !important;
-    color: #ffffff !important;
+    color: var(--fg-color) !important;
 }
 
 /* Scrollbars in WebKit */

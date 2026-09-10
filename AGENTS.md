@@ -6,7 +6,7 @@ Use local ollama models for subagent/task delegation whenever possible
 (`ollama serve` then`ollama run <model>` / the local API at `127.0.0.1:11434`); check
 `ollama list` for what's pulled. Currently useful: `qwen3-coder:30b`
 (coding), `gemma4:26b`, `llama3:70b`. Fall back to cloud CLIs (qwen, etc.)
-only when local models can't handle the task. Only use sustainable energy models.
+only when local models can't handle the task. Only use sustainable energy cloud models.
 
 ## node-hid native addon
 

@@ -34,6 +34,11 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
+    <release version="1.18.2" date="2026-09-10">
+      <description>
+        <p>Sidecar crash fixed (node-hid handle freed while a read was in flight) — Firmware Editor and Device Monitor no longer die with a device plugged in. Timeout animations now actually appear under Firmware Editor → Patches. Device Monitor chart: hover any point for its value, restyled as an NToolbox-style Highcharts port. App follows the system dark/light theme. Configuration dropdown double-arrow fixed.</p>
+      </description>
+    </release>
     <release version="1.18.1" date="2026-09-10">
       <description>
         <p>iStick Rim C support (STM32 line) and the full NFE device catalog (69 devices). Device Monitor no longer crashes the HID sidecar and streams live telemetry; "Download Stock" works while connected. Device Monitor temperature readings fixed: the firmware reports whole degrees, not tenths.</p>
