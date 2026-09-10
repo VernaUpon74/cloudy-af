@@ -107,7 +107,7 @@
           <div>
             <div style="height: 16px"></div>
             <table id="table-profiles">
-              <tr>
+              <tr data-lang-title="Tooltips.Enabled">
                 <td class="c1">Profile</td>
                 <td class="c2">
                   <div class="checkbox">
@@ -119,7 +119,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.ProfileName">
                 <td class="c1" data-lang="Profile.NameLabel">Name</td>
                 <td class="c2">
                   <input class="fox-pval" type="text" id="Name" maxlength="8">
@@ -127,7 +127,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.Power">
                 <td class="c1" data-lang="Profile.PowerLabel">Power</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="Power"> W
@@ -135,7 +135,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.Power1WStep">
                 <td class="c1" data-lang="Controls.Settings.Power1WStepLabel">Power 1W Step</td>
                 <td class="c2">
                   <div class="checkbox">
@@ -148,7 +148,7 @@
                 <td class="c4"></td>
               </tr>
 
-              <tr>
+              <tr data-lang-title="Tooltips.PreheatType">
                 <td class="c1" data-lang="Profile.PreheatTypeLabel">Preheat Type</td>
                 <td class="c2">
                   <select class="fox-pval" id="PreheatType">
@@ -160,7 +160,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr class="fox-notcurve">
+              <tr class="fox-notcurve" data-lang-title="Tooltips.PreheatPower">
                 <td class="c1" data-lang="Profile.PreheatPowerLabel">Preheat Power</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="PreheatPower">
@@ -169,7 +169,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr class="fox-curveonly">
+              <tr class="fox-curveonly" data-lang-title="Tooltips.PreheatCurve">
                 <td class="c1" data-lang="Profile.PreheatCurveLabel">Preheat Curve</td>
                 <td class="c2">
                  <select class="fox-pval" id="SelectedCurve">
@@ -181,7 +181,7 @@
                 </td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.PreheatTime">
                 <td class="c1" data-lang="Profile.PreheatTimeLabel">Preheat Time</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="PreheatTime"> s
@@ -189,7 +189,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.PreheatDelay">
                 <td class="c1" data-lang="Profile.PreheatDelayLabel">Preheat Delay</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="PreheatDelay"> s
@@ -197,7 +197,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.Resistance">
                 <td class="c1" data-lang="Profile.ResistanceLabel">Resistance</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="Resistance"> &#8486;
@@ -209,7 +209,7 @@
                 </td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.VapeMode">
                 <td class="c1" data-lang="Profile.ModeLabel">Mode</td>
                 <td class="c2">
                   <select class="fox-pval" id="mode">
@@ -222,7 +222,7 @@
                 </td>
                 <td class="c4"></td>
               </tr>
-              <tr class="fox-tconly">
+              <tr class="fox-tconly" data-lang-title="Tooltips.CoilMaterial">
                 <td class="c1" data-label="Profile.CoilMaterialLabel">Coil Material</td>
                 <td class="c2">
                   <select class="fox-pval" id="Material">
@@ -237,7 +237,7 @@
               <!-- DEVIATION: The per-profile IsCelcius selector is replaced with a
                    read-only unit label derived from the global TemperatureUnits
                    regional setting (0 = °F, 1 = °C). -->
-              <tr class="fox-tconly">
+              <tr class="fox-tconly" data-lang-title="Tooltips.Temperature">
                 <td class="c1" data-lang="Profile.TemperatureLabel">Temperature</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="Temperature">
@@ -247,7 +247,7 @@
                 </td>
                 <td class="c4"></td>
               </tr>
-              <tr class="fox-tconly">
+              <tr class="fox-tconly" data-lang-title="Tooltips.Temp1C2FStep">
                 <td class="c1" data-lang="Controls.Settings.Temperature1C2FStepLabel">Temp 1°C/2°F Step</td>
                 <td class="c2">
                   <div class="checkbox">
@@ -259,7 +259,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr class="fox-tconly">
+              <tr class="fox-tconly" data-lang-title="Tooltips.TDom">
                 <td class="c1"></td>
                 <td class="c2">
                   <div class="checkbox">
@@ -298,7 +298,7 @@
             <div class="subview" id="view-screen-settings">
               <div style="height: 28px"></div>
               <table id="table-screen-settings">
-                <tr>
+                <tr data-lang-title="Tooltips.Brightness">
                   <td class="c1" data-lang="Screen.Settings.BrightnessLabel">Brightness</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="Brightness" min="0" max="100" step="1"> %
@@ -306,7 +306,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.IdleTime">
                   <td class="c1" data-lang="Screen.Settings.IdleTimeLabel">Idle Time</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="DimTimeout" min="5" max="60" step="1"> s
@@ -314,7 +314,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.IdleTimeLocked">
                   <td class="c1" data-lang="Screen.Settings.IdleTimeLockedLabel">Idle Time (Locked)</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="DimTimeoutLocked" min="5" max="60" step="1"> s
@@ -322,7 +322,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.IdleTimeCharging">
                   <td class="c1" data-lang="Screen.Settings.IdleTimeChargingLabel">Idle Time (Charging)</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="DimTimeoutCharging" min="0" max="60" step="1"> s
@@ -330,7 +330,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.PuffScreenDelay">
                   <td class="c1" data-lang="Screen.Settings.PuffScreenDelayLabel">Puff Screen Delay</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="PuffScreenDelay" min="0" max="5" step="0.1"> s
@@ -338,7 +338,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.Flipped">
                   <td class="c1" data-lang="Screen.Settings.FlippedLabel">Flipped</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -356,7 +356,7 @@
             <div class="subview" id="view-screen-appearance" style="display:none">
               <div style="height: 28px"></div>
               <table id="table-screen-appearance">
-                <tr>
+                <tr data-lang-title="Tooltips.MainScreenSkin">
                   <td class="c1" data-lang="Screen.Appearance.MainScreenSkinLabel">Main Screen Skin</td>
                   <td class="c2">
                     <select class="fox-val" id="MainScreenSkin">
@@ -380,7 +380,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.LogoDelay">
                   <td class="c1" data-lang="Screen.Appearance.LogoDelayLabel">Logo Delay</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="ShowLogoDelay" min="1" max="60" step="1"> <span data-lang="SecondsLabel">s</span>
@@ -400,7 +400,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ClockDelay">
                   <td class="c1" data-lang="Screen.Appearance.ClockDelayLabel">Clock Delay</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="ShowClockDelay" min="1" max="60" step="1"> <span data-lang="SecondsLabel">s</span>
@@ -408,7 +408,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ClockType">
                   <td class="c1" data-lang="Screen.Appearance.ClockTypeLabel">Clock Type</td>
                   <td class="c2">
                     <select class="fox-val" id="ClockType">
@@ -433,7 +433,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ChargeScreen">
                   <td class="c1" data-lang="Screen.Appearance.ChargeScreenLabel">Charge Screen</td>
                   <td class="c2">
                     <select class="fox-val" id="ChargeScreenType">
@@ -444,7 +444,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ChargeExtra">
                   <td class="c1" data-lang="Screen.Appearance.ChargeExtraLabel">Charge Extra</td>
                   <td class="c2">
                     <select class="fox-val" id="ChargeExtraType">
@@ -457,7 +457,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ScreensaverTime">
                   <td class="c1" data-lang="Screen.Appearance.ScreensaverTimeLabel">Screensaver Time</td>
                   <td class="c2">
                     <input class="fox-val" id="ScreensaveDuration" type="number" min="0" max="30" step="1">
@@ -487,7 +487,7 @@
                   <div style="height: 16px"></div>
                   <h5 style="padding-left: 12px" data-lang="Screen.Layout.VWModeLayoutLabel">VW</h5>
                   <table id="table-screen-layout-classic">
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">VW Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinVWLine1">
@@ -520,7 +520,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">VW Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinVWLine2">
@@ -553,7 +553,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">VW Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinVWLine3">
@@ -586,7 +586,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line4Label">VW Line 4</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinVWLine4">
@@ -622,7 +622,7 @@
                     </table>
                     <h5 style="padding-left: 12px" data-lang="Screen.Layout.TCModeLayoutLabel">TC</h5>
                     <table>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">TC Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinTCLine1">
@@ -655,7 +655,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">TC Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinTCLine2">
@@ -688,7 +688,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">TC Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinTCLine3">
@@ -719,7 +719,7 @@
                       </div></td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line4Label">TC Line 4</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinTCLine4">
@@ -759,7 +759,7 @@
                   <div style="height: 16px"></div>
                   <h5 style="padding-left: 12px" data-lang="Screen.Layout.VWModeLayoutLabel">VW</h5>
                   <table id="table-screen-layout-circle">
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">VW Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="CircleSkinVWLine1">
@@ -781,7 +781,7 @@
                       <td class="c3"></td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">VW Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="CircleSkinVWLine2">
@@ -803,7 +803,7 @@
                       <td class="c3"></td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">VW Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="CircleSkinVWLine3">
@@ -824,7 +824,7 @@
                   </table>
                   <h5 style="padding-left: 12px" data-lang="Screen.Layout.TCModeLayoutLabel">TC</h5>
                   <table>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">TC Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="CircleSkinTCLine1">
@@ -846,7 +846,7 @@
                       <td class="c3"></td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">TC Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="CircleSkinTCLine2">
@@ -868,7 +868,7 @@
                       <td class="c3"></td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">TC Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="CircleSkinTCLine3">
@@ -892,7 +892,7 @@
                   <div style="height: 16px"></div>
                    <h5 style="padding-left: 12px" data-lang="Screen.Layout.VWModeLayoutLabel">VW</h5>
                   <table id="table-screen-layout-foxy">
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">VW Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="FoxySkinVWLine1">
@@ -918,7 +918,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">VW Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="FoxySkinVWLine2">
@@ -944,7 +944,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">VW Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="FoxySkinVWLine3">
@@ -973,7 +973,7 @@
                   </table>
                   <h5 style="padding-left: 12px" data-lang="Screen.Layout.TCModeLayoutLabel">TC</h5>
                   <table>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">TC Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="FoxySkinTCLine1">
@@ -999,7 +999,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">TC Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="FoxySkinTCLine2">
@@ -1025,7 +1025,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">TC Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="FoxySkinTCLine3">
@@ -1056,7 +1056,7 @@
                   <div style="height: 16px"></div>
                    <h5 style="padding-left: 12px" data-lang="Screen.Layout.VWModeLayoutLabel">VW</h5>
                   <table id="table-screen-layout-small">
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">VW Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="SmallSkinVWLine1">
@@ -1084,7 +1084,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">VW Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="SmallSkinVWLine2">
@@ -1115,7 +1115,7 @@
                   </table>
                    <h5 style="padding-left: 12px" data-lang="Screen.Layout.TCModeLayoutLabel">TC</h5>
                   <table>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">TC Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="SmallSkinTCLine1">
@@ -1143,7 +1143,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">TC Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="SmallSkinTCLine2">
@@ -1178,7 +1178,7 @@
                   <div style="height: 16px"></div>
                   <h5 style="padding-left: 12px" data-lang="Screen.Layout.VWModeLayoutLabel">VW</h5>
                   <table id="table-screen-layout-medium">
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">VW Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="MediumSkinVWLine1">
@@ -1206,7 +1206,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">VW Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="MediumSkinVWLine2">
@@ -1234,7 +1234,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">VW Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="MediumSkinVWLine3">
@@ -1265,7 +1265,7 @@
                   </table>
                   <h5 style="padding-left: 12px" data-lang="Screen.Layout.TCModeLayoutLabel">TC</h5>
                   <table>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">TC Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="MediumSkinTCLine1">
@@ -1293,7 +1293,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">TC Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="MediumSkinTCLine2">
@@ -1321,7 +1321,7 @@
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">TC Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="MediumSkinTCLine3">
@@ -1357,7 +1357,7 @@
             <div class="subview" id="view-screen-stealth" style="display:none">
               <div style="height: 28px"></div>
               <table id="table-screen-stealth">
-                <tr>
+                <tr data-lang-title="Tooltips.StealthMode">
                   <td class="c1" data-lang="Screen.Stealth.StealthModeLabel">Stealth Mode</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1369,7 +1369,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ShowCharging">
                   <td class="c1" data-lang="Screen.Stealth.ShowChargingLabel">Show Charging</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1381,7 +1381,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ShowScreensaver">
                   <td class="c1" data-lang="Screen.Stealth.ShowScreensaverLabel">Show Screensaver</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1399,7 +1399,7 @@
             <div class="subview" id="view-screen-regional" style="display:none">
               <div style="height: 28px"></div>
               <table id="table-screen-regional">
-                <tr>
+                <tr data-lang-title="Tooltips.TemperatureUnits">
                   <td class="c1" data-lang="Screen.Regional.TemperatureUnits">Temperature Units</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1414,7 +1414,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.DateFormat">
                   <td class="c1" data-lang="Screen.Regional.DateFormat">Date Format</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1429,7 +1429,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.TimeFormat">
                   <td class="c1" data-lang="Screen.Regional.TimeFormat">Time Format</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1470,7 +1470,7 @@
               <div style="height: 28px"></div>
               <table id="table-controls-settings">
 
-                <tr>
+                <tr data-lang-title="Tooltips.WakeUpOnPlusMinus">
                   <td class="c1" data-lang="Controls.Settings.WakeUpPlusMinusLabel">+ / - Wakeup</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1482,7 +1482,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.UpDownBehavior">
                   <td class="c1" data-lang="Controls.Settings.UpDownButtonsBehaviorLabel">+ / - behavior</td>
                   <td class="c2">
                     <select class="fox-val" id="IsUpDownSwapped">
@@ -1502,7 +1502,7 @@
               <div style="height: 12px"></div>
               <h5 style="padding-left:12px" data-lang="Controls.MultiClicks.VWModeClicksLabel">VW Mode Fire Button Multi Clicks</h5>
               <table id="table-controls-multiclicks-vw">
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.2ClicksLabel">2 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="ClicksVW0">
@@ -1540,7 +1540,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.3ClicksLabel">3 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="ClicksVW1">
@@ -1578,7 +1578,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.4ClicksLabel">4 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="ClicksVW2">
@@ -1619,7 +1619,7 @@
               </table>
               <h5 style="padding-left:12px" data-lang="Controls.MultiClicks.TCModeClicksLabel">TC Mode Fire Button Multi Clicks</h5>
               <table id="table-controls-multiclicks-tc">
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.2ClicksLabel">2 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="ClicksTC0">
@@ -1657,7 +1657,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.3ClicksLabel">3 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="ClicksTC1">
@@ -1695,7 +1695,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.4ClicksLabel">4 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="ClicksTC2">
@@ -1736,7 +1736,7 @@
               </table>
               <h5 style="padding-left:12px" data-lang="Controls.MultiClicks.SharedLabel">Shared</h5>
               <table id="table-controls-multiclicks-shared">
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.5ClicksLabel">5 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="FiveClicks">
@@ -1755,7 +1755,7 @@
                 <div class="shortcut-cell">
                   <h5 data-lang="Controls.Shortcuts.InStandbyLabel">In Standby</h5>
                   <table id="table-controls-shortcuts-vw-standby">
-                                  <tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
                                     <td class="c1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
                                     <td class="c2">
                                       <select class="fox-val" id="ShortcutsVW0InStandby">
@@ -1793,7 +1793,7 @@
                                     <td class="c3"></td>
                                     <td class="c4"></td>
                                   </tr>
-                                  <tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
                                     <td class="c1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
                                     <td class="c2">
                                       <select class="fox-val" id="ShortcutsVW1InStandby">
@@ -1831,7 +1831,7 @@
                                     <td class="c3"></td>
                                     <td class="c4"></td>
                                   </tr>
-                                  <tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
                                     <td class="c1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
                                     <td class="c2">
                                       <select class="fox-val" id="ShortcutsVW2InStandby">
@@ -1874,21 +1874,21 @@
                 <div class="shortcut-cell">
                   <h5 data-lang="Controls.Shortcuts.InMenuLabel">In Menu</h5>
                   <table id="table-controls-shortcuts-vw-menu">
-                  <tr><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s2">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s2">
                                       <select class="fox-val" id="ShortcutsVW0InMenu">
                                         <option value="0" data-lang="ClickActions.None">None</option>
                                         <option value="1" data-lang="ClickActions.MenuBack">Back</option>
                                         <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
                                       </select>
                                     </td></tr>
-                  <tr><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s2">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s2">
                                       <select class="fox-val" id="ShortcutsVW1InMenu">
                                         <option value="0" data-lang="ClickActions.None">None</option>
                                         <option value="1" data-lang="ClickActions.MenuBack">Back</option>
                                         <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
                                       </select>
                                     </td></tr>
-                  <tr><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s2">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s2">
                                       <select class="fox-val" id="ShortcutsVW2InMenu">
                                         <option value="0" data-lang="ClickActions.None">None</option>
                                         <option value="1" data-lang="ClickActions.MenuBack">Back</option>
@@ -1900,19 +1900,19 @@
                 <div class="shortcut-cell">
                   <h5 data-lang="Controls.Shortcuts.InEditLabel">In Edit</h5>
                   <table id="table-controls-shortcuts-vw-edit">
-                  <tr><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s3">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s3">
                                       <select class="fox-val" id="ShortcutsVW0InEditMain">
                                         <option value="0" data-lang="ClickActions.None">None</option>
                                         <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
                                       </select>
                                     </td></tr>
-                  <tr><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s3">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s3">
                                       <select class="fox-val" id="ShortcutsVW1InEditMain">
                                         <option value="0" data-lang="ClickActions.None">None</option>
                                         <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
                                       </select>
                                     </td></tr>
-                  <tr><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s3">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s3">
                                       <select class="fox-val" id="ShortcutsVW2InEditMain">
                                         <option value="0" data-lang="ClickActions.None">None</option>
                                         <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
@@ -1923,7 +1923,7 @@
                 <div class="shortcut-cell">
                   <h5 data-lang="Controls.Shortcuts.InSelectorLabel">In Profile Select</h5>
                   <table id="table-controls-shortcuts-vw-selector">
-                                  <tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
                                     <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
                                     <td class="s4">
                                       <select class="fox-val" id="ShortcutsVW0InSelector">
@@ -1932,7 +1932,7 @@
                                       </select>
                                     </td>
                                   </tr>
-                                  <tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
                                     <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
                                     <td class="s4">
                                       <select class="fox-val" id="ShortcutsVW1InSelector">
@@ -1941,7 +1941,7 @@
                                       </select>
                                     </td>
                                   </tr>
-                                  <tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
                                     <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
                                     <td class="s4">
                                       <select class="fox-val" id="ShortcutsVW2InSelector">
@@ -1961,7 +1961,7 @@
                 <div class="shortcut-cell">
                   <h5 data-lang="Controls.Shortcuts.InStandbyLabel">In Standby</h5>
                   <table id="table-controls-shortcuts-tc-standby">
-                                  <tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
                                     <td class="c1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
                                     <td class="c2">
                                       <select class="fox-val" id="ShortcutsTC0InStandby">
@@ -1999,7 +1999,7 @@
                                     <td class="c3"></td>
                                     <td class="c4"></td>
                                   </tr>
-                                  <tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
                                     <td class="c1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
                                     <td class="c2">
                                       <select class="fox-val" id="ShortcutsTC1InStandby">
@@ -2037,7 +2037,7 @@
                                     <td class="c3"></td>
                                     <td class="c4"></td>
                                   </tr>
-                                  <tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
                                     <td class="c1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
                                     <td class="c2">
                                       <select class="fox-val" id="ShortcutsTC2InStandby">
@@ -2080,21 +2080,21 @@
                 <div class="shortcut-cell">
                   <h5 data-lang="Controls.Shortcuts.InMenuLabel">In Menu</h5>
                   <table id="table-controls-shortcuts-tc-menu">
-                  <tr><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s2">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s2">
                                       <select class="fox-val" id="ShortcutsTC0InMenu">
                                         <option value="0" data-lang="ClickActions.None">None</option>
                                         <option value="1" data-lang="ClickActions.MenuBack">Back</option>
                                         <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
                                       </select>
                                     </td></tr>
-                  <tr><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s2">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s2">
                                       <select class="fox-val" id="ShortcutsTC1InMenu">
                                         <option value="0" data-lang="ClickActions.None">None</option>
                                         <option value="1" data-lang="ClickActions.MenuBack">Back</option>
                                         <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
                                       </select>
                                     </td></tr>
-                  <tr><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s2">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s2">
                                       <select class="fox-val" id="ShortcutsTC2InMenu">
                                         <option value="0" data-lang="ClickActions.None">None</option>
                                         <option value="1" data-lang="ClickActions.MenuBack">Back</option>
@@ -2106,19 +2106,19 @@
                 <div class="shortcut-cell">
                   <h5 data-lang="Controls.Shortcuts.InEditLabel">In Edit</h5>
                   <table id="table-controls-shortcuts-tc-edit">
-                  <tr><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s3">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s3">
                                       <select class="fox-val" id="ShortcutsTC0InEditMain">
                                         <option value="0" data-lang="ClickActions.None">None</option>
                                         <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
                                       </select>
                                     </td></tr>
-                  <tr><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s3">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s3">
                                       <select class="fox-val" id="ShortcutsTC1InEditMain">
                                         <option value="0" data-lang="ClickActions.None">None</option>
                                         <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
                                       </select>
                                     </td></tr>
-                  <tr><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s3">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s3">
                                       <select class="fox-val" id="ShortcutsTC2InEditMain">
                                         <option value="0" data-lang="ClickActions.None">None</option>
                                         <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
@@ -2129,7 +2129,7 @@
                 <div class="shortcut-cell">
                   <h5 data-lang="Controls.Shortcuts.InSelectorLabel">In Profile Select</h5>
                   <table id="table-controls-shortcuts-tc-selector">
-                                  <tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
                                     <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
                                     <td class="s4">
                                       <select class="fox-val" id="ShortcutsTC0InSelector">
@@ -2138,7 +2138,7 @@
                                       </select>
                                     </td>
                                   </tr>
-                                  <tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
                                     <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
                                     <td class="s4">
                                       <select class="fox-val" id="ShortcutsTC1InSelector">
@@ -2147,7 +2147,7 @@
                                       </select>
                                     </td>
                                   </tr>
-                                  <tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
                                     <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
                                     <td class="s4">
                                       <select class="fox-val" id="ShortcutsTC2InSelector">
@@ -2166,7 +2166,7 @@
         <div class="view" id="view-smart" style="display:none">
           <div style="height: 28px"></div>
           <table id="table-smart">
-            <tr>
+            <tr data-lang-title="Tooltips.SmartMode">
               <td class="c1" data-lang="Smart.SmartModeLabel">Smart Mode</td>
               <td class="c2">
                 <select class="fox-val" id="SmartMode">
@@ -2178,7 +2178,7 @@
               <td class="c3"></td>
               <td class="c4"></td>
             </tr>
-            <tr>
+            <tr data-lang-title="Tooltips.SmartRange">
               <td class="c1" data-lang="Smart.SmartRangeLabel">Smart Range</td>
               <td class="c2">
                 <input class="fox-val" type="number" id="SmartRange" min="1" max="15" step="1">
@@ -2208,7 +2208,7 @@
             <div class="subview" id="view-advanced-settings">
               <div style="height: 28px"></div>
               <table id="table-advanced-settings">
-                <tr>
+                <tr data-lang-title="Tooltips.PowerLimit">
                   <td class="c1" data-lang="Advanced.Settings.PowerLimitLabel">Power Limit</td>
                   <td class="c2">
                     <input class="fox-val" type="number" max="1400" step="0.1" id="PowerLimit"> <span data-lang="Profile.WattsLabel">W</span>
@@ -2232,7 +2232,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.InternalResistance">
                   <td class="c1" data-lang="Advanced.Settings.InternalResistanceLabel">Internal Resistance</td>
                   <td class="c2">
                     <input class="fox-val" type="number" min="0" max="0.1" step="0.001" id="InternalResistance"> &#8486;
@@ -2240,7 +2240,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.BatteryModel">
                   <td class="c1" data-lang="Advanced.Settings.BatteryModelLabel">Battery Model</td>
                   <td class="c2">
                     <select class="fox-val" id="BatteryModel">
@@ -2279,7 +2279,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.DeepSleepBehavior">
                   <td class="c1" data-lang="Advanced.Settings.DeepSleepBehaviorLabel">Deep Sleep Behavior</td>
                   <td class="c2">
                     <select class="fox-val" id="DeepSleepMode">
@@ -2291,7 +2291,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.DeepSleepDelay">
                   <td class="c1" data-lang="Advanced.Settings.DeepSleepDelayLabel">Deep Sleep Delay</td>
                   <td class="c2">
                     <input class="fox-val" type="number" min="1" max="30" step="1" id="DeepSleepDelay"> <span data-label="">min</span>
@@ -2341,6 +2341,7 @@
               </table>
               <div style="padding-top:20px; padding-left: 12px; font-size: 10px" data-lang="Advanced.Settings.TooltipLabel"></div>
               <div style="padding: 12px;">
+                <button id="device-monitor" class="btn btn-default" data-lang="Advanced.Settings.DeviceMonitorButton">Device Monitor</button>
                 <button id="firmware-editor" class="btn btn-default">Firmware Editor</button>
               </div>
             </div>
@@ -2356,7 +2357,7 @@
             <div class="subview" id="view-advanced-bvo" style="display:none">
               <div style="height: 28px"></div>
               <table id="table-advanced-bvo">
-                <tr>
+                <tr data-lang-title="Tooltips.BVO">
                   <td class="c1" data-lang="Advanced.BVO.Battery1Label">Battery 1</td>
                   <td class="c2">
                     <input class="fox-val" type="number" min="-0.3" max="0.3" step="0.01" id="BatteryVoltageOffset1"> V
@@ -2364,7 +2365,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.BVO">
                   <td class="c1" data-lang="Advanced.BVO.Battery2Label">Battery 2</td>
                   <td class="c2">
                     <input class="fox-val" type="number" min="-0.3" max="0.3" step="0.01" id="BatteryVoltageOffset2"> V
@@ -2372,7 +2373,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.BVO">
                   <td class="c1" data-lang="Advanced.BVO.Battery3Label">Battery 3</td>
                   <td class="c2">
                     <input class="fox-val" type="number" min="-0.3" max="0.3" step="0.01" id="BatteryVoltageOffset3"> V
@@ -2380,7 +2381,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.BVO">
                   <td class="c1" data-lang="Advanced.BVO.Battery4Label">Battery 4</td>
                   <td class="c2">
                     <input class="fox-val" type="number" min="-0.3" max="0.3" step="0.01" id="BatteryVoltageOffset4"> V
@@ -2396,7 +2397,7 @@
         <div class="view" id="view-stats" style="display:none">
           <div style="height: 28px"></div>
           <table id="table-stats">
-            <tr>
+            <tr data-lang-title="Tooltips.PuffsCount">
               <td class="c1" data-lang="Stats.PuffsCountLabel">Puffs Count</td>
               <td class="c2">
                 <input class="fox-val" type="number" id="PuffsCount">
@@ -2404,7 +2405,7 @@
               <td class="c3"></td>
               <td class="c4"></td>
             </tr>
-            <tr>
+            <tr data-lang-title="Tooltips.TotalPuffsTime">
               <td class="c1" data-lang="Stats.TotalPuffsTimeLabel">Puffs Time</td>
               <td class="c2">
                 <input class="fox-val" type="number" step="0.1" id="PuffsTime">
@@ -2412,7 +2413,7 @@
               <td class="c3"></td>
               <td class="c4"></td>
             </tr>
-            <tr>
+            <tr data-lang-title="Tooltips.PuffsTimeFormat">
               <td class="c1" data-lang="Stats.PuffsTimeFormatLabel">Puffs Time Format</td>
               <td class="c2">
                 <select class="fox-val" id="PuffsTimeFormat">
