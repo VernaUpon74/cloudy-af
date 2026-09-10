@@ -4,6 +4,7 @@
 
 ### Added
 - **Timeout animation effects in the Firmware Editor's Patches tab**: Gradient Fade, Center Pulse and Diagonal Sweep are now listed as regular patches when an opened image matches a bundled animation descriptor (currently af_190602) — applicable and rollback-able like any other patch. Only one effect can be applied at a time since all three share one hook site and code cave; applying one rolls back the other. `resources/animations/` is now bundled with the app.
+- **Eleaf iStick Rim C support (ArcticFox STM32 line)**: STM32-line devices (USB VID 0483 / PID 5750, product M177) now connect, load settings and stream Device Monitor telemetry. The HID command packet needs the STM signature `5C CA 37 75` instead of the Nuvoton `HIDC`, and firmware flashing targets the STM flash base `0x0800C000` instead of 0 — both taken from NFE's NCore STM32 support (NFE-Tools v190718 beta). Logo upload on STM32-line devices is untested and unchanged.
 
 ## 1.18.0 — 2026-09-10
 

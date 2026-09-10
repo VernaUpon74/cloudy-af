@@ -1,7 +1,7 @@
 {
   "lines": {
     "nuvoton": { "product_ids": ["E043","E052","E056","E060","E079","E083","E092","E115","E150","E166","E182","E196","E203","M011","M037","M038","M041","M045","M046","M064","M065","M070","M073","M074","M077","M091","M095","M105","M111","M114","M972","M973","W007","W010","W011","W013","W014","W016","W017","W018","W026","W033","W043","W057","W069","W073","W078"], "usb": { "vid": "0x0416", "pid": "0x5020" } },
-    "stm32": { "product_ids": [], "usb": { "vid": "0x0483", "pid": "0x5750" } }
+    "stm32": { "product_ids": ["M177"], "usb": { "vid": "0x0483", "pid": "0x5750" } }
   },
   "rescue": [
     { "id": "istick_pico_v100", "file": "istick_pico_v100.bin", "product_ids": ["M041"], "label": "Eleaf iStick Pico V1.00 (original manufacturer firmware)" },

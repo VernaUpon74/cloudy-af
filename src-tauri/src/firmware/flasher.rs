@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -7,6 +8,55 @@ use super::{FirmwareError, Result};
 struct DeviceId {
     vid: u16,
     pid: u16,
+}
+
+/// MCU family of a connected device, keyed by USB vendor ID (NCore.USB).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum McuFamily {
+    /// Nuvoton M451 line (Pico and most Joyetech/Eleaf ArcticFox devices).
+    Nuvoton = 0,
+    /// STMicro STM32 line (Eleaf iStick Rim C et al., VID 0483).
+    Stm = 1,
+}
+
+impl McuFamily {
+    fn from_vid(vid: u16) -> McuFamily {
+        match vid {
+            0x0483 => McuFamily::Stm,
+            _ => McuFamily::Nuvoton,
+        }
+    }
+
+    /// Command-packet signature bytes (NCore.USB.HidConnector): the STM32
+    /// bootloader answers nothing to the Nuvoton "HIDC" signature.
+    fn hid_signature(self) -> [u8; 4] {
+        match self {
+            McuFamily::Nuvoton => *b"HIDC",
+            McuFamily::Stm => [0x5C, 0xCA, 0x37, 0x75],
+        }
+    }
+
+    /// APROM address sent as arg1 of the 0xC3 WriteFirmware command
+    /// (NCore FirmwareStartAddress: 0 for Nuvoton, flash base for STM).
+    fn firmware_start_address(self) -> i32 {
+        match self {
+            McuFamily::Nuvoton => 0,
+            McuFamily::Stm => 0x0800C000,
+        }
+    }
+}
+
+/// Family of the most recently opened device. Flashing/monitoring operations
+/// are strictly sequential (the sidecar is suspended while flashing), so a
+/// static is safe and avoids threading a parameter through every call site.
+static CURRENT_FAMILY: AtomicU8 = AtomicU8::new(McuFamily::Nuvoton as u8);
+
+fn current_family() -> McuFamily {
+    match CURRENT_FAMILY.load(Ordering::SeqCst) {
+        x if x == McuFamily::Stm as u8 => McuFamily::Stm,
+        _ => McuFamily::Nuvoton,
+    }
 }
 
 const SUPPORTED_DEVICES: &[DeviceId] = &[
@@ -36,6 +86,7 @@ pub fn open_device() -> Result<hidapi::HidDevice> {
     let api = hidapi::HidApi::new().map_err(|e| FirmwareError::Other(e.to_string()))?;
     for dev_id in SUPPORTED_DEVICES {
         if let Ok(device) = api.open(dev_id.vid, dev_id.pid) {
+            CURRENT_FAMILY.store(McuFamily::from_vid(dev_id.vid) as u8, Ordering::SeqCst);
             return Ok(device);
         }
     }
@@ -73,6 +124,9 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>> {
 /// Connect to a specific device by HID path (from [`list_devices`]).
 pub fn open_device_by_path(path: &str) -> Result<hidapi::HidDevice> {
     let api = hidapi::HidApi::new().map_err(|e| FirmwareError::Other(e.to_string()))?;
+    if let Some(info) = api.device_list().find(|d| d.path().to_string_lossy() == path) {
+        CURRENT_FAMILY.store(McuFamily::from_vid(info.vendor_id()) as u8, Ordering::SeqCst);
+    }
     let device = api
         .open_path(std::ffi::CString::new(path).map_err(|e| FirmwareError::Other(e.to_string()))?.as_c_str())
         .map_err(|e| FirmwareError::Other(format!("cannot open HID device {path}: {e}")))?;
@@ -85,7 +139,7 @@ fn create_command(cmd: u8, arg1: i32, arg2: i32) -> [u8; 18] {
     packet[1] = 0x0E;
     packet[2..6].copy_from_slice(&arg1.to_le_bytes());
     packet[6..10].copy_from_slice(&arg2.to_le_bytes());
-    packet[10..14].copy_from_slice(b"HIDC");
+    packet[10..14].copy_from_slice(&current_family().hid_signature());
     let sum: i32 = packet[0..14].iter().map(|b| *b as i32).sum();
     packet[14..18].copy_from_slice(&sum.to_le_bytes());
     packet
@@ -309,7 +363,12 @@ pub fn ensure_ldrom_mode() -> Result<()> {
 fn write_firmware_stream(bytes: &[u8]) -> Result<()> {
     let mut device = open_device()?;
 
-    send_command(&mut device, CMD_WRITE_DATA, 0, bytes.len() as i32)?;
+    send_command(
+        &mut device,
+        CMD_WRITE_DATA,
+        current_family().firmware_start_address(),
+        bytes.len() as i32,
+    )?;
 
     for chunk in bytes.chunks(REPORT_SIZE) {
         let mut report = vec![0u8; REPORT_SIZE + 1];
@@ -488,5 +547,35 @@ pub fn recovery_flash(
                 thread::sleep(Duration::from_secs(1));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mcu_family_signature_and_flash_base() {
+        assert_eq!(McuFamily::from_vid(0x0416), McuFamily::Nuvoton);
+        assert_eq!(McuFamily::from_vid(0x0483), McuFamily::Stm);
+        assert_eq!(McuFamily::Nuvoton.hid_signature(), *b"HIDC");
+        assert_eq!(McuFamily::Stm.hid_signature(), [0x5C, 0xCA, 0x37, 0x75]);
+        assert_eq!(McuFamily::Nuvoton.firmware_start_address(), 0);
+        assert_eq!(McuFamily::Stm.firmware_start_address(), 0x0800C000);
+
+        // The 18-byte command packet carries the family signature at bytes
+        // 10..14 and the sum of bytes 0..14 as a LE i32 checksum at 14..18.
+        CURRENT_FAMILY.store(McuFamily::Stm as u8, Ordering::SeqCst);
+        let pkt = create_command(CMD_WRITE_DATA, 0x0800C000, 114_688);
+        assert_eq!(pkt[0], CMD_WRITE_DATA);
+        assert_eq!(&pkt[2..6], &0x0800C000i32.to_le_bytes());
+        assert_eq!(&pkt[10..14], &[0x5C, 0xCA, 0x37, 0x75]);
+        let sum: i32 = pkt[..14].iter().map(|b| *b as i32).sum();
+        assert_eq!(&pkt[14..18], &sum.to_le_bytes());
+
+        CURRENT_FAMILY.store(McuFamily::Nuvoton as u8, Ordering::SeqCst);
+        let pkt = create_command(CMD_WRITE_DATA, 0, 114_688);
+        assert_eq!(&pkt[10..14], b"HIDC");
+        assert_eq!(&pkt[2..6], &0i32.to_le_bytes());
     }
 }
