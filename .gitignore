@@ -1,5 +1,6 @@
 node_modules
 .idea
+.github/workflows
 dist
 release
 src-tauri/target
