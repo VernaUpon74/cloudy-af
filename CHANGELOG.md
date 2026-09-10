@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.19.1 — 2026-09-10
+
+### Added
+- **Complete translations for all 17 locales**: every non-English language file is now key-complete (364 keys, including the Device Monitor, clock-animation and new-tooltip strings that were previously missing) and the large block of English-only tooltip text is translated. Czech `cs`/`cz` twins updated together.
+- **Tab tooltips**: the Advanced sub-tabs (Settings, Power Curves, Materials, BVO) and Screen sub-tabs (Settings, Appearance, Layout, Stealth, Regional) now show tooltip descriptions on hover, matching the main tabs.
+
+### Changed
+- **Device Monitor button moved to the Stats tab** (out of Advanced → Settings).
+
 ## 1.19.0 — 2026-09-10
 
 ### Added
