@@ -55,7 +55,7 @@ sudo udevadm trigger
 
 Then unplug and reconnect your device.
 
-### Linux (AppImage / .deb / .rpm)
+### Linux (AppImage / .deb / .rpm) -- buggier for now
 
 Native Linux packages are produced by `scripts/build-appimage.sh` and placed in `builds/`:
 
@@ -70,8 +70,8 @@ Native Linux packages are produced by `scripts/build-appimage.sh` and placed in 
 Make the file executable and run it:
 
 ```bash
-chmod +x builds/Cloudy_AF-1.2.0-x86_64.AppImage
-./builds/Cloudy_AF-1.2.0-x86_64.AppImage
+chmod +x builds/Cloudy_AF-1.9.0-x86_64.AppImage
+./builds/Cloudy_AF-1.9.0-x86_64.AppImage
 ```
 
 The AppImage uses a static runtime and works on systems with only FUSE3.
@@ -80,10 +80,10 @@ The AppImage uses a static runtime and works on systems with only FUSE3.
 
 ```bash
 # Debian / Ubuntu
-sudo apt install ./builds/Cloudy\ AF_1.2.0_amd64.deb
+sudo apt install ./builds/Cloudy\ AF_1.9.0_amd64.deb
 
 # Fedora
-sudo dnf install ./builds/Cloudy\ AF-1.2.0-1.x86_64.rpm
+sudo dnf install ./builds/Cloudy\ AF-1.9.0-1.x86_64.rpm
 ```
 
 #### USB permissions
@@ -103,6 +103,8 @@ Then unplug and reconnect your device.
 macOS builds are not officially produced by this fork, but the Tauri app can be built from source on
 macOS using Homebrew. The resulting `.app` / `.dmg` uses the Homebrew-installed Node.js runtime to
 run the HID sidecar.
+
+Looking for macOS devs.
 
 #### Install prerequisites with Homebrew
 
@@ -204,7 +206,7 @@ Wismec Presa/Reuleaux, Vaporflask, and friends) — they all share the same Nuvo
 bootloader interface (VID `0x0416` / PID `0x5020`) and are told apart by the Product ID
 string in the device dataflash.
 
-## Firmware encryption (VandalProof)
+## Dev Notes- Firmware encryption (VandalProof)
 
 ArcticFox firmware update packages (`af_*.bin`, 2018 and later) are encrypted with
 "VandalProof": AES-128-CBC, the first 16 bytes of the file are the IV, PKCS7 padding.
@@ -243,7 +245,7 @@ before the second because it keeps the sandbox intact.
    # Flatpak
    flatpak run --env=WEBKIT_FORCE_SOFTWARE_RENDERING=1 org.cloudy.af
    # AppImage
-   WEBKIT_FORCE_SOFTWARE_RENDERING=1 ./builds/Cloudy_AF-1.2.0-x86_64.AppImage
+   WEBKIT_FORCE_SOFTWARE_RENDERING=1 ./builds/Cloudy_AF-1.9.0-x86_64.AppImage
    ```
 
 2. **Disable the WebKit sandbox** (last resort):
@@ -252,7 +254,7 @@ before the second because it keeps the sandbox intact.
    # Flatpak
    flatpak run --env=WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 org.cloudy.af
    # AppImage
-   WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 ./builds/Cloudy_AF-1.2.0-x86_64.AppImage
+   WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 ./builds/Cloudy_AF-1.9.0-x86_64.AppImage
    ```
 
 ## Project structure
@@ -285,9 +287,11 @@ Key deviations from the original `hobbyquaker/arcticfox-config` are documented i
 
 Notable changes include:
 
+- Boot wabi-sabi removed, to great fung-shei displeasure
+- Bugs exterminated
 - Tauri 2.x desktop shell replacing Electron
 - Flatpak packaging with bundled Node.js sidecar for HID access
-- Dark UI by default. Up Material UIrs
+- Adaptive light/dark UI
 - Window scaling
 - Freedom units by default
 - Removed Coil Material gobbledygook, TFR list back. She's got curves, baby.
@@ -296,7 +300,7 @@ Notable changes include:
 - Lite mode support in Appearance settings
 - All five ArcticFox main-screen skins (Small/Medium included) with an NToolbox-style active-mode Layout page
 - Shortcuts (VW/TC) arranged as a 2×2 grid; Puff Cut-Off steps in whole seconds
-- Hover tooltips on all settings rows (specific vape-function descriptions where available)
+- Improved hover tooltips on all settings rows (specific vape-function descriptions where available)
 - Dependency security updates (`highcharts` 9.x, `xml2js` 0.6.2, local `put` replacement)
 - Firmware Editor: open/edit/patch/flash ArcticFox firmware images (all encryption schemes, incl. VandalProof), with an emergency recovery flasher
 - Support for every ArcticFox-compatible device (47 Product IDs: Joyetech, Eleaf, Wismec, Vaporflask…), not just the iStick Pico
@@ -304,8 +308,7 @@ Notable changes include:
 
 Planned developments include:
 - Screen animations
-- Auto TFR curve plotting
-- Device Monitor (live device telemetry window like NToolbox's; the in-progress firmware emulation harness — `src-tauri/src/firmware/emu/` — will be used to replicate its rendering behaviour)
+- ~~Auto TFR curve plotting~~ scrapped, no suitable USB K-type thermocouple adapter found
 
 ## Contributing
 
@@ -330,7 +333,7 @@ Based on the work of [NFE Team](https://nfeteam.org/) and [hobbyquaker](https://
 
 This software uses [Highcharts](http://www.highcharts.com/) which is free __only for non-commercial use__.
 
-Kimi Code assisted in software rewrite.
+Kimi Code and local models assisted in software rewrite.
 Images all edited by mouse using OSS.
 
 ## Donations
