@@ -7,6 +7,10 @@
 - **Eleaf iStick Rim C support (ArcticFox STM32 line)**: STM32-line devices (USB VID 0483 / PID 5750, product M177) now connect, load settings and stream Device Monitor telemetry. The HID command packet needs the STM signature `5C CA 37 75` instead of the Nuvoton `HIDC`, and firmware flashing targets the STM flash base `0x0800C000` instead of 0 — both taken from NFE's NCore STM32 support (NFE-Tools v190718 beta). Logo upload on STM32-line devices is untested and unchanged.
 - **Full NFE device catalog**: the product table now covers all 69 devices of NFE-Tools v190718's NCore database (was 37) — newly named Eleaf iStick Pico 25/21700/S, Tria, Pico Squeeze 2, ASTER RT, iKuu i80, iKonn 220, Invoke 220, Lexicon, iStick Mix; Joyetech eVic Primo Mini SE / Primo Fit, Elitar Pipe, Ultex T80, Espion / Espion Solo; Twisp Vega / Vega Mini; Wismec RX GEN3 (incl. Dual, RX2 20700/21700), Active, Luxotic DF/MF, Sinuous P80/CB-80/V80/V200/Ravage230, ES300/myTri — so any NFE-supported ArcticFox device now shows its proper name, and firmware builds match it to the right device line.
 
+### Fixed
+- **Device Monitor crashing the HID sidecar**: each monitor sample used to suspend the sidecar — closing and reopening the hidraw handle every poll — which raced node-hid's read thread (SIGABRT, "free(): invalid pointer") and killed the sidecar, leaving the monitor non-functional. Samples now go through the sidecar's own `monitoring` request, which keeps the handle open.
+- **Firmware Editor "Download Stock" failing while the device was connected**: direct-from-Rust device reads (`download_stock`, `read_device_dataflash`, `read_device_product_id`, restart) did not suspend the sidecar, whose always-on hidraw reader thread consumed the device's response — the read then timed out. All four now suspend the sidecar for the duration (same guard pattern as flashing).
+
 ## 1.18.0 — 2026-09-10
 
 ### Added

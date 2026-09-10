@@ -7,6 +7,9 @@ license = "GPL-3.0"
 repository = "https://github.com/VernaUpon74/cloudy-af"
 edition = "2021"
 rust-version = "1.77.2"
+# The app binary (src/main.rs), not the src/bin/ development tools — tauri
+# bundling picks this for the desktop file's Exec= and the bundled binary.
+default-run = "cloudy-af"
 
 [lib]
 name = "cloudy_af_lib"

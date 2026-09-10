@@ -86,6 +86,19 @@ function sendError(message, detail) {
     send('error', { message, error: true, detail: detail ? String(detail) : undefined });
 }
 
+// Async replies (their command handler has already returned, so
+// currentRequestId is null again) still need request-id correlation with the
+// Rust sidecar_request: temporarily restore the id around send().
+function sendForRequest(event, payload, requestId) {
+    const prev = currentRequestId;
+    currentRequestId = requestId;
+    try {
+        send(event, payload);
+    } finally {
+        currentRequestId = prev;
+    }
+}
+
 // Remove control characters and Unicode replacement characters from strings so
 // profile/TFR/battery names display cleanly and xml2js can build valid XML.
 function sanitizeConfigStrings(obj) {
@@ -267,6 +280,33 @@ function handleCommand(cmd) {
                 sendError('Disconnect failed', err);
             }
             break;
+
+        case 'monitoring': {
+            // One live 0x66 telemetry sample for the Device Monitor. Served
+            // by the sidecar itself: the HID handle stays open, so no
+            // close/reopen churn and no node-hid close race.
+            const requestId = cmd.request_id || null;
+            if (suspended || !fox.connected) {
+                sendForRequest('error', {
+                    message: 'Monitoring read failed',
+                    error: true,
+                    detail: 'device not connected'
+                }, requestId);
+                break;
+            }
+            fox.readMonitoringDataRaw((err, data) => {
+                if (err) {
+                    sendForRequest('error', {
+                        message: 'Monitoring read failed',
+                        error: true,
+                        detail: err.toString()
+                    }, requestId);
+                } else {
+                    sendForRequest('monitoring_ack', { data: data.toString('base64') }, requestId);
+                }
+            });
+            break;
+        }
 
         case 'suspend':
             // The Rust firmware flasher is about to own the HID device:

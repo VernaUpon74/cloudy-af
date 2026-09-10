@@ -1,5 +1,5 @@
 diff --git a/node_modules/arcticfox/index.js b/node_modules/arcticfox/index.js
-index 9363c3c..1158fd6 100644
+index 9363c3c..c76accf 100644
 --- a/node_modules/arcticfox/index.js
 +++ b/node_modules/arcticfox/index.js
 @@ -1,5 +1,10 @@
@@ -129,8 +129,19 @@ index 9363c3c..1158fd6 100644
              this.hid.on('data', data => {
                  clearTimeout(this.timeout);
                  switch (this.expectedAnswer) {
-@@ -108,9 +175,9 @@ class ArcticFox extends events.EventEmitter {
+@@ -106,11 +173,20 @@ class ArcticFox extends events.EventEmitter {
+                             this.callback = null;
+                         }
                          break;
++                    case 'monitoringDataRaw':
++                        // Same as monitoringData but hands the callback the
++                        // untouched report bytes (the Rust backend decodes
++                        // them with its own NToolbox-parity decoder).
++                        if (this.callback) {
++                            this.callback(null, data);
++                            this.callback = null;
++                        }
++                        break;
                      case 'configuration':
                          if (this.callback) {
 -                            message = Buffer.concat([message, data]);
@@ -142,7 +153,7 @@ index 9363c3c..1158fd6 100644
                                      this.callback(err, config);
                                      this.callback = null;
                                  });
-@@ -119,9 +186,9 @@ class ArcticFox extends events.EventEmitter {
+@@ -119,9 +195,9 @@ class ArcticFox extends events.EventEmitter {
                          break;
                      case 'screenshot':
                          if (this.callback) {
@@ -155,7 +166,7 @@ index 9363c3c..1158fd6 100644
                                  this.callback = null;
                              }
                          }
-@@ -131,7 +198,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -131,7 +207,7 @@ class ArcticFox extends events.EventEmitter {
              });
              this.hid.on('error', err => {
                  this.emit('error', err);
@@ -164,7 +175,7 @@ index 9363c3c..1158fd6 100644
                      this.disconnect();
                  }
              });
-@@ -182,10 +249,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -182,10 +258,7 @@ class ArcticFox extends events.EventEmitter {
              (arg2 & 0xFF0000) >> 16,
              (arg2 & 0xFF000000) >> 24,
  
@@ -176,7 +187,7 @@ index 9363c3c..1158fd6 100644
          ];
  
          let sum = 0;
-@@ -259,6 +323,9 @@ class ArcticFox extends events.EventEmitter {
+@@ -259,6 +332,9 @@ class ArcticFox extends events.EventEmitter {
          if (profile.IsTemperatureDominant) {
              flags += 0x10;
          }
@@ -186,7 +197,7 @@ index 9363c3c..1158fd6 100644
          if (profile.IsResistanceLocked) {
              flags += 0x40;
          }
-@@ -281,14 +348,14 @@ class ArcticFox extends events.EventEmitter {
+@@ -281,14 +357,14 @@ class ArcticFox extends events.EventEmitter {
              .put(Buffer.from((profile.Name + '\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000').substr(0, 8), 'ascii'))
              .word8(flags)
              .word8(flags2)
@@ -206,7 +217,7 @@ index 9363c3c..1158fd6 100644
              .word16le(profile.TCR)
              .word8(profile.PIRegulatorRange)
              .word16le(profile.PIRegulatorPValue)
-@@ -330,6 +397,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -330,6 +406,7 @@ class ArcticFox extends events.EventEmitter {
          data.PreheatPower /= 10;
          data.Material = data.Flags & 0x0F;
          data.IsTemperatureDominant = Boolean(data.Flags & 0x10);
@@ -214,7 +225,7 @@ index 9363c3c..1158fd6 100644
          data.IsResistanceLocked = Boolean(data.Flags & 0x40);
          data.IsEnabled = Boolean(data.Flags & 0x80);
  
-@@ -774,13 +842,13 @@ class ArcticFox extends events.EventEmitter {
+@@ -774,13 +851,13 @@ class ArcticFox extends events.EventEmitter {
          for (let i = 0; i < 11; i++) {
              bin = Buffer.concat([bin, put()
                  .word16le(battery.PercentsVoltage[i].Percents)
@@ -230,7 +241,7 @@ index 9363c3c..1158fd6 100644
              .buffer()
          ]);
  
-@@ -833,7 +901,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -833,7 +910,7 @@ class ArcticFox extends events.EventEmitter {
          for (let i = 0; i < 7; i++) {
              bin = Buffer.concat([bin, put()
                  .word16le(table.Points[i].Temperature)
@@ -239,7 +250,7 @@ index 9363c3c..1158fd6 100644
                  .buffer()
              ]);
          }
-@@ -878,7 +946,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -878,7 +955,7 @@ class ArcticFox extends events.EventEmitter {
  
          for (let i = 0; i < 12; i++) {
              bin = Buffer.concat([bin, put()
@@ -248,7 +259,7 @@ index 9363c3c..1158fd6 100644
                  .word8(curve.Points[i].Percent)
                  .buffer()
              ]);
-@@ -918,9 +986,17 @@ class ArcticFox extends events.EventEmitter {
+@@ -918,9 +995,17 @@ class ArcticFox extends events.EventEmitter {
      }
  
      encodeAdvancedConfiguration(config) {
@@ -269,7 +280,7 @@ index 9363c3c..1158fd6 100644
  
              .word8((((config.BatteryVoltageOffset1 < 0)) ? 0x80 : 0) + ((config.BatteryVoltageOffset1 * 100) & 0x7F))
              .word8((((config.BatteryVoltageOffset2 < 0)) ? 0x80 : 0) + ((config.BatteryVoltageOffset2 * 100) & 0x7F))
-@@ -935,7 +1011,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -935,7 +1020,7 @@ class ArcticFox extends events.EventEmitter {
              .word8(config.ResetCountersOnStartup ? 1 : 0)
  
              .word8(config.ShuntCorrection)
@@ -278,7 +289,7 @@ index 9363c3c..1158fd6 100644
  
              .word8(config.BatteryModel)
              .buffer();
-@@ -961,10 +1037,13 @@ class ArcticFox extends events.EventEmitter {
+@@ -961,10 +1046,13 @@ class ArcticFox extends events.EventEmitter {
          return bin;
      }
  
@@ -296,7 +307,7 @@ index 9363c3c..1158fd6 100644
  
              .word8s('BatteryVoltageOffset1')
              .word8s('BatteryVoltageOffset2')
-@@ -1098,7 +1177,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -1098,7 +1186,7 @@ class ArcticFox extends events.EventEmitter {
          res = this.parseUiConiguration(res.buf);
          this.extend(data, res.data);
  
@@ -305,9 +316,23 @@ index 9363c3c..1158fd6 100644
          this.extend(data, res.data);
  
          callback(null, data);
-@@ -1163,6 +1242,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -1162,7 +1250,21 @@ class ArcticFox extends events.EventEmitter {
+         }
      }
  
++    readMonitoringDataRaw(callback) {
++        if (this.hidWrite(this.createCommand(this.commands.readMonitoringData, 0, this.monitoringDataLength))) {
++            this.expectedAnswer = 'monitoringDataRaw';
++            this.callback = callback;
++            this.timeout = setTimeout(() => {
++                this.callback = null;
++                callback(new Error('timeout'));
++            }, this.callbackTimeout);
++        } else {
++            callback(new Error());
++        }
++    }
++
      readConfiguration(callback) {
 +        this.message = Buffer.from([]);
          if (this.hidWrite(this.createCommand(this.commands.readConfiguration, 0, this.configurationLength))) {

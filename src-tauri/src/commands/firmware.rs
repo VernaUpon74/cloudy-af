@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
+use base64::Engine;
 
 use crate::firmware::anim::asm::AnimError;
 use crate::firmware::anim::effects::{
@@ -25,6 +26,25 @@ use crate::firmware::stock::{line_for_definition, line_for_product, load_library
 /// read dispatched in the same millisecond a flash starts can still land
 /// inside the stream.
 static FLASH_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Run a short direct-device operation with the sidecar suspended for the
+/// duration. The sidecar's hidraw reader thread consumes every report the
+/// device answers with, so a direct read without suspend loses its response
+/// to the sidecar and times out. Resume fires before returning in every
+/// path; the sidecar reconnects and re-downloads the config afterwards.
+async fn with_device<T, F>(sidecar: &crate::SidecarState, f: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    let _ = crate::suspend_sidecar(sidecar).await;
+    let _guard = FLASH_MUTEX.lock().await;
+    let result = tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| e.to_string())?;
+    let _ = crate::resume_sidecar(sidecar).await;
+    result
+}
 
 fn backup_path(app: &AppHandle, handle: &str) -> Option<PathBuf> {
     app.path().config_dir().ok().map(|d| d.join(format!("cloudy-af/firmware-backups/{}.bin", handle)))
@@ -337,10 +357,12 @@ fn open_stock_file(
 #[tauri::command]
 pub async fn download_stock(
     app: AppHandle,
+    sidecar: State<'_, crate::SidecarState>,
     state: State<'_, FirmwareState>,
 ) -> Result<Value, String> {
-    let _guard = FLASH_MUTEX.lock().await;
-    let df = read_dataflash().map_err(|e| e.to_string())?;
+    // Suspend the sidecar: its hidraw reader thread would otherwise consume
+    // the 0x35 response and this read would time out.
+    let df = with_device(&sidecar, || read_dataflash().map_err(|e| e.to_string())).await?;
     if df.len() < 320 {
         return Err("dataflash too short for product id".to_string());
     }
@@ -525,15 +547,17 @@ pub async fn close_firmware(
 }
 
 #[tauri::command]
-pub async fn read_device_dataflash() -> Result<Vec<u8>, String> {
-    let _guard = FLASH_MUTEX.lock().await;
-    read_dataflash().map_err(|e| e.to_string())
+pub async fn read_device_dataflash(
+    sidecar: State<'_, crate::SidecarState>,
+) -> Result<Vec<u8>, String> {
+    with_device(&sidecar, || read_dataflash().map_err(|e| e.to_string())).await
 }
 
 #[tauri::command]
-pub async fn read_device_product_id() -> Result<String, String> {
-    let _guard = FLASH_MUTEX.lock().await;
-    read_product_id().map_err(|e| e.to_string())
+pub async fn read_device_product_id(
+    sidecar: State<'_, crate::SidecarState>,
+) -> Result<String, String> {
+    with_device(&sidecar, || read_product_id().map_err(|e| e.to_string())).await
 }
 
 /// Flash the opened image, refusing when the connected device's Product ID
@@ -588,29 +612,33 @@ pub async fn flash_firmware_to_device(
 }
 
 #[tauri::command]
-pub async fn restart_device_cmd() -> Result<(), String> {
-    let _guard = FLASH_MUTEX.lock().await;
-    restart_device().map_err(|e| e.to_string())
+pub async fn restart_device_cmd(
+    sidecar: State<'_, crate::SidecarState>,
+) -> Result<(), String> {
+    with_device(&sidecar, || restart_device().map_err(|e| e.to_string())).await
 }
 
 /// Read and decode one live monitoring sample (0x66) for the Device Monitor
-/// window. Device access is guarded exactly like the other direct-device
-/// commands: the HID sidecar is suspended for the duration and the flash
-/// mutex serializes against flashes/dataflash reads.
+/// window. Served by the HID sidecar, which already owns the open device:
+/// suspending it per sample used to close/reopen the hidraw handle every
+/// poll, racing node-hid's read thread (SIGABRT / "free(): invalid pointer")
+/// and re-downloading the full config after every sample.
 #[tauri::command]
 pub async fn read_monitoring_data_cmd(
     sidecar: State<'_, crate::SidecarState>,
 ) -> Result<crate::firmware::monitoring::MonitoringData, String> {
-    let _ = crate::suspend_sidecar(&sidecar).await;
-    let _flash_guard = FLASH_MUTEX.lock().await;
-    let result = tauri::async_runtime::spawn_blocking(|| {
-        let raw = crate::firmware::flasher::read_monitoring_data_auto().map_err(|e| e.to_string())?;
-        crate::firmware::monitoring::decode_monitoring_data(&raw).map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-    let _ = crate::resume_sidecar(&sidecar).await;
-    result
+    let res = crate::sidecar_request(&sidecar, serde_json::json!({ "type": "monitoring" })).await?;
+    if let Some(msg) = res.get("message").and_then(|v| v.as_str()) {
+        return Err(format!("Sidecar error: {}", msg));
+    }
+    let b64 = res
+        .get("data")
+        .and_then(|v| v.as_str())
+        .ok_or("Missing monitoring data in sidecar reply")?;
+    let raw = base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .map_err(|e| e.to_string())?;
+    crate::firmware::monitoring::decode_monitoring_data(&raw).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

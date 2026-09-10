@@ -43,7 +43,8 @@
       "../resources/definitions": "definitions",
       "../resources/patches": "patches",
       "../resources/firmware": "firmware",
-      "../resources/animations": "animations"
+      "../resources/animations": "animations",
+      "../sidecar": "sidecar"
     }
   }
 }
