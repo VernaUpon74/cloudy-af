@@ -34,6 +34,11 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
+    <release version="1.18.0" date="2026-09-10">
+      <description>
+        <p>Accessibility tooltips on every setting, written for screen-reader and low-vision users. Live Device Monitor under Advanced (NToolbox port). Charge-screen timeout animations (Gradient Fade, Center Pulse, Diagonal Sweep) as a firmware patch for af_190602, verified in an emulator before flashing. Fix for zoom fit at startup clipping the tab bar.</p>
+      </description>
+    </release>
     <release version="1.17.0" date="2026-09-06">
       <description>
         <p>Controls Shortcuts (VW/TC) rearranged into a NToolbox-style 2x2 grid; Puff Cut-Off now steps in whole seconds. Screen Layout page shows only the active skin's fields, with all five ArcticFox skins (Small/Medium added for 64x128 displays).</p>

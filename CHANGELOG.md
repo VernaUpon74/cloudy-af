@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.18.0 — 2026-09-10
+
+### Added
+- **Accessibility tooltips on every setting**: all ~120 settings rows now carry a concise description of what the setting does, shown on hover/focus, written for screen-reader and low-vision users.
+- **Live Device Monitor under Advanced** (NToolbox port): real-time battery voltage, board temperature, live current and resistance readouts streamed from the device while connected.
+- **Charge-screen timeout animations** (firmware patch, af_190602): three selectable CRT-style fade effects — Gradient Fade, Center Pulse, and Diagonal Sweep — injected into the firmware's show-clock-on-timeout path via a code-cave patch. Effect is chosen by a dataflash config byte; each frame of the patched firmware is verified against an in-emulator reference before flashing.
 
 ### Fixed
 - **Zoom fit at startup**: the fit computation now measures the real content container and re-runs once web fonts and i18n text settle, fixing the tab bar being clipped under the header until the first window resize.
