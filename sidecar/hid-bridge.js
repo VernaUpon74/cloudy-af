@@ -38,6 +38,12 @@ let suspended = false;
 
 let currentRequestId = null;
 
+// Set when the device opened but never answered the ArcticFox protocol
+// (e.g. stock firmware). The handle stays open — close() races node-hid's
+// hidraw read thread (free(): invalid pointer) — and we re-probe on a timer
+// instead of tearing the connection down.
+let unresponsive = false;
+
 // DEVIATION: Explicit auto-reconnect logic. The original arcticfox module schedules
 // its own reconnect inside disconnect(); we override disconnect() below and use this
 // timer so the sidecar can reconnect when a device is unplugged and re-plugged.
@@ -105,16 +111,45 @@ function emit(channel, data) {
 
 function onConnect() {
     clearReconnectTimer();
-    emit('connect', true);
+    // 'connect' is only announced once the device has proven it speaks the
+    // ArcticFox protocol — a stock-firmware device opens fine but silently
+    // times out every read, which must not show as "connected".
+    unresponsive = false;
     if (autoconnect) {
         fox.setDateTime(new Date());
         downloadConfig();
+    } else {
+        emit('connect', true);
     }
 }
 
 function onClose() {
+    unresponsive = false;
     emit('connect', false);
     scheduleReconnect();
+}
+
+// Re-probe an unresponsive device on the already-open handle. A successful
+// read flips it to connected; a firmware flash resets the USB enumeration
+// and arrives as a HID error -> onClose -> normal reconnect loop.
+function scheduleUnresponsiveProbe() {
+    clearReconnectTimer();
+    if (suspended || !unresponsive || !fox.connected) {
+        return;
+    }
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (!suspended && unresponsive && fox.connected) {
+            try {
+                fox.setDateTime(new Date());
+                downloadConfig();
+            } catch (err) {
+                scheduleUnresponsiveProbe();
+            }
+        } else {
+            scheduleUnresponsiveProbe();
+        }
+    }, RECONNECT_INTERVAL_MS);
 }
 
 function onError(err) {
@@ -174,7 +209,19 @@ function downloadConfig() {
     fox.readConfiguration((err, data) => {
         if (err) {
             console.error(err.toString());
-            if (err.toString() === 'Error: Outdated Toolbox') {
+            if (err.toString() === 'Error: timeout') {
+                // Device opened but does not answer: stock (non-ArcticFox)
+                // firmware. Report once, stay disconnected, keep probing.
+                const firstFailure = !unresponsive;
+                unresponsive = true;
+                emit('connect', false);
+                scheduleUnresponsiveProbe();
+                if (firstFailure) {
+                    sendError('Device not responding',
+                        'The device opened but does not answer the ArcticFox protocol. ' +
+                        'Stock firmware must be replaced with ArcticFox (Firmware Editor) before settings can be loaded.');
+                }
+            } else if (err.toString() === 'Error: Outdated Toolbox') {
                 sendError('Incompatible Firmware', 'Outdated Toolbox');
             } else if (err.toString() === 'Error: Outdated Firmware') {
                 sendError('Incompatible Firmware', 'Connect device with firmware build >= ' + fox.minimumSupportedBuildNumber);
@@ -183,7 +230,9 @@ function downloadConfig() {
             }
             return;
         }
+        unresponsive = false;
         const cleanData = sanitizeConfigStrings(data);
+        emit('connect', true);
         emit('config', cleanData);
     });
 }
