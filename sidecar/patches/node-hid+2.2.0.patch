@@ -1,0 +1,48 @@
+diff --git a/node_modules/node-hid/src/HID.cc b/node_modules/node-hid/src/HID.cc
+--- a/node_modules/node-hid/src/HID.cc
++++ b/node_modules/node-hid/src/HID.cc
+@@ -24,6 +24,7 @@
+ #include <iomanip>
+ #include <sstream>
+ #include <vector>
++#include <mutex>
+
+ #include <stdlib.h>
+
+@@ -46,6 +47,14 @@
+
+   hid_device *_hidHandle;
+
++  // Serializes handle use between the JS thread (close/write) and the
++  // AsyncWorker read thread. Without it, closeHandle()'s hid_close() frees
++  // the hid_device while a blocked hid_read_timeout() is still using it —
++  // node-hid 2.2.0 upstream race, seen as SIGABRT "free(): invalid pointer"
++  // in HID_hidraw.node whenever the handle is closed with a read in flight
++  // (sidecar suspend, device flapping during a flash).
++  std::mutex _handleMutex;
++
+ private:
+   static Napi::Value devices(const Napi::CallbackInfo &info);
+
+@@ -122,6 +131,7 @@
+
+ void HID::closeHandle()
+ {
++  std::lock_guard<std::mutex> lock(_handleMutex);
+   if (_hidHandle)
+   {
+     hid_close(_hidHandle);
+@@ -148,6 +158,13 @@
+     int mswait = 50;
+     while (len == 0 && _hid->_hidHandle)
+     {
++      // Hold the handle mutex across each read slice so closeHandle() cannot
++      // free the hid_device underneath a blocked hid_read_timeout().
++      std::lock_guard<std::mutex> lock(_hid->_handleMutex);
++      if (!_hid->_hidHandle)
++      {
++        break;
++      }
+       len = hid_read_timeout(_hid->_hidHandle, buf, READ_BUFF_MAXSIZE, mswait);
+     }
+     if (len <= 0)

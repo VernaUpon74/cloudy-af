@@ -7,4 +7,14 @@ src-tauri/gen
 flatpak/build-dir
 flatpak/repo
 flatpak/.flatpak-builder
+flatpak/.cargo-cache
 *.flatpak
+builds/
+src-tauri/binaries/
+*.log
+repo/
+# Local firmware RE scratch (optional tooling, see scripts/fetch-ghidra.sh)
+DecryptProject/
+AF_fw/
+# Device-specific hardware-test binaries and dumps (not committed)
+test-fixtures/

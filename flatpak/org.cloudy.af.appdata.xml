@@ -34,6 +34,66 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
+    <release version="1.19.0" date="2026-09-10">
+      <description>
+        <p>Recovery tooling: "Repair Product ID" fixes a device whose dataflash product ID was erased or rewritten by the wrong stock firmware (crash-loop / not detected after flashing), flash progress reaches the status line in all paths, and STM32-line device coverage is broadened (M149/M172/M177). Also: flasher restart-retry after a successful write, and documentation of the device's two USB modes and dataflash layout.</p>
+      </description>
+    </release>
+    <release version="1.18.3" date="2026-09-10">
+      <description>
+        <p>Flash reliability: firmware is padded to whole flash rows so the updater no longer dies on a ragged final chunk, and applying a timeout animation also writes the config byte that enables it. Flashes now tolerate devices that won't soft-switch into bootloader mode (e.g. Pico Dual): the app waits for an unplug/replug and reports progress live. Firmware Editor auto-loads the stock firmware for the connected device, "Download Stock" is now "Download FW", and Device Monitor adds a pause button and Space shortcut.</p>
+      </description>
+    </release>
+    <release version="1.18.2" date="2026-09-10">
+      <description>
+        <p>Sidecar crash fixed (node-hid handle freed while a read was in flight) — Firmware Editor and Device Monitor no longer die with a device plugged in. Timeout animations now actually appear under Firmware Editor → Patches. Device Monitor chart: hover any point for its value, restyled as an NToolbox-style Highcharts port. App follows the system dark/light theme. Configuration dropdown double-arrow fixed.</p>
+      </description>
+    </release>
+    <release version="1.18.1" date="2026-09-10">
+      <description>
+        <p>iStick Rim C support (STM32 line) and the full NFE device catalog (69 devices). Device Monitor no longer crashes the HID sidecar and streams live telemetry; "Download Stock" works while connected. Device Monitor temperature readings fixed: the firmware reports whole degrees, not tenths.</p>
+      </description>
+    </release>
+    <release version="1.18.0" date="2026-09-10">
+      <description>
+        <p>Accessibility tooltips on every setting, written for screen-reader and low-vision users. Live Device Monitor under Advanced (NToolbox port). Charge-screen timeout animations (Gradient Fade, Center Pulse, Diagonal Sweep) as a firmware patch for af_190602, verified in an emulator before flashing. Fix for zoom fit at startup clipping the tab bar.</p>
+      </description>
+    </release>
+    <release version="1.17.0" date="2026-09-06">
+      <description>
+        <p>Controls Shortcuts (VW/TC) rearranged into a NToolbox-style 2x2 grid; Puff Cut-Off now steps in whole seconds. Screen Layout page shows only the active skin's fields, with all five ArcticFox skins (Small/Medium added for 64x128 displays).</p>
+      </description>
+    </release>
+    <release version="1.16.2" date="2026-09-04">
+      <description>
+        <p>Emergency recovery now accepts encrypted ArcticFox firmware files and decrypts them before flashing. Bundled decrypted firmware images for inspection and patching. Shortened recovery tab instructions.</p>
+      </description>
+    </release>
+    <release version="1.16.1" date="2026-09-04">
+      <description>
+        <p>Fixed a firmware-flash race that could brick devices (single-instance enforcement, whole-upload retry, sidecar crash fix). Recovery tab now auto-loads the bundled original manufacturer firmware and offers the matching ArcticFox build afterwards.</p>
+      </description>
+    </release>
+    <release version="1.16.0" date="2026-09-03">
+      <description>
+        <p>Added Firmware Editor Recovery tab, support for all 47 ArcticFox-compatible device Product IDs, in-app VandalProof firmware decryption, and bundled stock firmware library. Fixed STM32-line firmware opening and Flatpak resource bundling.</p>
+      </description>
+    </release>
+    <release version="1.15.3" date="2026-08-15">
+      <description>
+        <p>Added Firmware Editor window with Patches tab for opening, patching, saving, and flashing ArcticFox firmware binaries. Added Undo Changes backup restore.</p>
+      </description>
+    </release>
+    <release version="1.2.1" date="2026-08-15">
+      <description>
+        <p>Fixed Advanced Materials list to show each TFR table as [TFR] &lt;name&gt; and updated the TFR curve editor chart to match the original NToolbox spline plot.</p>
+      </description>
+    </release>
+    <release version="1.2.0" date="2026-08-15">
+      <description>
+        <p>Renamed all runtime and packaging references from arcticfox-config to cloudy-af for consistent branding.</p>
+      </description>
+    </release>
     <release version="1.14.1" date="2026-08-14">
       <description>
         <p>Flatpak permission hardening: removed the WebKit sandbox bypass, removed Flatpak spawn access, and allowed native Wayland use.</p>

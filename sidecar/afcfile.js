@@ -261,7 +261,9 @@ const enumPuffsTimeFormat = {
 const enumSkin = {
     0: 'Classic',
     1: 'Circle',
-    2: 'Foxy'
+    2: 'Foxy',
+    3: 'Small',
+    4: 'Medium'
 };
 
 const enumBatteryModel = {
@@ -533,6 +535,7 @@ class AfcFile {
             'Model.Interface.IsLogoEnabled': config.IsLogoEnabled,
             'Model.Interface.IsClockOnMainScreen': config.IsClockOnMainScreen,
             'Model.Interface.ClockType': enumClockType[config.ClockType],
+            'Model.Interface.ClockAnimation': config.ClockAnimation || 0,
             'Model.Interface.DimTimeout': config.DimTimeout,
             'Model.Interface.DimTimeoutLocked': config.DimTimeoutLocked,
             'Model.Interface.DimTimeoutCharging': config.DimTimeoutCharging,
@@ -1502,6 +1505,7 @@ class AfcFile {
             'Model.Interface.ChargeExtraType': (config, val) => config.ChargeExtraType = re(enumChargeExtraType, val),
             'Model.Interface.IsLogoEnabled': (config, val) => config.IsLogoEnabled = bool(val),
             'Model.Interface.ClockType': (config, val) => config.ClockType = re(enumClockType, val),
+            'Model.Interface.ClockAnimation': (config, val) => config.ClockAnimation = Number(val) || 0,
             'Model.Interface.IsClockOnMainScreen': (config, val) => config.IsClockOnMainScreen = bool(val),
             'Model.Interface.ScreensaveDuration': (config, val) => config.ScreensaveDuration = Number(val),
             'Model.Interface.PuffScreenDelay': (config, val) => config.PuffScreenDelay = Math.round(val / 10),
@@ -1731,7 +1735,7 @@ class AfcFile {
             'Model.Advanced.TFRTables[7].Points[6].Temperature': (config, val) => config.TFRTables[7].Points[6].Temperature = Number(val),
             'Model.Advanced.TFRTables[7].Points[6].Factor': (config, val) => config.TFRTables[7].Points[6].Factor = val / 10000,
 
-            'Model.Advanced.PuffCutOff': (config, val) => config.PuffCutOff = val / 10,
+            'Model.Advanced.PuffCutOff': (config, val) => config.PuffCutOff = Math.round(val / 10),
 
             'Model.Advanced.PowerCurves[0].Name': (config, val) => config.PowerCurves[0].Name = val,
             'Model.Advanced.PowerCurves[0].Points[0].Time': (config, val) => config.PowerCurves[0].Points[0].Time = val / 10,

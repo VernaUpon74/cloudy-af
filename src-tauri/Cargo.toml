@@ -1,15 +1,18 @@
 [package]
-name = "arcticfox-config"
-version = "1.14.0"
+name = "cloudy-af"
+version = "1.19.0"
 description = "Configuration Tool for Vape Battery Mods with Arcticfox Firmware"
-authors = ["Sebastian Raff"]
+authors = ["Sebastian Raff", "OneButtFarting"]
 license = "GPL-3.0"
-repository = "https://github.com/hobbyquaker/arcticfox-config"
+repository = "https://github.com/VernaUpon74/cloudy-af"
 edition = "2021"
 rust-version = "1.77.2"
+# The app binary (src/main.rs), not the src/bin/ development tools — tauri
+# bundling picks this for the desktop file's Exec= and the bundled binary.
+default-run = "cloudy-af"
 
 [lib]
-name = "arcticfox_config_lib"
+name = "cloudy_af_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -17,13 +20,25 @@ tauri-build = { version = "2.2.0", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# NOTE (ADR-007): release builds MUST enable tauri/custom-protocol, e.g.
+#   cargo build --release --features tauri/custom-protocol
+# Plain `cargo build --release` leaves the frontend assets un-embedded
+# (dev mode -> loads http://localhost:1420) and the flatpak then fails at
+# startup with "GDBus.Error:org.freedesktop.portal.Error.NotAllowed".
+# `npm run build:native` / `tauri build` handle this automatically.
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-os = "2"
 tauri-plugin-shell = "2"
+tauri-plugin-single-instance = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["process", "io-util", "sync", "rt", "macros"] }
 log = "0.4"
 base64 = "0.22"
 uuid = { version = "1", features = ["v4"] }
+thiserror = "2.0.20"
+quick-xml = "0.41"
+hidapi = "2.6.6"
+aes = "0.8"
+getrandom = "0.2"

@@ -11,6 +11,9 @@ body {
 
 .window-content {
     flex: 1 1 auto !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
     overflow: hidden !important;
 }
 
@@ -42,6 +45,8 @@ tr td {
     position: absolute;
     top: 26px;
     left: 0;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
 }
 
 #SelectedProfile {
@@ -98,13 +103,56 @@ tr:active {
     padding-top: 28px;
 }
 
-#table-material {
-    width: 240px;
-}
+
 
 .sparkline {
     height: 24px;
     width: 160px;
+}
+
+.tfr-sparkline {
+    height: 32px;
+    width: 100px;
+}
+
+/* Grid layout for Power Curves and Materials (matches original NToolbox). */
+.curve-grid {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 12px !important;
+    padding: 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+.curve-card {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 120px !important;
+    padding: 6px !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 4px !important;
+    background-color: var(--panel-color) !important;
+    cursor: pointer !important;
+}
+
+.curve-card:hover {
+    background-color: var(--hover-bg) !important;
+}
+
+.curve-preview {
+    width: 100px !important;
+    height: 48px !important;
+}
+
+.curve-label {
+    margin-top: 4px !important;
+    font-size: 11px !important;
+    text-align: center !important;
+    color: var(--fg-color) !important;
+    white-space: nowrap !important;
 }
 
 #startscreen {
@@ -136,7 +184,11 @@ tr:active {
 
 
 #version {
+    display: block;
     font-size: 10px;
+    text-align: center;
+    margin-top: 4px;
+    color: var(--fg-color);
 }
 
 /* Default dark mode overrides for Photon UI */
@@ -152,6 +204,25 @@ tr:active {
     --link-color: #4fc1ff;
     --disabled-bg: #2a2a2a;
     --disabled-fg: #808080;
+}
+
+/* Light mode follows the system/desktop theme (detected at boot, reacts to
+   theme switches). WebKitGTK resolves prefers-color-scheme through the
+   xdg-desktop-portal color-scheme setting. */
+@media (prefers-color-scheme: light) {
+    :root {
+        --bg-color: #ffffff;
+        --fg-color: #1e1e1e;
+        --panel-color: #f3f3f3;
+        --border-color: #c8c8c8;
+        --accent-color: #006ab1;
+        --input-bg: #ffffff;
+        --input-fg: #1e1e1e;
+        --hover-bg: #e4e6f0;
+        --link-color: #006ab1;
+        --disabled-bg: #f0f0f0;
+        --disabled-fg: #8a8a8a;
+    }
 }
 
 html,
@@ -171,10 +242,14 @@ body,
 .content-scale-wrap {
     display: flex !important;
     flex-direction: column !important;
-    width: 536px !important;
-    height: 100% !important;
-    transform: scale(var(--content-scale, 1)) !important;
-    transform-origin: top left !important;
+    width: var(--base-width, 536px) !important;
+    height: var(--base-content-height, 551px) !important;
+    /* `zoom` (WebKit-supported) re-lays-out and re-rasterizes text at the
+       final size, so scaled UI text stays crisp. The previous
+       `transform: scale(var(--content-scale))` upscaled a 1x raster,
+       which blurred text (most visible on the Advanced -> Settings page)
+       at the fractional fit factors computed by updateContentZoom(). */
+    zoom: var(--content-scale, 1);
     overflow: hidden !important;
 }
 
@@ -210,6 +285,14 @@ body,
 .toolbar-footer {
     position: relative !important;
     z-index: 10 !important;
+}
+
+/* Scale the Configuration dropdown and footer action buttons so they stay
+   visually consistent with the scaled content area. */
+#configuration-menu,
+.toolbar-footer .btn {
+    transform: scale(var(--content-scale, 1)) !important;
+    transform-origin: center center !important;
 }
 
 .toolbar-footer .toolbar-actions > .btn {
@@ -265,7 +348,7 @@ body,
 
 .tab-item {
     position: relative !important;
-    flex: 0 0 auto !important;
+    flex: 1 1 auto !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -284,6 +367,10 @@ body,
     background-image: none !important;
     cursor: default !important;
     box-sizing: border-box !important;
+}
+
+.tab-item-fixed {
+    flex: 0 0 auto !important;
 }
 
 .tab-item:after {
@@ -363,6 +450,33 @@ select option {
     color: var(--input-fg) !important;
 }
 
+/* Make the Configuration menu button look like the other dropdown selects
+   (e.g., Active Profile) instead of a Photon push button. */
+#configuration-menu {
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    background-color: var(--input-bg) !important;
+    color: var(--input-fg) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 4px !important;
+    padding: 2px 20px 2px 8px !important;
+    background-image: linear-gradient(45deg, transparent 50%, var(--fg-color) 50%),
+                      linear-gradient(135deg, var(--fg-color) 50%, transparent 50%) !important;
+    background-position: calc(100% - 10px) 50%, calc(100% - 6px) 50% !important;
+    background-size: 4px 4px, 4px 4px !important;
+    background-repeat: no-repeat !important;
+    box-shadow: none !important;
+    text-decoration: none !important;
+    font-size: 12px !important;
+    line-height: 1.2 !important;
+    height: 22px !important;
+}
+
+#configuration-menu::after {
+    display: none !important;
+}
+
 input:disabled,
 select:disabled,
 textarea:disabled,
@@ -440,7 +554,7 @@ hr {
 .list-group-item:focus,
 .list-group-item.active {
     background-color: var(--hover-bg) !important;
-    color: #ffffff !important;
+    color: var(--fg-color) !important;
 }
 
 label,
@@ -471,7 +585,7 @@ h6 {
 
 #configuration-menu-dropdown li:hover {
     background-color: var(--hover-bg) !important;
-    color: #ffffff !important;
+    color: var(--fg-color) !important;
 }
 
 /* Scrollbars in WebKit */
@@ -507,4 +621,72 @@ h6 {
     pointer-events: auto;
     user-select: none;
     -webkit-user-drag: none;
+}
+
+/* NToolbox-style Layout page: replaces the removed five-mode tab bar with a
+   static caption naming the active screen mode. The single subview below it is
+   switched by uiScreenLayoutView() from config.MainScreenSkin. */
+.mode-bar {
+    display: flex !important;
+    align-items: center !important;
+    height: 26px !important;
+    width: 100%;
+    padding: 2px 4px !important;
+    box-sizing: border-box !important;
+    background-color: var(--panel-color) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
+.mode-bar .layout-mode-label {
+    display: inline-flex !important;
+    align-items: center !important;
+    font-size: 12px !important;
+    color: var(--input-fg) !important;
+    gap: 4px !important;
+}
+
+.mode-bar .layout-mode-label strong {
+    color: var(--accent-color) !important;
+}
+
+/* NToolbox-style Shortcuts (VW / TC): arrange the four shortcut contexts
+   (In Standby, In Menu, In Edit, In Profile Select) as a 2x2 grid instead of
+   stacking them vertically. Each cell is a titled table. */
+.shortcut-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 8px 16px !important;
+    padding: 4px 8px 12px 8px !important;
+    box-sizing: border-box !important;
+}
+
+.shortcut-grid .shortcut-cell h5 {
+    padding-left: 12px;
+    margin: 8px 0 4px 0;
+}
+
+.shortcut-grid .shortcut-cell table {
+    width: 100%;
+    margin: 0;
+}
+
+.shortcut-grid .shortcut-cell table td {
+    padding: 2px 6px;
+    white-space: nowrap;
+}
+
+.shortcut-grid .shortcut-cell table td.c1,
+.shortcut-grid .shortcut-cell table td.s1 {
+    width: 64px;
+}
+
+.shortcut-grid .shortcut-cell table td.c2 {
+    width: auto;
+}
+
+.shortcut-grid .shortcut-cell table td select {
+    min-width: 120px;
+    width: 100%;
+    box-sizing: border-box;
 }

@@ -1,0 +1,16 @@
+{
+  "lines": {
+    "nuvoton": { "product_ids": ["E043","E052","E056","E060","E079","E083","E092","E115","E118","E150","E166","E169","E182","E196","E198","E203","E235","E239","E248","E260","E289","J001","J012","J056","J059","J070","J075","J087","J088","J113","J129","J135","M011","M037","M038","M041","M045","M046","M064","M065","M070","M073","M074","M077","M091","M095","M105","M111","M114","M167","M972","M973","W007","W010","W011","W013","W014","W016","W017","W018","W026","W033","W043","W057","W069","W073","W078","W084","W091"], "usb": { "vid": "0x0416", "pid": "0x5020" } },
+    "stm32": { "product_ids": ["M149","M172","M177"], "usb": { "vid": "0x0483", "pid": "0x5750" } }
+  },
+  "rescue": [
+    { "id": "istick_pico_v100", "file": "istick_pico_v100.bin", "product_ids": ["M041"], "label": "Eleaf iStick Pico V1.00 (original manufacturer firmware)" },
+    { "id": "istick_pico_25_v105", "file": "istick_pico_25_v105.bin", "product_ids": ["M011","M037","M038","M045","M046","M064","M065","M070","M073","M074","M077","M091","M095","M105","M111","M114","M972","M973"], "label": "Eleaf iStick Pico 25 V1.05 (original manufacturer firmware; stock loop-breaker for Eleaf Nuvoton devices)" }
+  ],
+  "builds": [
+    { "id": "af_170222", "file": "af_170222.bin", "line": "nuvoton", "fw_versions": [] },
+    { "id": "af_180913", "file": "af_180913.bin", "line": "nuvoton", "fw_versions": [] },
+    { "id": "af_190602", "file": "af_190602.bin", "line": "nuvoton", "fw_versions": [110] },
+    { "id": "af_211009", "file": "af_211009.bin", "line": "stm32",    "fw_versions": [] }
+  ]
+}

@@ -4,7 +4,8 @@
 > The project is Cloudy AF (originally Arcticfox Config), a Linux desktop configuration utility for vape battery mods that run the ArcticFox firmware. It is a community fork that modernizes the decade-old Electron-based app into a Tauri desktop application, packaged as a Flatpak.
 
   This fork reworks hobbyquaker's Electron-based Linux/macOS [project](https://github.com/hobbyquaker/arcticfox-config) as a Rust [Tauri](https://tauri.app/) desktop app, packaging it as a sandboxed [Flatpak](https://flatpak.org) image for Linux, permission-controllable (through [Flatseal](https://github.com/tchx84/Flatseal)), because current npm is a minefield, Wine USB passthrough is a headache, and so is creating Windows VMs.
-  The fork also adds quality-of-life improvements such as window scaling, an eternally dark UI, Freedom Unit selection that works (original defaulted to Celsius and capped F at 400), Autofire as a multi-click/shortcut option, device auto-reconnect, and a "Lite" appearance mode for small devices.
+  The fork also adds quality-of-life improvements such as built-in Device Monitor, light/dark UI detection, window scaling, Freedom Unit selection that works (original defaulted to Celsius and capped F at 400), enhanced tooltip description, device auto-reconnect, a "Lite" appearance mode for small devices with all five ArcticFox skins available on large displays, STM32 support and a Firmware Editor.
+  Planned developments include unique device timeout and charge animations- proving complicated.
 
 ![demo](demo.png)
 ![Screenshot](Screenshot.png)
@@ -16,22 +17,23 @@
 
 Pre-built Flatpak bundle is available on the
 [releases page](https://github.com/VernaUpon74/cloudy-af/releases/)
-and in the local `builds/` directory after running the build scripts. 
-
-Or click [here](https://github.com/VernaUpon74/cloudy-af/releases/download/v1.14.1-flatpak/cloudy-af.flatpak) for a direct link.
+and in the local `builds/` directory after running the build scripts.
 
 Portable Appimage binary also provided on the releases page. Installable .deb and .rpm files can be found there as well. And in the local `builds/` directory after running the build scripts.
 
-#### Install from the '.flatpak' bundle after downloading
-
-```bash
-flatpak install --user ~/Downloads/cloudy-af.flatpak
-```
-<!-- I'll start using the preview tab more instead of all these commits-->
 #### Install from the `.flatpak` bundle after building from source
 
 ```bash
 flatpak install --user builds/cloudy-af.flatpak
+```
+
+#### Install from the local Flatpak repository
+
+If you built the Flatpak locally, add the local repository and install from it:
+
+```bash
+flatpak remote-add --user --no-gpg-verify cloudy-af-repo flatpak/repo
+flatpak install --user cloudy-af-repo org.cloudy.af
 ```
 
 #### Run
@@ -40,10 +42,10 @@ flatpak install --user builds/cloudy-af.flatpak
 flatpak run org.cloudy.af
 ```
 
-#### USB permissions- use if device not connecting
+#### USB permissions
 
 The Flatpak manifest requests `--device=all`, but HID access also requires udev rules for
-unprivileged users. Install the provided rules after downloading source:
+unprivileged users. Install the provided rules:
 
 ```bash
 sudo cp flatpak/50-cloudy-af.rules /etc/udev/rules.d/
@@ -68,8 +70,8 @@ Native Linux packages are produced by `scripts/build-appimage.sh` and placed in 
 Make the file executable and run it:
 
 ```bash
-chmod +x builds/Cloudy_AF-1.14.1-x86_64.AppImage
-./builds/Cloudy_AF-1.14.1-x86_64.AppImage
+chmod +x builds/Cloudy_AF-1.2.0-x86_64.AppImage
+./builds/Cloudy_AF-1.2.0-x86_64.AppImage
 ```
 
 The AppImage uses a static runtime and works on systems with only FUSE3.
@@ -78,10 +80,10 @@ The AppImage uses a static runtime and works on systems with only FUSE3.
 
 ```bash
 # Debian / Ubuntu
-sudo apt install ./builds/Cloudy\ AF_1.14.1_amd64.deb
+sudo apt install ./builds/Cloudy\ AF_1.2.0_amd64.deb
 
 # Fedora
-sudo dnf install ./builds/Cloudy\ AF-1.14.1-1.x86_64.rpm
+sudo dnf install ./builds/Cloudy\ AF-1.2.0-1.x86_64.rpm
 ```
 
 #### USB permissions
@@ -172,7 +174,7 @@ The AppImage / .deb / .rpm build script also copies completed packages to `build
 
 ```bash
 cd flatpak
-flatpak-builder --force-clean --repo=repo build-dir org.cloudy.af.yml
+flatpak-builder --disable-rofiles-fuse --force-clean --repo=repo build-dir org.cloudy.af.yml
 flatpak build-bundle repo cloudy-af.flatpak org.cloudy.af
 mv cloudy-af.flatpak ../builds/
 ```
@@ -186,17 +188,72 @@ npm run appimage:build
 
 All native Linux packages are copied to `builds/`.
 
+> The AppImage build script runs Tauri's release build inside the org.gnome.Sdk
+> Flatpak runtime, so the host does not need GTK/WebKit development headers.
+> `scripts/build-appimage.sh` will reuse freshly built Flatpak binary, sidecar,
+> and Node runtime artifacts when they are present.
+
 ## Usage
 
 Start the application and connect your ArcticFox device. The app will automatically detect the
 device and download its configuration. Use the tabs to edit profiles, power curves, TFR tables,
 and device settings, then click **Upload** to write the configuration back to the device.
 
+All ArcticFox-compatible devices are supported (Joyetech eVic/Cuboid/eGrip, Eleaf iStick,
+Wismec Presa/Reuleaux, Vaporflask, and friends) — they all share the same Nuvoton HID
+bootloader interface (VID `0x0416` / PID `0x5020`) and are told apart by the Product ID
+string in the device dataflash.
+
+## Firmware encryption (VandalProof)
+
+ArcticFox firmware update packages (`af_*.bin`, 2018 and later) are encrypted with
+"VandalProof": AES-128-CBC, the first 16 bytes of the file are the IV, PKCS7 padding.
+The AES key is the 16 ASCII bytes of the string **`FA89412D87B0EFD9`**
+(key bytes hex: `46 41 38 39 34 31 32 44 38 37 42 30 45 46 44 39`), recovered from
+NFirmwareEditor's obfuscated loader. Full format and provenance:
+[docs/vandalproof-encryption.md](docs/vandalproof-encryption.md). The app decrypts these
+packages in-app; they can also be flashed as-is (the on-device LDROM updater decrypts them).
+
 ## Debug
 
-Work in progress. Issues welcome.  
+If no device is detected, follow the USB permissions instructions above.
 
-If no device detected, follow the USB permissions instruction above.
+### Native binary fails with `libwebkit2gtk-4.1.so.0: cannot open shared object file`
+
+The native Linux binary needs the system's WebKitGTK 4.1 runtime libraries:
+
+```bash
+# Fedora / RPM-based
+sudo dnf install webkit2gtk4.1
+
+# Debian / Ubuntu / apt-based
+sudo apt install libwebkit2gtk-4.1-0
+```
+
+### WebKit crashes on NVIDIA (`WebKitWebProcess` ABRT in `libnvidia-gpucomp`)
+
+The default package keeps WebKit's internal WebProcess/GPU sandbox enabled.
+On some NVIDIA systems this sandbox conflicts with the driver and the webview
+process aborts. Two runtime workarounds are available; try the first one
+before the second because it keeps the sandbox intact.
+
+1. **Software rendering** (keeps the sandbox):
+   ```bash
+   ./builds/cloudy-af --software-rendering
+   # Flatpak
+   flatpak run --env=WEBKIT_FORCE_SOFTWARE_RENDERING=1 org.cloudy.af
+   # AppImage
+   WEBKIT_FORCE_SOFTWARE_RENDERING=1 ./builds/Cloudy_AF-1.2.0-x86_64.AppImage
+   ```
+
+2. **Disable the WebKit sandbox** (last resort):
+   ```bash
+   ./builds/cloudy-af --disable-webkit-sandbox
+   # Flatpak
+   flatpak run --env=WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 org.cloudy.af
+   # AppImage
+   WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 ./builds/Cloudy_AF-1.2.0-x86_64.AppImage
+   ```
 
 ## Project structure
 
@@ -233,25 +290,22 @@ Notable changes include:
 - Dark UI by default. Up Material UIrs
 - Window scaling
 - Freedom units by default
+- Removed Coil Material gobbledygook, TFR list back. She's got curves, baby.
 - Autofire added to multi-click / shortcut dropdowns
 - Device auto-reconnect on unexpected disconnect
 - Lite mode support in Appearance settings
+- All five ArcticFox main-screen skins (Small/Medium included) with an NToolbox-style active-mode Layout page
+- Shortcuts (VW/TC) arranged as a 2×2 grid; Puff Cut-Off steps in whole seconds
 - Hover tooltips on all settings rows (specific vape-function descriptions where available)
 - Dependency security updates (`highcharts` 9.x, `xml2js` 0.6.2, local `put` replacement)
-wabe-sabe
+- Firmware Editor: open/edit/patch/flash ArcticFox firmware images (all encryption schemes, incl. VandalProof), with an emergency recovery flasher
+- Support for every ArcticFox-compatible device (47 Product IDs: Joyetech, Eleaf, Wismec, Vaporflask…), not just the iStick Pico
+
 
 Planned developments include:
-- Firmware update tool- coming next update
-- Screen animations in NFirmwareEditor 'Patches' port- also coming next update, fw encryption cracked
-- 'Resource Editor' NFirmwareEditor feature port- screensaver, logo, text editor
-- Better 'Power Curve/Materials' plot visualizer, fix text
-- Temperature field jump by 10 or 5 degrees, dependent on unit chosen in Screen->Regional. Temp unit no longer changed in Profiles
-- Surefire Rim C/STM32 support, not just Picos
-- Remove boot version text wabi-sabi
-- Exterminate bugs
-- Fix Appimage
-- ~~Auto TFR curve plotting~~ scrapped, no suitable USB K-type thermocouple adapter found
-- Remove Herobrine
+- Screen animations
+- Auto TFR curve plotting
+- Device Monitor (live device telemetry window like NToolbox's; the in-progress firmware emulation harness — `src-tauri/src/firmware/emu/` — will be used to replicate its rendering behaviour)
 
 ## Contributing
 

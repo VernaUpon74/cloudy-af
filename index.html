@@ -8,21 +8,21 @@
   <body>
   <div id="startscreen">
     <h5>Cloudy AF</h5>
-    <span id="version"></span>
     <p style="position: relative; display: inline-block; width: 192px; height: 192px; cursor: pointer;" id="boot-icon-stack">
       <img id="boot-icon" src="icon.png" width="256" style="position: absolute; top: 0; left: 0; width: 192px; height: 192px; object-fit: contain; transition: opacity 0.22s ease; transform-origin: center center;">
       <img id="boot-icon-alt" src="Tux&Foxx.png" width="256" style="position: absolute; top: 0; left: 0; width: 192px; height: 192px; object-fit: contain; opacity: 0; transition: opacity 0.22s ease; transform-origin: center center; pointer-events: none;">
     </p>
+    <span id="version"></span>
     <p data-lang="Message.ConnectDevice"></p>
     <p>&nbsp;</p>
     <p>
-      <a id="link-download" href="#" data-lang="ConnectAndDownloadLink">Connect and Download configuration</a>
+      <a id="link-download" href="#" data-lang="ConnectAndDownloadLink" data-lang-title="Tooltips.ConnectDownload">Connect and Download configuration</a>
     </p>
     <p>
-      <a id="link-new" href="#" data-lang="NewConfigurationLink">Create new configuration</a>
+      <a id="link-new" href="#" data-lang="NewConfigurationLink" data-lang-title="Tooltips.NewConfig">Create new configuration</a>
     </p>
     <p>
-      <a id="link-open" href="#" data-lang="OpenConfigurationLink">Open existing configuration</a>
+      <a id="link-open" href="#" data-lang="OpenConfigurationLink" data-lang-title="Tooltips.OpenConfig">Open existing configuration</a>
     </p>
   </div>
   <div class="window">
@@ -34,29 +34,29 @@
       <div class="toolbar-actions">
         <span data-lang="FWVerLabel">Firmware Ver:</span> <input size="8" type="text" class="fox-val" id="FirmwareBuild" disabled>
         <span data-lang="HWVerLabel">HW Ver:</span> <input size="8" type="text" class="fox-val" id="HardwareVersion" disabled>
-        <button id="configuration-menu" class="btn btn-default btn-dropdown pull-right" data-lang="ConfigurationButton">
+        <button id="configuration-menu" class="btn btn-default btn-dropdown pull-right" data-lang="ConfigurationButton" data-lang-title="Tooltips.ConfigurationMenu">
           Configuration
         </button>
       </div>
     </header>
 
     <div class="tab-group" id="main">
-      <div class="tab-item active" data-view="profiles" data-lang="ProfilesTab">
+      <div class="tab-item active" data-view="profiles" data-lang="ProfilesTab" data-lang-title="Tooltips.ProfilesTab">
         Profiles
       </div>
-      <div class="tab-item" data-view="screen" data-lang="ScreenTab">
+      <div class="tab-item" data-view="screen" data-lang="ScreenTab" data-lang-title="Tooltips.ScreenTab">
         Screen
       </div>
-      <div class="tab-item" data-view="controls" data-lang="ControlsTab">
+      <div class="tab-item" data-view="controls" data-lang="ControlsTab" data-lang-title="Tooltips.ControlsTab">
         Controls
       </div>
-      <div class="tab-item" data-view="smart" data-lang="SmartTab">
+      <div class="tab-item" data-view="smart" data-lang="SmartTab" data-lang-title="Tooltips.SmartTab">
         Smart
       </div>
-      <div class="tab-item" data-view="advanced" data-lang="AdvancedTab">
+      <div class="tab-item" data-view="advanced" data-lang="AdvancedTab" data-lang-title="Tooltips.AdvancedTab">
         Advanced
       </div>
-      <div class="tab-item" data-view="stats" data-lang="StatsTab">
+      <div class="tab-item" data-view="stats" data-lang="StatsTab" data-lang-title="Tooltips.StatsTab">
         Stats
       </div>
     </div>
@@ -107,7 +107,7 @@
           <div>
             <div style="height: 16px"></div>
             <table id="table-profiles">
-              <tr>
+              <tr data-lang-title="Tooltips.Enabled">
                 <td class="c1">Profile</td>
                 <td class="c2">
                   <div class="checkbox">
@@ -119,7 +119,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.ProfileName">
                 <td class="c1" data-lang="Profile.NameLabel">Name</td>
                 <td class="c2">
                   <input class="fox-pval" type="text" id="Name" maxlength="8">
@@ -127,7 +127,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.Power">
                 <td class="c1" data-lang="Profile.PowerLabel">Power</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="Power"> W
@@ -135,7 +135,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.Power1WStep">
                 <td class="c1" data-lang="Controls.Settings.Power1WStepLabel">Power 1W Step</td>
                 <td class="c2">
                   <div class="checkbox">
@@ -148,7 +148,7 @@
                 <td class="c4"></td>
               </tr>
 
-              <tr>
+              <tr data-lang-title="Tooltips.PreheatType">
                 <td class="c1" data-lang="Profile.PreheatTypeLabel">Preheat Type</td>
                 <td class="c2">
                   <select class="fox-pval" id="PreheatType">
@@ -160,7 +160,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr class="fox-notcurve">
+              <tr class="fox-notcurve" data-lang-title="Tooltips.PreheatPower">
                 <td class="c1" data-lang="Profile.PreheatPowerLabel">Preheat Power</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="PreheatPower">
@@ -169,7 +169,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr class="fox-curveonly">
+              <tr class="fox-curveonly" data-lang-title="Tooltips.PreheatCurve">
                 <td class="c1" data-lang="Profile.PreheatCurveLabel">Preheat Curve</td>
                 <td class="c2">
                  <select class="fox-pval" id="SelectedCurve">
@@ -181,7 +181,7 @@
                 </td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.PreheatTime">
                 <td class="c1" data-lang="Profile.PreheatTimeLabel">Preheat Time</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="PreheatTime"> s
@@ -189,7 +189,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.PreheatDelay">
                 <td class="c1" data-lang="Profile.PreheatDelayLabel">Preheat Delay</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="PreheatDelay"> s
@@ -197,7 +197,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.Resistance">
                 <td class="c1" data-lang="Profile.ResistanceLabel">Resistance</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="Resistance"> &#8486;
@@ -209,7 +209,7 @@
                 </td>
                 <td class="c4"></td>
               </tr>
-              <tr>
+              <tr data-lang-title="Tooltips.VapeMode">
                 <td class="c1" data-lang="Profile.ModeLabel">Mode</td>
                 <td class="c2">
                   <select class="fox-pval" id="mode">
@@ -222,7 +222,7 @@
                 </td>
                 <td class="c4"></td>
               </tr>
-              <tr class="fox-tconly">
+              <tr class="fox-tconly" data-lang-title="Tooltips.CoilMaterial">
                 <td class="c1" data-label="Profile.CoilMaterialLabel">Coil Material</td>
                 <td class="c2">
                   <select class="fox-pval" id="Material">
@@ -234,23 +234,20 @@
                 </td>
                 <td class="c4"></td>
               </tr>
-              <!-- DEVIATION: The IsCelcius selector is not present in the original fork.
-                   It controls bit 0x20 of the profile Flags field, supported by current
-                   ArcticFox firmware builds. -->
-              <tr class="fox-tconly">
+              <!-- DEVIATION: The per-profile IsCelcius selector is replaced with a
+                   read-only unit label derived from the global TemperatureUnits
+                   regional setting (0 = °F, 1 = °C). -->
+              <tr class="fox-tconly" data-lang-title="Tooltips.Temperature">
                 <td class="c1" data-lang="Profile.TemperatureLabel">Temperature</td>
                 <td class="c2">
                   <input class="fox-pval" type="number" id="Temperature">
                 </td>
                 <td class="c3">
-                  <select class="fox-pval" id="IsCelcius">
-                    <option value="true">°C</option>
-                    <option value="false" selected="selected">°F</option>
-                  </select>
+                  <span class="fox-pval" id="IsCelcius" style="font-weight: bold;"></span>
                 </td>
                 <td class="c4"></td>
               </tr>
-              <tr class="fox-tconly">
+              <tr class="fox-tconly" data-lang-title="Tooltips.Temp1C2FStep">
                 <td class="c1" data-lang="Controls.Settings.Temperature1C2FStepLabel">Temp 1°C/2°F Step</td>
                 <td class="c2">
                   <div class="checkbox">
@@ -262,7 +259,7 @@
                 <td class="c3"></td>
                 <td class="c4"></td>
               </tr>
-              <tr class="fox-tconly">
+              <tr class="fox-tconly" data-lang-title="Tooltips.TDom">
                 <td class="c1"></td>
                 <td class="c2">
                   <div class="checkbox">
@@ -301,7 +298,7 @@
             <div class="subview" id="view-screen-settings">
               <div style="height: 28px"></div>
               <table id="table-screen-settings">
-                <tr>
+                <tr data-lang-title="Tooltips.Brightness">
                   <td class="c1" data-lang="Screen.Settings.BrightnessLabel">Brightness</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="Brightness" min="0" max="100" step="1"> %
@@ -309,7 +306,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.IdleTime">
                   <td class="c1" data-lang="Screen.Settings.IdleTimeLabel">Idle Time</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="DimTimeout" min="5" max="60" step="1"> s
@@ -317,7 +314,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.IdleTimeLocked">
                   <td class="c1" data-lang="Screen.Settings.IdleTimeLockedLabel">Idle Time (Locked)</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="DimTimeoutLocked" min="5" max="60" step="1"> s
@@ -325,7 +322,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.IdleTimeCharging">
                   <td class="c1" data-lang="Screen.Settings.IdleTimeChargingLabel">Idle Time (Charging)</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="DimTimeoutCharging" min="0" max="60" step="1"> s
@@ -333,7 +330,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.PuffScreenDelay">
                   <td class="c1" data-lang="Screen.Settings.PuffScreenDelayLabel">Puff Screen Delay</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="PuffScreenDelay" min="0" max="5" step="0.1"> s
@@ -341,7 +338,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.Flipped">
                   <td class="c1" data-lang="Screen.Settings.FlippedLabel">Flipped</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -359,7 +356,7 @@
             <div class="subview" id="view-screen-appearance" style="display:none">
               <div style="height: 28px"></div>
               <table id="table-screen-appearance">
-                <tr>
+                <tr data-lang-title="Tooltips.MainScreenSkin">
                   <td class="c1" data-lang="Screen.Appearance.MainScreenSkinLabel">Main Screen Skin</td>
                   <td class="c2">
                     <select class="fox-val" id="MainScreenSkin">
@@ -383,7 +380,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.LogoDelay">
                   <td class="c1" data-lang="Screen.Appearance.LogoDelayLabel">Logo Delay</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="ShowLogoDelay" min="1" max="60" step="1"> <span data-lang="SecondsLabel">s</span>
@@ -403,7 +400,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ClockDelay">
                   <td class="c1" data-lang="Screen.Appearance.ClockDelayLabel">Clock Delay</td>
                   <td class="c2">
                     <input class="fox-val" type="number" id="ShowClockDelay" min="1" max="60" step="1"> <span data-lang="SecondsLabel">s</span>
@@ -411,7 +408,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ClockType">
                   <td class="c1" data-lang="Screen.Appearance.ClockTypeLabel">Clock Type</td>
                   <td class="c2">
                     <select class="fox-val" id="ClockType">
@@ -423,6 +420,20 @@
                   <td class="c4"></td>
                 </tr>
                 <tr>
+                  <td class="c1" data-lang="Screen.Appearance.ClockAnimationLabel">Clock Animation</td>
+                  <td class="c2">
+                    <!-- Disabled until VandalProof firmware decryption/patching lands. -->
+                    <select class="fox-val" id="ClockAnimation" disabled data-lang-title="Animation.ComingSoon" title="Requires firmware patch support (coming soon)">
+                      <option value="0" data-lang="Animation.Off">Off</option>
+                      <option value="1" data-lang="Animation.Swirl">Swirl</option>
+                      <option value="2" data-lang="Animation.GradientFade">Gradient Fade</option>
+                      <option value="3" data-lang="Animation.RipplingWave">Rippling Wave</option>
+                    </select>
+                  </td>
+                  <td class="c3"></td>
+                  <td class="c4"></td>
+                </tr>
+                <tr data-lang-title="Tooltips.ChargeScreen">
                   <td class="c1" data-lang="Screen.Appearance.ChargeScreenLabel">Charge Screen</td>
                   <td class="c2">
                     <select class="fox-val" id="ChargeScreenType">
@@ -433,7 +444,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ChargeExtra">
                   <td class="c1" data-lang="Screen.Appearance.ChargeExtraLabel">Charge Extra</td>
                   <td class="c2">
                     <select class="fox-val" id="ChargeExtraType">
@@ -446,7 +457,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ScreensaverTime">
                   <td class="c1" data-lang="Screen.Appearance.ScreensaverTimeLabel">Screensaver Time</td>
                   <td class="c2">
                     <input class="fox-val" id="ScreensaveDuration" type="number" min="0" max="30" step="1">
@@ -460,21 +471,14 @@
             </div>
 
             <div class="subview" id="view-screen-layout" style="display:none">
-              <div class="tab-group" id="screen-layout">
-                <div class="tab-item" data-view="screen-layout-classic" data-lang="Skin.Classic">
-                  Classic
-                </div>
-                <div class="tab-item" data-view="screen-layout-circle" data-lang="Skin.Circle">
-                  Circle
-                </div>
-                <div class="tab-item" data-view="screen-layout-foxy" data-lang="Skin.Foxy">
-                  Foxy
-                </div>
-                <div class="tab-item" data-view="screen-layout-small" data-lang="Skin.Small">
-                  Small
-                </div>
-                <div class="tab-item" data-view="screen-layout-medium" data-lang="Skin.Medium">
-                  Medium
+              <!-- NToolbox-style: the Layout page shows fields only for the active
+                   screen mode (selected via Appearance → Main Screen Skin). The old
+                   manual five-mode tab bar is gone; the single subview below is
+                   switched by uiScreenLayoutView() from config.MainScreenSkin. -->
+              <div class="mode-bar" id="layout-mode-bar" style="display:none">
+                <div class="layout-mode-label">
+                  <span data-lang="Screen.Layout.ActiveModeLabel">Active mode:</span>
+                  <strong id="layout-mode-name"></strong>
                 </div>
               </div>
 
@@ -483,7 +487,7 @@
                   <div style="height: 16px"></div>
                   <h5 style="padding-left: 12px" data-lang="Screen.Layout.VWModeLayoutLabel">VW</h5>
                   <table id="table-screen-layout-classic">
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">VW Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinVWLine1">
@@ -510,13 +514,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="ClassicSkinVWLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="ClassicSkinVWLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">VW Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinVWLine2">
@@ -543,13 +547,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="ClassicSkinVWLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="ClassicSkinVWLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">VW Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinVWLine3">
@@ -576,13 +580,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="ClassicSkinVWLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="ClassicSkinVWLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line4Label">VW Line 4</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinVWLine4">
@@ -609,7 +613,7 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="ClassicSkinVWLine4Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="ClassicSkinVWLine4Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
@@ -618,7 +622,7 @@
                     </table>
                     <h5 style="padding-left: 12px" data-lang="Screen.Layout.TCModeLayoutLabel">TC</h5>
                     <table>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">TC Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinTCLine1">
@@ -645,13 +649,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="ClassicSkinTCLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="ClassicSkinTCLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">TC Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinTCLine2">
@@ -678,13 +682,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="ClassicSkinTCLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="ClassicSkinTCLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">TC Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinTCLine3">
@@ -710,12 +714,12 @@
                       </td>
                       <td class="c3"><div class="checkbox">
                         <label>
-                          <input class="fox-val" type="checkbox" id="ClassicSkinTCLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                          <input class="fox-val" type="checkbox" id="ClassicSkinTCLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                         </label>
                       </div></td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line4Label">TC Line 4</td>
                       <td class="c2">
                         <select class="fox-val" id="ClassicSkinTCLine4">
@@ -742,7 +746,7 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="ClassicSkinTCLine4Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="ClassicSkinTCLine4Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
@@ -755,7 +759,7 @@
                   <div style="height: 16px"></div>
                   <h5 style="padding-left: 12px" data-lang="Screen.Layout.VWModeLayoutLabel">VW</h5>
                   <table id="table-screen-layout-circle">
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">VW Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="CircleSkinVWLine1">
@@ -777,7 +781,7 @@
                       <td class="c3"></td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">VW Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="CircleSkinVWLine2">
@@ -799,7 +803,7 @@
                       <td class="c3"></td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">VW Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="CircleSkinVWLine3">
@@ -811,7 +815,7 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="CircleSkinVWLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="CircleSkinVWLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
@@ -820,7 +824,7 @@
                   </table>
                   <h5 style="padding-left: 12px" data-lang="Screen.Layout.TCModeLayoutLabel">TC</h5>
                   <table>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">TC Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="CircleSkinTCLine1">
@@ -842,7 +846,7 @@
                       <td class="c3"></td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">TC Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="CircleSkinTCLine2">
@@ -864,7 +868,7 @@
                       <td class="c3"></td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">TC Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="CircleSkinTCLine3">
@@ -875,7 +879,7 @@
                       </td>
                       <td class="c3"><div class="checkbox">
                         <label>
-                          <input class="fox-val" type="checkbox" id="CircleSkinTCLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                          <input class="fox-val" type="checkbox" id="CircleSkinTCLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                         </label>
                       </div></td>
                       <td class="c4"></td>
@@ -888,7 +892,7 @@
                   <div style="height: 16px"></div>
                    <h5 style="padding-left: 12px" data-lang="Screen.Layout.VWModeLayoutLabel">VW</h5>
                   <table id="table-screen-layout-foxy">
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">VW Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="FoxySkinVWLine1">
@@ -908,13 +912,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="FoxySkinVWLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="FoxySkinVWLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">VW Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="FoxySkinVWLine2">
@@ -934,13 +938,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="FoxySkinVWLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="FoxySkinVWLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">VW Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="FoxySkinVWLine3">
@@ -960,7 +964,7 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="FoxySkinVWLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="FoxySkinVWLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
@@ -969,7 +973,7 @@
                   </table>
                   <h5 style="padding-left: 12px" data-lang="Screen.Layout.TCModeLayoutLabel">TC</h5>
                   <table>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">TC Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="FoxySkinTCLine1">
@@ -989,13 +993,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="FoxySkinTCLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="FoxySkinTCLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">TC Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="FoxySkinTCLine2">
@@ -1015,13 +1019,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="FoxySkinTCLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="FoxySkinTCLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">TC Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="FoxySkinTCLine3">
@@ -1040,7 +1044,7 @@
                       </td>
                       <td class="c3"><div class="checkbox">
                         <label>
-                          <input class="fox-val" type="checkbox" id="FoxySkinTCLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                          <input class="fox-val" type="checkbox" id="FoxySkinTCLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                         </label>
                       </div></td>
                       <td class="c4"></td>
@@ -1052,7 +1056,7 @@
                   <div style="height: 16px"></div>
                    <h5 style="padding-left: 12px" data-lang="Screen.Layout.VWModeLayoutLabel">VW</h5>
                   <table id="table-screen-layout-small">
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">VW Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="SmallSkinVWLine1">
@@ -1074,13 +1078,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="SmallSkinVWLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="SmallSkinVWLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">VW Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="SmallSkinVWLine2">
@@ -1102,7 +1106,7 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="SmallSkinVWLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="SmallSkinVWLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
@@ -1111,7 +1115,7 @@
                   </table>
                    <h5 style="padding-left: 12px" data-lang="Screen.Layout.TCModeLayoutLabel">TC</h5>
                   <table>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">TC Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="SmallSkinTCLine1">
@@ -1133,13 +1137,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="SmallSkinTCLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="SmallSkinTCLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">TC Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="SmallSkinTCLine2">
@@ -1161,7 +1165,7 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="SmallSkinTCLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="SmallSkinTCLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
@@ -1174,7 +1178,7 @@
                   <div style="height: 16px"></div>
                   <h5 style="padding-left: 12px" data-lang="Screen.Layout.VWModeLayoutLabel">VW</h5>
                   <table id="table-screen-layout-medium">
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">VW Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="MediumSkinVWLine1">
@@ -1196,13 +1200,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="MediumSkinVWLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="MediumSkinVWLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">VW Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="MediumSkinVWLine2">
@@ -1224,13 +1228,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="MediumSkinVWLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="MediumSkinVWLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">VW Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="MediumSkinVWLine3">
@@ -1252,7 +1256,7 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="MediumSkinVWLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="MediumSkinVWLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
@@ -1261,7 +1265,7 @@
                   </table>
                   <h5 style="padding-left: 12px" data-lang="Screen.Layout.TCModeLayoutLabel">TC</h5>
                   <table>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line1Label">TC Line 1</td>
                       <td class="c2">
                         <select class="fox-val" id="MediumSkinTCLine1">
@@ -1283,13 +1287,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="MediumSkinTCLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="MediumSkinTCLine1Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line2Label">TC Line 2</td>
                       <td class="c2">
                         <select class="fox-val" id="MediumSkinTCLine2">
@@ -1311,13 +1315,13 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="MediumSkinTCLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="MediumSkinTCLine2Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
                       <td class="c4"></td>
                     </tr>
-                    <tr>
+                    <tr data-lang-title="Tooltips.InfoLine">
                       <td class="c1" data-lang="Screen.Layout.Line3Label">TC Line 3</td>
                       <td class="c2">
                         <select class="fox-val" id="MediumSkinTCLine3">
@@ -1339,7 +1343,7 @@
                       <td class="c3">
                         <div class="checkbox">
                           <label>
-                            <input class="fox-val" type="checkbox" id="MediumSkinTCLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel">Puff Time</span>
+                            <input class="fox-val" type="checkbox" id="MediumSkinTCLine3Puff"> <span data-lang="Screen.Layout.PuffTimeLabel" data-lang-title="Tooltips.PuffTime">Puff Time</span>
                           </label>
                         </div>
                       </td>
@@ -1353,7 +1357,7 @@
             <div class="subview" id="view-screen-stealth" style="display:none">
               <div style="height: 28px"></div>
               <table id="table-screen-stealth">
-                <tr>
+                <tr data-lang-title="Tooltips.StealthMode">
                   <td class="c1" data-lang="Screen.Stealth.StealthModeLabel">Stealth Mode</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1365,7 +1369,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ShowCharging">
                   <td class="c1" data-lang="Screen.Stealth.ShowChargingLabel">Show Charging</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1377,7 +1381,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.ShowScreensaver">
                   <td class="c1" data-lang="Screen.Stealth.ShowScreensaverLabel">Show Screensaver</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1395,7 +1399,7 @@
             <div class="subview" id="view-screen-regional" style="display:none">
               <div style="height: 28px"></div>
               <table id="table-screen-regional">
-                <tr>
+                <tr data-lang-title="Tooltips.TemperatureUnits">
                   <td class="c1" data-lang="Screen.Regional.TemperatureUnits">Temperature Units</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1410,7 +1414,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.DateFormat">
                   <td class="c1" data-lang="Screen.Regional.DateFormat">Date Format</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1425,7 +1429,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.TimeFormat">
                   <td class="c1" data-lang="Screen.Regional.TimeFormat">Time Format</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1466,7 +1470,7 @@
               <div style="height: 28px"></div>
               <table id="table-controls-settings">
 
-                <tr>
+                <tr data-lang-title="Tooltips.WakeUpOnPlusMinus">
                   <td class="c1" data-lang="Controls.Settings.WakeUpPlusMinusLabel">+ / - Wakeup</td>
                   <td class="c2">
                     <div class="checkbox">
@@ -1478,7 +1482,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.UpDownBehavior">
                   <td class="c1" data-lang="Controls.Settings.UpDownButtonsBehaviorLabel">+ / - behavior</td>
                   <td class="c2">
                     <select class="fox-val" id="IsUpDownSwapped">
@@ -1498,7 +1502,7 @@
               <div style="height: 12px"></div>
               <h5 style="padding-left:12px" data-lang="Controls.MultiClicks.VWModeClicksLabel">VW Mode Fire Button Multi Clicks</h5>
               <table id="table-controls-multiclicks-vw">
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.2ClicksLabel">2 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="ClicksVW0">
@@ -1536,7 +1540,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.3ClicksLabel">3 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="ClicksVW1">
@@ -1574,7 +1578,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.4ClicksLabel">4 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="ClicksVW2">
@@ -1615,7 +1619,7 @@
               </table>
               <h5 style="padding-left:12px" data-lang="Controls.MultiClicks.TCModeClicksLabel">TC Mode Fire Button Multi Clicks</h5>
               <table id="table-controls-multiclicks-tc">
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.2ClicksLabel">2 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="ClicksTC0">
@@ -1653,7 +1657,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.3ClicksLabel">3 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="ClicksTC1">
@@ -1691,7 +1695,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.4ClicksLabel">4 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="ClicksTC2">
@@ -1732,7 +1736,7 @@
               </table>
               <h5 style="padding-left:12px" data-lang="Controls.MultiClicks.SharedLabel">Shared</h5>
               <table id="table-controls-multiclicks-shared">
-                <tr>
+                <tr data-lang-title="Tooltips.MultiClicks">
                   <td class="c1" data-lang="Controls.MultiClicks.5ClicksLabel">5 Clicks</td>
                   <td class="c2">
                     <select class="fox-val" id="FiveClicks">
@@ -1747,414 +1751,414 @@
             </div>
             <div class="subview" id="view-controls-shortcutsvw" style="display:none">
               <div style="height: 12px"></div>
-              <h5 style="padding-left:12px">In Standby</h5>
-              <table id="table-controls-shortcuts-vw-standby">
-                <tr>
-                  <td class="c1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
-                  <td class="c2">
-                    <select class="fox-val" id="ShortcutsVW0InStandby">
-                      <option value="0" data-lang="ClickActions.None">None</option>                      
-                      <option disabled>──────────</option>
-                      <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
-                      <option disabled>──────────</option>
-                      <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
-                      <option value="1" data-lang="ClickActions.Edit">Edit</option>
-                      <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
-                      <option value="9" data-lang="ClickActions.">ProfileEdit</option>
-                      <option disabled>──────────</option>
-                      <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
-                      <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                      <option disabled>──────────</option>
-                      <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
-                      <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
-                      <option disabled>──────────</option>
-                      <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
-                      <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
-                      <option disabled>──────────</option>
-                      <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
-                      <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
-                      <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
-                      <option disabled>──────────</option>
-                      <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
-                      <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
-                      <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
-                      <option disabled>──────────</option>
-                      <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
-                      <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
-                      <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
-                    </select>
-                  </td>
-                  <td class="c3"></td>
-                  <td class="c4"></td>
-                </tr>
-                <tr>
-                  <td class="c1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
-                  <td class="c2">
-                    <select class="fox-val" id="ShortcutsVW1InStandby">
-                      <option value="0" data-lang="ClickActions.None">None</option>                      
-                      <option disabled>──────────</option>
-                      <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
-                      <option disabled>──────────</option>
-                      <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
-                      <option value="1" data-lang="ClickActions.Edit">Edit</option>
-                      <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
-                      <option value="9" data-lang="ClickActions.">ProfileEdit</option>
-                      <option disabled>──────────</option>
-                      <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
-                      <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                      <option disabled>──────────</option>
-                      <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
-                      <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
-                      <option disabled>──────────</option>
-                      <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
-                      <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
-                      <option disabled>──────────</option>
-                      <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
-                      <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
-                      <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
-                      <option disabled>──────────</option>
-                      <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
-                      <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
-                      <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
-                      <option disabled>──────────</option>
-                      <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
-                      <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
-                      <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
-                    </select>
-                  </td>
-                  <td class="c3"></td>
-                  <td class="c4"></td>
-                </tr>
-                <tr>
-                  <td class="c1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
-                  <td class="c2">
-                    <select class="fox-val" id="ShortcutsVW2InStandby">
-                      <option value="0" data-lang="ClickActions.None">None</option>                      
-                      <option disabled>──────────</option>
-                      <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
-                      <option disabled>──────────</option>
-                      <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
-                      <option value="1" data-lang="ClickActions.Edit">Edit</option>
-                      <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
-                      <option value="9" data-lang="ClickActions.">ProfileEdit</option>
-                      <option disabled>──────────</option>
-                      <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
-                      <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                      <option disabled>──────────</option>
-                      <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
-                      <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
-                      <option disabled>──────────</option>
-                      <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
-                      <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
-                      <option disabled>──────────</option>
-                      <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
-                      <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
-                      <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
-                      <option disabled>──────────</option>
-                      <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
-                      <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
-                      <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
-                      <option disabled>──────────</option>
-                      <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
-                      <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
-                      <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
-                    </select>
-                  </td>
-                  <td class="c3"></td>
-                  <td class="c4"></td>
-                </tr>
-              </table>
-              <table id="table-controls-shortcuts-vw-menu">
-                <tr>
-                  <td class="s1"></td>
-                  <td class="s2"><h5 data-lang="Controls.Shortcuts.InMenuLabel">In Menu</h5></td>
-                  <td class="s3"><h5 data-lang="Controls.Shortcuts.InEditLabel">In Edit</h5></td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
-                  <td class="s2">
-                    <select class="fox-val" id="ShortcutsVW0InMenu">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.MenuBack">Back</option>
-                      <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
-                    </select>
-                  </td>
-                  <td class="s3">
-                    <select class="fox-val" id="ShortcutsVW0InEditMain">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
-                  <td class="s2">
-                    <select class="fox-val" id="ShortcutsVW1InMenu">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.MenuBack">Back</option>
-                      <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
-                    </select>
-                  </td>
-                  <td class="s3">
-                    <select class="fox-val" id="ShortcutsVW1InEditMain">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
-                  <td class="s2">
-                    <select class="fox-val" id="ShortcutsVW2InMenu">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.MenuBack">Back</option>
-                      <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
-                    </select>
-                  </td>
-                  <td class="s3">
-                    <select class="fox-val" id="ShortcutsVW2InEditMain">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                    </select>
-                  </td>
-                </tr>
-              </table>
-              <h5 style="padding-left: 12px" data-lang="Controls.Shortcuts.InSelectorLabel">In Profile Select</h5>
-              <table id="table-controls-shortcuts-vw-menu">
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
-                  <td class="s4">
-                    <select class="fox-val" id="ShortcutsVW0InSelector">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
-                  <td class="s4">
-                    <select class="fox-val" id="ShortcutsVW1InSelector">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
-                  <td class="s4">
-                    <select class="fox-val" id="ShortcutsVW2InSelector">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
-                    </select>
-                  </td>
-                </tr>
-              </table>
+              <div class="shortcut-grid">
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InStandbyLabel">In Standby</h5>
+                  <table id="table-controls-shortcuts-vw-standby">
+                                  <tr data-lang-title="Tooltips.Shortcuts">
+                                    <td class="c1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
+                                    <td class="c2">
+                                      <select class="fox-val" id="ShortcutsVW0InStandby">
+                                        <option value="0" data-lang="ClickActions.None">None</option>                      
+                                        <option disabled>──────────</option>
+                                        <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
+                                        <option disabled>──────────</option>
+                                        <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
+                                        <option value="1" data-lang="ClickActions.Edit">Edit</option>
+                                        <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
+                                        <option value="9" data-lang="ClickActions.">ProfileEdit</option>
+                                        <option disabled>──────────</option>
+                                        <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
+                                        <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                        <option disabled>──────────</option>
+                                        <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
+                                        <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
+                                        <option disabled>──────────</option>
+                                        <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
+                                        <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
+                                        <option disabled>──────────</option>
+                                        <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
+                                        <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
+                                        <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
+                                        <option disabled>──────────</option>
+                                        <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
+                                        <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
+                                        <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
+                                        <option disabled>──────────</option>
+                                        <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
+                                        <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
+                                        <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
+                                      </select>
+                                    </td>
+                                    <td class="c3"></td>
+                                    <td class="c4"></td>
+                                  </tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
+                                    <td class="c1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
+                                    <td class="c2">
+                                      <select class="fox-val" id="ShortcutsVW1InStandby">
+                                        <option value="0" data-lang="ClickActions.None">None</option>                      
+                                        <option disabled>──────────</option>
+                                        <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
+                                        <option disabled>──────────</option>
+                                        <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
+                                        <option value="1" data-lang="ClickActions.Edit">Edit</option>
+                                        <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
+                                        <option value="9" data-lang="ClickActions.">ProfileEdit</option>
+                                        <option disabled>──────────</option>
+                                        <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
+                                        <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                        <option disabled>──────────</option>
+                                        <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
+                                        <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
+                                        <option disabled>──────────</option>
+                                        <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
+                                        <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
+                                        <option disabled>──────────</option>
+                                        <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
+                                        <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
+                                        <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
+                                        <option disabled>──────────</option>
+                                        <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
+                                        <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
+                                        <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
+                                        <option disabled>──────────</option>
+                                        <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
+                                        <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
+                                        <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
+                                      </select>
+                                    </td>
+                                    <td class="c3"></td>
+                                    <td class="c4"></td>
+                                  </tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
+                                    <td class="c1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
+                                    <td class="c2">
+                                      <select class="fox-val" id="ShortcutsVW2InStandby">
+                                        <option value="0" data-lang="ClickActions.None">None</option>                      
+                                        <option disabled>──────────</option>
+                                        <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
+                                        <option disabled>──────────</option>
+                                        <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
+                                        <option value="1" data-lang="ClickActions.Edit">Edit</option>
+                                        <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
+                                        <option value="9" data-lang="ClickActions.">ProfileEdit</option>
+                                        <option disabled>──────────</option>
+                                        <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
+                                        <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                        <option disabled>──────────</option>
+                                        <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
+                                        <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
+                                        <option disabled>──────────</option>
+                                        <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
+                                        <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
+                                        <option disabled>──────────</option>
+                                        <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
+                                        <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
+                                        <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
+                                        <option disabled>──────────</option>
+                                        <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
+                                        <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
+                                        <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
+                                        <option disabled>──────────</option>
+                                        <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
+                                        <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
+                                        <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
+                                      </select>
+                                    </td>
+                                    <td class="c3"></td>
+                                    <td class="c4"></td>
+                                  </tr>
+                                </table>
+                </div>
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InMenuLabel">In Menu</h5>
+                  <table id="table-controls-shortcuts-vw-menu">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s2">
+                                      <select class="fox-val" id="ShortcutsVW0InMenu">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.MenuBack">Back</option>
+                                        <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
+                                      </select>
+                                    </td></tr>
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s2">
+                                      <select class="fox-val" id="ShortcutsVW1InMenu">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.MenuBack">Back</option>
+                                        <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
+                                      </select>
+                                    </td></tr>
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s2">
+                                      <select class="fox-val" id="ShortcutsVW2InMenu">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.MenuBack">Back</option>
+                                        <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
+                                      </select>
+                                    </td></tr>
+                  </table>
+                </div>
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InEditLabel">In Edit</h5>
+                  <table id="table-controls-shortcuts-vw-edit">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s3">
+                                      <select class="fox-val" id="ShortcutsVW0InEditMain">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                      </select>
+                                    </td></tr>
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s3">
+                                      <select class="fox-val" id="ShortcutsVW1InEditMain">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                      </select>
+                                    </td></tr>
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s3">
+                                      <select class="fox-val" id="ShortcutsVW2InEditMain">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                      </select>
+                                    </td></tr>
+                  </table>
+                </div>
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InSelectorLabel">In Profile Select</h5>
+                  <table id="table-controls-shortcuts-vw-selector">
+                                  <tr data-lang-title="Tooltips.Shortcuts">
+                                    <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
+                                    <td class="s4">
+                                      <select class="fox-val" id="ShortcutsVW0InSelector">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
+                                    <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
+                                    <td class="s4">
+                                      <select class="fox-val" id="ShortcutsVW1InSelector">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
+                                    <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
+                                    <td class="s4">
+                                      <select class="fox-val" id="ShortcutsVW2InSelector">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                </table>
+                </div>
+              </div>
             </div>
 
             <div class="subview" id="view-controls-shortcutstc" style="display:none">
               <div style="height: 12px"></div>
-              <h5 style="padding-left:12px">In Standby</h5>
-              <table id="table-controls-shortcuts-tc-standby">
-                <tr>
-                  <td class="c1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
-                  <td class="c2">
-                    <select class="fox-val" id="ShortcutsTC0InStandby">
-                      <option value="0" data-lang="ClickActions.None">None</option>                      
-                      <option disabled>──────────</option>
-                      <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
-                      <option disabled>──────────</option>
-                      <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
-                      <option value="1" data-lang="ClickActions.Edit">Edit</option>
-                      <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
-                      <option value="9" data-lang="ClickActions.">ProfileEdit</option>
-                      <option disabled>──────────</option>
-                      <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
-                      <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                      <option disabled>──────────</option>
-                      <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
-                      <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
-                      <option disabled>──────────</option>
-                      <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
-                      <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
-                      <option disabled>──────────</option>
-                      <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
-                      <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
-                      <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
-                      <option disabled>──────────</option>
-                      <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
-                      <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
-                      <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
-                      <option disabled>──────────</option>
-                      <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
-                      <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
-                      <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
-                    </select>
-                  </td>
-                  <td class="c3"></td>
-                  <td class="c4"></td>
-                </tr>
-                <tr>
-                  <td class="c1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
-                  <td class="c2">
-                    <select class="fox-val" id="ShortcutsTC1InStandby">
-                      <option value="0" data-lang="ClickActions.None">None</option>                      
-                      <option disabled>──────────</option>
-                      <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
-                      <option disabled>──────────</option>
-                      <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
-                      <option value="1" data-lang="ClickActions.Edit">Edit</option>
-                      <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
-                      <option value="9" data-lang="ClickActions.">ProfileEdit</option>
-                      <option disabled>──────────</option>
-                      <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
-                      <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                      <option disabled>──────────</option>
-                      <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
-                      <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
-                      <option disabled>──────────</option>
-                      <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
-                      <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
-                      <option disabled>──────────</option>
-                      <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
-                      <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
-                      <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
-                      <option disabled>──────────</option>
-                      <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
-                      <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
-                      <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
-                      <option disabled>──────────</option>
-                      <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
-                      <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
-                      <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
-                    </select>
-                  </td>
-                  <td class="c3"></td>
-                  <td class="c4"></td>
-                </tr>
-                <tr>
-                  <td class="c1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
-                  <td class="c2">
-                    <select class="fox-val" id="ShortcutsTC2InStandby">
-                      <option value="0" data-lang="ClickActions.None">None</option>                      
-                      <option disabled>──────────</option>
-                      <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
-                      <option disabled>──────────</option>
-                      <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
-                      <option value="1" data-lang="ClickActions.Edit">Edit</option>
-                      <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
-                      <option value="9" data-lang="ClickActions.">ProfileEdit</option>
-                      <option disabled>──────────</option>
-                      <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
-                      <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                      <option disabled>──────────</option>
-                      <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
-                      <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
-                      <option disabled>──────────</option>
-                      <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
-                      <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
-                      <option disabled>──────────</option>
-                      <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
-                      <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
-                      <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
-                      <option disabled>──────────</option>
-                      <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
-                      <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
-                      <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
-                      <option disabled>──────────</option>
-                      <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
-                      <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
-                      <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
-                    </select>
-                  </td>
-                  <td class="c3"></td>
-                  <td class="c4"></td>
-                </tr>
-              </table>
-              <table id="table-controls-shortcuts-tc-menu">
-                <tr>
-                  <td class="s1"></td>
-                  <td class="s2"><h5 data-lang="Controls.Shortcuts.InMenuLabel">In Menu</h5></td>
-                  <td class="s3"><h5 data-lang="Controls.Shortcuts.InEditLabel">In Edit</h5></td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
-                  <td class="s2">
-                    <select class="fox-val" id="ShortcutsTC0InMenu">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.MenuBack">Back</option>
-                      <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
-                    </select>
-                  </td>
-                  <td class="s3">
-                    <select class="fox-val" id="ShortcutsTC0InEditMain">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
-                  <td class="s2">
-                    <select class="fox-val" id="ShortcutsTC1InMenu">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.MenuBack">Back</option>
-                      <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
-                    </select>
-                  </td>
-                  <td class="s3">
-                    <select class="fox-val" id="ShortcutsTC1InEditMain">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
-                  <td class="s2">
-                    <select class="fox-val" id="ShortcutsTC2InMenu">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.MenuBack">Back</option>
-                      <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
-                    </select>
-                  </td>
-                  <td class="s3">
-                    <select class="fox-val" id="ShortcutsTC2InEditMain">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
-                    </select>
-                  </td>
-                </tr>
-              </table>
-              <h5 style="padding-left: 12px" data-lang="Controls.Shortcuts.InSelectorLabel">In Profile Select</h5>
-              <table id="table-controls-shortcuts-tc-menu">
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
-                  <td class="s4">
-                    <select class="fox-val" id="ShortcutsTC0InSelector">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
-                  <td class="s4">
-                    <select class="fox-val" id="ShortcutsTC1InSelector">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
-                    </select>
-                  </td>
-                </tr>
-                <tr>
-                  <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
-                  <td class="s4">
-                    <select class="fox-val" id="ShortcutsTC2InSelector">
-                      <option value="0" data-lang="ClickActions.None">None</option>
-                      <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
-                    </select>
-                  </td>
-                </tr>
-              </table>
+              <div class="shortcut-grid">
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InStandbyLabel">In Standby</h5>
+                  <table id="table-controls-shortcuts-tc-standby">
+                                  <tr data-lang-title="Tooltips.Shortcuts">
+                                    <td class="c1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
+                                    <td class="c2">
+                                      <select class="fox-val" id="ShortcutsTC0InStandby">
+                                        <option value="0" data-lang="ClickActions.None">None</option>                      
+                                        <option disabled>──────────</option>
+                                        <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
+                                        <option disabled>──────────</option>
+                                        <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
+                                        <option value="1" data-lang="ClickActions.Edit">Edit</option>
+                                        <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
+                                        <option value="9" data-lang="ClickActions.">ProfileEdit</option>
+                                        <option disabled>──────────</option>
+                                        <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
+                                        <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                        <option disabled>──────────</option>
+                                        <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
+                                        <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
+                                        <option disabled>──────────</option>
+                                        <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
+                                        <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
+                                        <option disabled>──────────</option>
+                                        <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
+                                        <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
+                                        <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
+                                        <option disabled>──────────</option>
+                                        <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
+                                        <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
+                                        <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
+                                        <option disabled>──────────</option>
+                                        <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
+                                        <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
+                                        <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
+                                      </select>
+                                    </td>
+                                    <td class="c3"></td>
+                                    <td class="c4"></td>
+                                  </tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
+                                    <td class="c1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
+                                    <td class="c2">
+                                      <select class="fox-val" id="ShortcutsTC1InStandby">
+                                        <option value="0" data-lang="ClickActions.None">None</option>                      
+                                        <option disabled>──────────</option>
+                                        <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
+                                        <option disabled>──────────</option>
+                                        <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
+                                        <option value="1" data-lang="ClickActions.Edit">Edit</option>
+                                        <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
+                                        <option value="9" data-lang="ClickActions.">ProfileEdit</option>
+                                        <option disabled>──────────</option>
+                                        <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
+                                        <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                        <option disabled>──────────</option>
+                                        <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
+                                        <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
+                                        <option disabled>──────────</option>
+                                        <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
+                                        <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
+                                        <option disabled>──────────</option>
+                                        <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
+                                        <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
+                                        <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
+                                        <option disabled>──────────</option>
+                                        <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
+                                        <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
+                                        <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
+                                        <option disabled>──────────</option>
+                                        <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
+                                        <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
+                                        <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
+                                      </select>
+                                    </td>
+                                    <td class="c3"></td>
+                                    <td class="c4"></td>
+                                  </tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
+                                    <td class="c1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
+                                    <td class="c2">
+                                      <select class="fox-val" id="ShortcutsTC2InStandby">
+                                        <option value="0" data-lang="ClickActions.None">None</option>                      
+                                        <option disabled>──────────</option>
+                                        <option value="20" data-lang="ClickActions.Autofire">Autofire</option>
+                                        <option disabled>──────────</option>
+                                        <option value="7" data-lang="ClickActions.MainMenu">MainMenu</option>
+                                        <option value="1" data-lang="ClickActions.Edit">Edit</option>
+                                        <option value="8" data-lang="ClickActions.PreheatMenu">PreheatEdit</option>
+                                        <option value="9" data-lang="ClickActions.">ProfileEdit</option>
+                                        <option disabled>──────────</option>
+                                        <option value="2" data-lang="ClickActions.SelectProfile">ProfileSelector</option>
+                                        <option value="12" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                        <option disabled>──────────</option>
+                                        <option value="3" data-lang="ClickActions.TDom">TemperatureDominant</option>
+                                        <option value="15" data-lang="ClickActions.ResistanceLockUnlock">LockResistance</option>
+                                        <option disabled>──────────</option>
+                                        <option value="18" data-lang="ClickActions.ReReadResistanceAndSaveToProfile">ReReadResistanceAndSaveToProfile</option>
+                                        <option value="19" data-lang="ClickActions.ReReadResistanceAndSmart">ReReadResistanceAndSmart</option>
+                                        <option disabled>──────────</option>
+                                        <option value="4" data-lang="ClickActions.ShowClock">MainScreenClock</option>
+                                        <option value="11" data-lang="ClickActions.InfoScreen">InfoScreen</option>
+                                        <option value="16" data-lang="ClickActions.PowerBank">PowerBank</option>
+                                        <option disabled>──────────</option>
+                                        <option value="13" data-lang="ClickActions.StealthOnOff">StealthOnOff</option>
+                                        <option value="10" data-lang="ClickActions.SmartOnOff">SmartOnOff</option>
+                                        <option value="6" data-lang="ClickActions.LLSOnOf">LslOnOff</option>
+                                        <option disabled>──────────</option>
+                                        <option value="14" data-lang="ClickActions.KeyLockUnlock">KeyLock</option>
+                                        <option value="17" data-lang="ClickActions.DeviceLockUnlock">DeviceLock</option>
+                                        <option value="5" data-lang="ClickActions.DeviceOnOff">OnOff</option>
+                                      </select>
+                                    </td>
+                                    <td class="c3"></td>
+                                    <td class="c4"></td>
+                                  </tr>
+                                </table>
+                </div>
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InMenuLabel">In Menu</h5>
+                  <table id="table-controls-shortcuts-tc-menu">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s2">
+                                      <select class="fox-val" id="ShortcutsTC0InMenu">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.MenuBack">Back</option>
+                                        <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
+                                      </select>
+                                    </td></tr>
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s2">
+                                      <select class="fox-val" id="ShortcutsTC1InMenu">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.MenuBack">Back</option>
+                                        <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
+                                      </select>
+                                    </td></tr>
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s2">
+                                      <select class="fox-val" id="ShortcutsTC2InMenu">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.MenuBack">Back</option>
+                                        <option value="2" data-lang="ClickActions.MenuExit">Exit</option>
+                                      </select>
+                                    </td></tr>
+                  </table>
+                </div>
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InEditLabel">In Edit</h5>
+                  <table id="table-controls-shortcuts-tc-edit">
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td><td class="s3">
+                                      <select class="fox-val" id="ShortcutsTC0InEditMain">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                      </select>
+                                    </td></tr>
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td><td class="s3">
+                                      <select class="fox-val" id="ShortcutsTC1InEditMain">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                      </select>
+                                    </td></tr>
+                  <tr data-lang-title="Tooltips.Shortcuts"><td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td><td class="s3">
+                                      <select class="fox-val" id="ShortcutsTC2InEditMain">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResetCounters">ResetCounters</option>
+                                      </select>
+                                    </td></tr>
+                  </table>
+                </div>
+                <div class="shortcut-cell">
+                  <h5 data-lang="Controls.Shortcuts.InSelectorLabel">In Profile Select</h5>
+                  <table id="table-controls-shortcuts-tc-selector">
+                                  <tr data-lang-title="Tooltips.Shortcuts">
+                                    <td class="s1" data-lang="Controls.Shortcuts.FireMinusLabel">Fire -</td>
+                                    <td class="s4">
+                                      <select class="fox-val" id="ShortcutsTC0InSelector">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
+                                    <td class="s1" data-lang="Controls.Shortcuts.FirePlusLabel">Fire +</td>
+                                    <td class="s4">
+                                      <select class="fox-val" id="ShortcutsTC1InSelector">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                  <tr data-lang-title="Tooltips.Shortcuts">
+                                    <td class="s1" data-lang="Controls.Shortcuts.PlusMinusLabel">+ -</td>
+                                    <td class="s4">
+                                      <select class="fox-val" id="ShortcutsTC2InSelector">
+                                        <option value="0" data-lang="ClickActions.None">None</option>
+                                        <option value="1" data-lang="ClickActions.ResestSavedResistance">ResetResistance</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                </table>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2162,7 +2166,7 @@
         <div class="view" id="view-smart" style="display:none">
           <div style="height: 28px"></div>
           <table id="table-smart">
-            <tr>
+            <tr data-lang-title="Tooltips.SmartMode">
               <td class="c1" data-lang="Smart.SmartModeLabel">Smart Mode</td>
               <td class="c2">
                 <select class="fox-val" id="SmartMode">
@@ -2174,7 +2178,7 @@
               <td class="c3"></td>
               <td class="c4"></td>
             </tr>
-            <tr>
+            <tr data-lang-title="Tooltips.SmartRange">
               <td class="c1" data-lang="Smart.SmartRangeLabel">Smart Range</td>
               <td class="c2">
                 <input class="fox-val" type="number" id="SmartRange" min="1" max="15" step="1">
@@ -2204,7 +2208,7 @@
             <div class="subview" id="view-advanced-settings">
               <div style="height: 28px"></div>
               <table id="table-advanced-settings">
-                <tr>
+                <tr data-lang-title="Tooltips.PowerLimit">
                   <td class="c1" data-lang="Advanced.Settings.PowerLimitLabel">Power Limit</td>
                   <td class="c2">
                     <input class="fox-val" type="number" max="1400" step="0.1" id="PowerLimit"> <span data-lang="Profile.WattsLabel">W</span>
@@ -2215,7 +2219,7 @@
                 <tr data-lang-title="Tooltips.MaxPuffTime">
                   <td class="c1" data-lang="Advanced.Settings.PuffCutOffLabel">Puff Cut-Off</td>
                   <td class="c2">
-                    <input class="fox-val" type="number" min="1" max="15" step="0.1" id="PuffCutOff"> <span data-lang="SecondsLabel">s</span>
+                    <input class="fox-val" type="number" min="1" max="60" step="1" id="PuffCutOff"> <span data-lang="SecondsLabel">s</span>
                   </td>
                   <td class="c3"></td>
                   <td class="c4"></td>
@@ -2228,7 +2232,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.InternalResistance">
                   <td class="c1" data-lang="Advanced.Settings.InternalResistanceLabel">Internal Resistance</td>
                   <td class="c2">
                     <input class="fox-val" type="number" min="0" max="0.1" step="0.001" id="InternalResistance"> &#8486;
@@ -2236,7 +2240,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.BatteryModel">
                   <td class="c1" data-lang="Advanced.Settings.BatteryModelLabel">Battery Model</td>
                   <td class="c2">
                     <select class="fox-val" id="BatteryModel">
@@ -2247,7 +2251,7 @@
                     </select>
                   </td>
                   <td class="c3">
-                    <button style="display: none;" class="btn btn-default" id="battery-edit" data-lang="Advanced.Settings.BatteryEditButton">Edit</button>
+                    <button style="display: none;" class="btn btn-default" id="battery-edit" data-lang="Advanced.Settings.BatteryEditButton" data-lang-title="Tooltips.BatteryEdit">Edit</button>
                   </td>
                   <td class="c4"></td>
                 </tr>
@@ -2275,19 +2279,19 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.DeepSleepBehavior">
                   <td class="c1" data-lang="Advanced.Settings.DeepSleepBehaviorLabel">Deep Sleep Behavior</td>
                   <td class="c2">
                     <select class="fox-val" id="DeepSleepMode">
                       <option value="0" data-lang="DeepSleepMode.Standart">Just Sleep</option>
-                      <option value="2" data-lang="">Lock Device</option>
+                      <option value="2" data-lang="DeepSleepMode.Lock Device">Lock Device</option>
                       <option value="1" data-lang="DeepSleepMode.TurnOffDevice">Turn Off Device</option>
                     </select>
                   </td>
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.DeepSleepDelay">
                   <td class="c1" data-lang="Advanced.Settings.DeepSleepDelayLabel">Deep Sleep Delay</td>
                   <td class="c2">
                     <input class="fox-val" type="number" min="1" max="30" step="1" id="DeepSleepDelay"> <span data-label="">min</span>
@@ -2336,21 +2340,24 @@
                 </tr>
               </table>
               <div style="padding-top:20px; padding-left: 12px; font-size: 10px" data-lang="Advanced.Settings.TooltipLabel"></div>
+              <div style="padding: 12px;">
+                <button id="device-monitor" class="btn btn-default" data-lang="Advanced.Settings.DeviceMonitorButton" data-lang-title="Tooltips.DeviceMonitor">Device Monitor</button>
+                <button id="firmware-editor" class="btn btn-default" data-lang-title="Tooltips.FirmwareEditor">Firmware Editor</button>
+              </div>
             </div>
 
             <div class="subview" id="view-advanced-powercurves" style="display:none">
-              <div style="height: 28px"></div>
-              <table id="table-power"></table>
+              <div id="table-power" class="curve-grid"></div>
             </div>
 
             <div class="subview" id="view-advanced-materials" style="display:none">
-              <table id="table-material" style="width: 260px; padding-top: 28px"></table>
+              <div id="table-material" class="curve-grid"></div>
             </div>
 
             <div class="subview" id="view-advanced-bvo" style="display:none">
               <div style="height: 28px"></div>
               <table id="table-advanced-bvo">
-                <tr>
+                <tr data-lang-title="Tooltips.BVO">
                   <td class="c1" data-lang="Advanced.BVO.Battery1Label">Battery 1</td>
                   <td class="c2">
                     <input class="fox-val" type="number" min="-0.3" max="0.3" step="0.01" id="BatteryVoltageOffset1"> V
@@ -2358,7 +2365,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.BVO">
                   <td class="c1" data-lang="Advanced.BVO.Battery2Label">Battery 2</td>
                   <td class="c2">
                     <input class="fox-val" type="number" min="-0.3" max="0.3" step="0.01" id="BatteryVoltageOffset2"> V
@@ -2366,7 +2373,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.BVO">
                   <td class="c1" data-lang="Advanced.BVO.Battery3Label">Battery 3</td>
                   <td class="c2">
                     <input class="fox-val" type="number" min="-0.3" max="0.3" step="0.01" id="BatteryVoltageOffset3"> V
@@ -2374,7 +2381,7 @@
                   <td class="c3"></td>
                   <td class="c4"></td>
                 </tr>
-                <tr>
+                <tr data-lang-title="Tooltips.BVO">
                   <td class="c1" data-lang="Advanced.BVO.Battery4Label">Battery 4</td>
                   <td class="c2">
                     <input class="fox-val" type="number" min="-0.3" max="0.3" step="0.01" id="BatteryVoltageOffset4"> V
@@ -2390,7 +2397,7 @@
         <div class="view" id="view-stats" style="display:none">
           <div style="height: 28px"></div>
           <table id="table-stats">
-            <tr>
+            <tr data-lang-title="Tooltips.PuffsCount">
               <td class="c1" data-lang="Stats.PuffsCountLabel">Puffs Count</td>
               <td class="c2">
                 <input class="fox-val" type="number" id="PuffsCount">
@@ -2398,7 +2405,7 @@
               <td class="c3"></td>
               <td class="c4"></td>
             </tr>
-            <tr>
+            <tr data-lang-title="Tooltips.TotalPuffsTime">
               <td class="c1" data-lang="Stats.TotalPuffsTimeLabel">Puffs Time</td>
               <td class="c2">
                 <input class="fox-val" type="number" step="0.1" id="PuffsTime">
@@ -2406,7 +2413,7 @@
               <td class="c3"></td>
               <td class="c4"></td>
             </tr>
-            <tr>
+            <tr data-lang-title="Tooltips.PuffsTimeFormat">
               <td class="c1" data-lang="Stats.PuffsTimeFormatLabel">Puffs Time Format</td>
               <td class="c2">
                 <select class="fox-val" id="PuffsTimeFormat">
@@ -2425,13 +2432,13 @@
 
     <footer class="toolbar toolbar-footer">
       <div class="toolbar-actions">
-        <a href="#" id="download-settings" class="btn btn-default" data-lang="DownloadButton" onclick="downloadSettings(); return false;">
+        <a href="#" id="download-settings" class="btn btn-default" data-lang="DownloadButton" data-lang-title="Tooltips.DownloadFromDevice" onclick="downloadSettings(); return false;">
           Download Settings
         </a>
-        <a href="#" id="upload-settings" class="btn btn-default" data-lang="UploadButton" onclick="uploadSettings(); return false;">
+        <a href="#" id="upload-settings" class="btn btn-default" data-lang="UploadButton" data-lang-title="Tooltips.UploadToDevice" onclick="uploadSettings(); return false;">
           Upload Settings
         </a>
-        <a href="#" id="reset-settings" class="btn btn-default" data-lang="ResetButton" onclick="resetSettings(); return false;">
+        <a href="#" id="reset-settings" class="btn btn-default" data-lang="ResetButton" data-lang-title="Tooltips.ResetSettings" onclick="resetSettings(); return false;">
           Reset Settings
         </a>
       </div>

@@ -39,7 +39,7 @@ export async function getAppVersion() {
     try {
         return await getVersion();
     } catch (e) {
-        return '1.14.0';
+        return '1.2.0';
     }
 }
 
@@ -103,4 +103,71 @@ export async function importBat() {
 
 export async function exportBat(table) {
     return invoke('export_bat', { table });
+}
+
+export async function openFirmware(path) {
+    return invoke('open_firmware', { path });
+}
+
+export async function downloadStock() { return invoke('download_stock'); }
+export async function openStockBuild(buildId) { return invoke('open_stock_build', { buildId }); }
+
+export async function listPatches(handle) {
+    return invoke('list_patches', { handle });
+}
+
+export async function applyPatchCmd(handle, patchId) {
+    return invoke('apply_patch_cmd', { handle, patchId });
+}
+
+export async function rollbackPatchCmd(handle, patchId) {
+    return invoke('rollback_patch_cmd', { handle, patchId });
+}
+
+export async function saveFirmware(handle, path) {
+    return invoke('save_firmware', { handle, path });
+}
+
+export async function closeFirmware(handle) {
+    return invoke('close_firmware', { handle });
+}
+
+export async function readDeviceDataflash() {
+    return invoke('read_device_dataflash');
+}
+
+export async function readDeviceProductId() {
+    return invoke('read_device_product_id');
+}
+
+export async function flashFirmwareToDevice(handle) {
+    return invoke('flash_firmware_to_device', { handle });
+}
+
+export async function restartDeviceCmd() {
+    return invoke('restart_device_cmd');
+}
+
+export async function readMonitoringData() {
+    return invoke('read_monitoring_data_cmd');
+}
+
+export async function undoFirmwareChanges(handle) {
+    return invoke('undo_firmware_changes', { handle });
+}
+
+export async function listHidDevices() {
+    return invoke('list_hid_devices');
+}
+
+export async function recoveryFlash(path, expectedProductId) {
+    return invoke('recovery_flash', { path, expectedProductId });
+}
+
+export function onRecoveryProgress(callback) {
+    return listen('recovery-progress', (event) => callback(event.payload));
+}
+
+export function onFlashProgress(callback) {
+    return listen('flash-progress', (event) => callback(event.payload));
 }

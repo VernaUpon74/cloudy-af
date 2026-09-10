@@ -1,0 +1,59 @@
+app-id: org.cloudy.af
+runtime: org.gnome.Platform
+runtime-version: '49'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node22
+command: cloudy-af
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --device=all
+  - --filesystem=xdg-documents
+  - --persist=.config/cloudy-af
+  - --talk-name=org.freedesktop.portal.Desktop
+  - --talk-name=org.freedesktop.portal.FileChooser
+  - --env=PATH=/app/bin:/usr/bin
+
+modules:
+  - name: cloudy-af
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/node22/bin
+    sources:
+      - type: dir
+        path: ..
+        dest: source
+    build-commands:
+      - |
+        cd source
+        # Use the Tauri binary that was already built on the host/toolbox.
+        install -Dm755 src-tauri/target/release/cloudy-af /app/bin/cloudy-af
+        install -Dm644 flatpak/org.cloudy.af.desktop /app/share/applications/org.cloudy.af.desktop
+        install -Dm644 flatpak/org.cloudy.af.appdata.xml /app/share/metainfo/org.cloudy.af.metainfo.xml
+        install -Dm644 icon.png /app/share/icons/hicolor/512x512/apps/org.cloudy.af.png
+        # Bundle sidecar resources and Node runtime.
+        mkdir -p /app/lib/cloudy-af/resources
+        cp -r sidecar /app/lib/cloudy-af/resources/
+        cp -r public/i18n /app/lib/cloudy-af/resources/
+        cp public/default.afc.json /app/lib/cloudy-af/resources/
+        cp "public/Tux&Foxx.png" /app/lib/cloudy-af/resources/
+        cp -r resources/definitions /app/lib/cloudy-af/resources/
+        cp -r resources/patches /app/lib/cloudy-af/resources/
+        cp -r resources/firmware /app/lib/cloudy-af/resources/
+        cp -r resources/animations /app/lib/cloudy-af/resources/
+        # Strip dev tooling, documentation, examples, tests, and platform-specific
+        # native prebuilds from the sidecar to reduce the Flatpak size.
+        cd /app/lib/cloudy-af/resources/sidecar
+        npm prune --production
+        rm -rf node_modules/put
+        cp -r put-replacement node_modules/put
+        rm -rf patches node_modules/patch-package
+        rm -rf node_modules/node-hid/prebuilds/darwin-x64 \
+               node_modules/node-hid/prebuilds/darwin-arm64 \
+               node_modules/node-hid/prebuilds/win32-x64 \
+               node_modules/node-hid/prebuilds/win32-ia32 \
+               node_modules/node-hid/prebuilds/linux-arm
+        rm -rf node_modules/*/{README*,readme*,examples,example,tests,test,docs,doc,.github,*.md}
+        rm -f node_modules/arcticfox/{test.json,vtcmini.afc.json}
+        install -Dm755 /usr/lib/sdk/node22/bin/node /app/bin/node

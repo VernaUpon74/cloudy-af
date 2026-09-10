@@ -1038,6 +1038,7 @@
   "IsLogoEnabled": false,
   "IsClockOnMainScreen": false,
   "ClockType": 0,
+  "ClockAnimation": 0,
   "DimTimeout": 15,
   "DimTimeoutLocked": 10,
   "DimTimeoutCharging": 0,

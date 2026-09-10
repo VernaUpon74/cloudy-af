@@ -29,12 +29,20 @@ const AfcFile = require('./afcfile');
 
 const afc = new AfcFile();
 let autoconnect = true;
+// While the Rust backend flashes firmware it owns the HID device; suspend
+// stops polling and reconnects so nothing interleaves into the flash stream.
+let suspended = false;
 
-// The device firmware reports SettingsVersion 12; the npm module is hard-coded
-// to reject anything above 11. Bump the supported version so we can read it.
-fox.supportedSettingsVersion = 12;
+// The device firmware reports SettingsVersion 12; the arcticfox module
+// supports it natively (PuffCutOff widened to u16 in the v12 layout).
 
 let currentRequestId = null;
+
+// Set when the device opened but never answered the ArcticFox protocol
+// (e.g. stock firmware). The handle stays open — close() races node-hid's
+// hidraw read thread (free(): invalid pointer) — and we re-probe on a timer
+// instead of tearing the connection down.
+let unresponsive = false;
 
 // DEVIATION: Explicit auto-reconnect logic. The original arcticfox module schedules
 // its own reconnect inside disconnect(); we override disconnect() below and use this
@@ -51,7 +59,7 @@ function clearReconnectTimer() {
 
 function scheduleReconnect() {
     clearReconnectTimer();
-    if (!fox.connected) {
+    if (!suspended && !fox.connected) {
         reconnectTimer = setTimeout(() => {
             reconnectTimer = null;
             if (!fox.connected) {
@@ -76,6 +84,19 @@ function send(event, payload) {
 
 function sendError(message, detail) {
     send('error', { message, error: true, detail: detail ? String(detail) : undefined });
+}
+
+// Async replies (their command handler has already returned, so
+// currentRequestId is null again) still need request-id correlation with the
+// Rust sidecar_request: temporarily restore the id around send().
+function sendForRequest(event, payload, requestId) {
+    const prev = currentRequestId;
+    currentRequestId = requestId;
+    try {
+        send(event, payload);
+    } finally {
+        currentRequestId = prev;
+    }
 }
 
 // Remove control characters and Unicode replacement characters from strings so
@@ -103,28 +124,90 @@ function emit(channel, data) {
 
 function onConnect() {
     clearReconnectTimer();
-    emit('connect', true);
+    // 'connect' is only announced once the device has proven it speaks the
+    // ArcticFox protocol — a stock-firmware device opens fine but silently
+    // times out every read, which must not show as "connected".
+    unresponsive = false;
     if (autoconnect) {
         fox.setDateTime(new Date());
         downloadConfig();
+    } else {
+        emit('connect', true);
     }
 }
 
 function onClose() {
+    unresponsive = false;
     emit('connect', false);
     scheduleReconnect();
+}
+
+// Re-probe an unresponsive device on the already-open handle. A successful
+// read flips it to connected; a firmware flash resets the USB enumeration
+// and arrives as a HID error -> onClose -> normal reconnect loop.
+function scheduleUnresponsiveProbe() {
+    clearReconnectTimer();
+    if (suspended || !unresponsive || !fox.connected) {
+        return;
+    }
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (!suspended && unresponsive && fox.connected) {
+            try {
+                fox.setDateTime(new Date());
+                downloadConfig();
+            } catch (err) {
+                scheduleUnresponsiveProbe();
+            }
+        } else {
+            scheduleUnresponsiveProbe();
+        }
+    }, RECONNECT_INTERVAL_MS);
 }
 
 function onError(err) {
     sendError('HID error', err);
 }
 
+// node-hid's hidraw backend can heap-crash (free(): invalid pointer, seen
+// 2026-09-04) when close() races its background read thread while the device
+// is flapping (e.g. rebooting into LDROM during a firmware flash). Pausing
+// the reader first and deferring the close to the next tick shrinks that
+// race window; the full fix is single-instance + suspend (Rust side).
+function safeCloseHid(hid) {
+    if (!hid) {
+        return;
+    }
+    try {
+        if (hid.pause) {
+            hid.pause();
+        }
+    } catch (e) {
+        // ignore — closing anyway
+    }
+    setImmediate(() => {
+        try {
+            if (hid.close) {
+                hid.close();
+            }
+        } catch (e) {
+            // device already gone — fine
+        }
+    });
+}
+
 // Disable the arcticfox module's internal reconnect loop so this bridge controls
 // reconnection timing and avoids duplicate concurrent connection attempts.
 fox.disconnect = function() {
-    if (fox.hid && fox.hid.close) {
-        try { fox.hid.close(); } catch (e) {}
+    safeCloseHid(fox.hid);
+    if (fox.connected) {
+        fox.connected = false;
+        fox.emit('close');
     }
+};
+
+fox.close = function() {
+    safeCloseHid(fox.hid);
     if (fox.connected) {
         fox.connected = false;
         fox.emit('close');
@@ -139,7 +222,19 @@ function downloadConfig() {
     fox.readConfiguration((err, data) => {
         if (err) {
             console.error(err.toString());
-            if (err.toString() === 'Error: Outdated Toolbox') {
+            if (err.toString() === 'Error: timeout') {
+                // Device opened but does not answer: stock (non-ArcticFox)
+                // firmware. Report once, stay disconnected, keep probing.
+                const firstFailure = !unresponsive;
+                unresponsive = true;
+                emit('connect', false);
+                scheduleUnresponsiveProbe();
+                if (firstFailure) {
+                    sendError('Device not responding',
+                        'The device opened but does not answer the ArcticFox protocol. ' +
+                        'Stock firmware must be replaced with ArcticFox (Firmware Editor) before settings can be loaded.');
+                }
+            } else if (err.toString() === 'Error: Outdated Toolbox') {
                 sendError('Incompatible Firmware', 'Outdated Toolbox');
             } else if (err.toString() === 'Error: Outdated Firmware') {
                 sendError('Incompatible Firmware', 'Connect device with firmware build >= ' + fox.minimumSupportedBuildNumber);
@@ -148,7 +243,9 @@ function downloadConfig() {
             }
             return;
         }
+        unresponsive = false;
         const cleanData = sanitizeConfigStrings(data);
+        emit('connect', true);
         emit('config', cleanData);
     });
 }
@@ -182,6 +279,61 @@ function handleCommand(cmd) {
             } catch (err) {
                 sendError('Disconnect failed', err);
             }
+            break;
+
+        case 'monitoring': {
+            // One live 0x66 telemetry sample for the Device Monitor. Served
+            // by the sidecar itself: the HID handle stays open, so no
+            // close/reopen churn and no node-hid close race.
+            const requestId = cmd.request_id || null;
+            if (suspended || !fox.connected) {
+                sendForRequest('error', {
+                    message: 'Monitoring read failed',
+                    error: true,
+                    detail: 'device not connected'
+                }, requestId);
+                break;
+            }
+            fox.readMonitoringDataRaw((err, data) => {
+                if (err) {
+                    sendForRequest('error', {
+                        message: 'Monitoring read failed',
+                        error: true,
+                        detail: err.toString()
+                    }, requestId);
+                } else {
+                    sendForRequest('monitoring_ack', { data: data.toString('base64') }, requestId);
+                }
+            });
+            break;
+        }
+
+        case 'suspend':
+            // The Rust firmware flasher is about to own the HID device:
+            // drop our handle and stop the reconnect loop until 'resume'.
+            suspended = true;
+            clearReconnectTimer();
+            try {
+                fox.close();
+            } catch (err) {
+                // already closed — fine
+            }
+            send('suspend_ack', {});
+            break;
+
+        case 'resume':
+            suspended = false;
+            if (autoconnect && !fox.connected) {
+                try {
+                    fox.connect();
+                } catch (err) {
+                    // Device not present; the reconnect loop will retry.
+                }
+                if (!fox.connected) {
+                    scheduleReconnect();
+                }
+            }
+            send('resume_ack', {});
             break;
 
         case 'download':
@@ -362,7 +514,8 @@ process.stdin.on('data', chunk => {
 
 process.stdin.on('end', () => {
     fox.close();
-    process.exit(0);
+    // fox.close() defers the native close to the next tick; let it run.
+    setImmediate(() => process.exit(0));
 });
 
 // Emit firmware minimum once ready.

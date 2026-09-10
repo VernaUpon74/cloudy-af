@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    arcticfox_config_lib::run();
+    cloudy_af_lib::run();
 }

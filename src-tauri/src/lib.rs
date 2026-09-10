@@ -14,6 +14,9 @@ use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{Mutex, oneshot};
 use uuid::Uuid;
 
+mod commands;
+pub mod firmware;
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct IpcEvent {
     channel: String,
@@ -32,7 +35,7 @@ struct SidecarErrorEvent {
     detail: Option<String>,
 }
 
-struct SidecarState {
+pub(crate) struct SidecarState {
     child: Arc<Mutex<Option<Child>>>,
     stdin: Arc<Mutex<Option<ChildStdin>>>,
     pending: Arc<Mutex<HashMap<String, oneshot::Sender<serde_json::Value>>>>,
@@ -61,7 +64,7 @@ fn find_sidecar_script(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .map(|p| p.join("../lib/arcticfox-config/resources/sidecar/hid-bridge.js")),
+            .map(|p| p.join("../lib/cloudy-af/resources/sidecar/hid-bridge.js")),
         std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
@@ -116,6 +119,21 @@ async fn sidecar_request(state: &SidecarState, cmd: serde_json::Value) -> Result
     rx.await.map_err(|_| "Sidecar response cancelled".to_string())
 }
 
+/// Tell the HID sidecar to close the device and stop polling/reconnecting.
+/// Must be called before the firmware flasher talks to the device directly,
+/// so config reads cannot interleave into the flash stream (brick risk).
+/// Best-effort: returns Err when no sidecar is running, callers ignore it.
+pub(crate) async fn suspend_sidecar(state: &SidecarState) -> Result<(), String> {
+    sidecar_request(state, serde_json::json!({ "type": "suspend" })).await?;
+    Ok(())
+}
+
+/// Undo `suspend_sidecar`: the sidecar reconnects and resumes polling.
+pub(crate) async fn resume_sidecar(state: &SidecarState) -> Result<(), String> {
+    sidecar_request(state, serde_json::json!({ "type": "resume" })).await?;
+    Ok(())
+}
+
 #[tauri::command]
 async fn ipc_send(
     app: tauri::AppHandle,
@@ -123,7 +141,7 @@ async fn ipc_send(
     request: IpcSendRequest,
 ) -> Result<(), String> {
     match request.channel.as_str() {
-        "bat" | "tfr" | "pc" | "pireg" => {
+        "bat" | "tfr" | "pc" | "pireg" | "firmware" | "monitor" => {
             open_sub_window(&app, &request.channel, request.data).await
         }
         "piregchange" | "batchange" | "tfrchange" | "pcchange" => {
@@ -158,6 +176,8 @@ async fn open_sub_window(
         "tfr" => ("tfr", "TFR Profile", 545, 380, "tfr.html"),
         "pc" => ("pc", "Power Curve", 545, 520, "power.html"),
         "pireg" => ("pireg", "PI Regulator", 400, 275, "pireg.html"),
+        "firmware" => ("firmware", "Firmware Editor", 900, 600, "firmware.html"),
+        "monitor" => ("monitor", "Device Monitor", 940, 640, "monitor.html"),
         _ => return Err("Unknown sub-window".to_string()),
     };
 
@@ -200,11 +220,11 @@ async fn resolve_resource_path(
     let resource_dir = app.path().resource_dir().map_err(|e| e.to_string())?;
     let candidates = vec![
         resource_dir.join(&relative_path),
-        PathBuf::from("/app/lib/arcticfox-config/resources").join(&relative_path),
+        PathBuf::from("/app/lib/cloudy-af/resources").join(&relative_path),
         std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-            .map(|p| p.join("../lib/arcticfox-config/resources").join(&relative_path))
+            .map(|p| p.join("../lib/cloudy-af/resources").join(&relative_path))
             .unwrap_or_default(),
     ];
     if let Some(manifest) = option_env!("CARGO_MANIFEST_DIR") {
@@ -568,12 +588,37 @@ async fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
 }
 
 pub fn run() {
+    // DEVIATION: WebKit's internal WebProcess/GPU sandbox can crash on some
+    // NVIDIA systems (ABRT inside libnvidia-gpucomp). We keep the sandbox
+    // enabled by default and expose runtime escape hatches so users can opt in
+    // only when needed instead of weakening the package's default posture.
+    if std::env::args().any(|arg| arg == "--disable-webkit-sandbox") {
+        std::env::set_var("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1");
+    }
+    if std::env::args().any(|arg| arg == "--software-rendering") {
+        // Force WebKit to render without the GPU. This avoids the NVIDIA
+        // driver path while leaving the WebProcess sandbox intact.
+        std::env::set_var("WEBKIT_FORCE_SOFTWARE_RENDERING", "1");
+    }
+
     tauri::Builder::default()
+        // Single-instance MUST be the first plugin: a second concurrent
+        // instance runs its own HID sidecar whose auto-reconnect config reads
+        // interleave into a firmware flash stream and brick the device
+        // (observed 2026-09-04: three instances polling during an LDROM
+        // flash). A second launch just focuses the existing window instead.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
         .manage(SidecarState::new())
+        .manage(firmware::state::FirmwareState::new())
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
             let _ = window.set_title("Cloudy AF");
@@ -630,6 +675,22 @@ pub fn run() {
             export_tfr,
             import_bat,
             export_bat,
+            commands::firmware::open_firmware,
+            commands::firmware::download_stock,
+            commands::firmware::open_stock_build,
+            commands::firmware::list_patches,
+            commands::firmware::apply_patch_cmd,
+            commands::firmware::rollback_patch_cmd,
+            commands::firmware::save_firmware,
+            commands::firmware::close_firmware,
+            commands::firmware::read_device_dataflash,
+            commands::firmware::read_device_product_id,
+            commands::firmware::flash_firmware_to_device,
+            commands::firmware::restart_device_cmd,
+            commands::firmware::read_monitoring_data_cmd,
+            commands::firmware::undo_firmware_changes,
+            commands::firmware::list_hid_devices,
+            commands::firmware::recovery_flash,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,8 +1,8 @@
 {
   "name": "arcticfox-hid-sidecar",
-  "version": "1.14.1",
+  "version": "1.19.0",
   "private": true,
-  "description": "HID sidecar for Arcticfox Config Tauri app",
+  "description": "HID sidecar for Cloudy AF Tauri app",
   "main": "hid-bridge.js",
   "type": "commonjs",
   "scripts": {

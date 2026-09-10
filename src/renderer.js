@@ -2,11 +2,14 @@ import 'photonkit/dist/css/photon.css';
 import './style.css';
 import $ from 'jquery';
 import Highcharts from 'highcharts';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { PhysicalSize } from '@tauri-apps/api/dpi';
 import { ipc, getLocale, getAppVersion, readTextFile, resolveResourcePath, showError, openConfig, saveConfig } from './lib/tauri-bridge.js';
+import { DEFAULT_TFR_TABLES, DEFAULT_POWER_CURVES } from './lib/default-curves.js';
 
 let config;
 let lang;
-let appVersion = '1.14.0';
+let appVersion = '1.2.0';
 
 ipc.on('connect', (event, status) => {
     $('#connection-status').html(_('Status.Device') + ' ' + (status ? _('Status.Connected') : _('Status.Disconnected')));
@@ -45,6 +48,28 @@ let foxfirmware = '170909';
 // works for configs loaded from the device or from older .afc files.
 function normalizeConfig(cfg) {
     if (!cfg || !Array.isArray(cfg.profiles)) return cfg;
+    // Local-only fields (not sent to the device) default to 0 when missing
+    // from older .afc files.
+    if (typeof cfg.ClockAnimation !== 'number') cfg.ClockAnimation = 0;
+    // Fall back to the built-in default curves when a TFR table or power
+    // curve is entirely zeroed (e.g. fresh/never-customized device tables),
+    // so the plots show meaningful data instead of a flat zero line.
+    if (Array.isArray(cfg.TFRTables)) {
+        cfg.TFRTables.forEach((tfr, i) => {
+            const zeroed = !tfr.Points || tfr.Points.every(p => !p.Temperature && !p.Factor);
+            if (zeroed && DEFAULT_TFR_TABLES[i]) {
+                cfg.TFRTables[i] = JSON.parse(JSON.stringify(DEFAULT_TFR_TABLES[i]));
+            }
+        });
+    }
+    if (Array.isArray(cfg.PowerCurves)) {
+        cfg.PowerCurves.forEach((pc, i) => {
+            const zeroed = !pc.Points || pc.Points.every(p => !p.Time && !p.Percent);
+            if (zeroed && DEFAULT_POWER_CURVES[i]) {
+                cfg.PowerCurves[i] = JSON.parse(JSON.stringify(DEFAULT_POWER_CURVES[i]));
+            }
+        });
+    }
     cfg.profiles.forEach(profile => {
         if (typeof profile.IsCelcius !== 'boolean') {
             if (typeof profile.Flags === 'number') {
@@ -95,6 +120,18 @@ function uiInitTabs() {
         const view = $(this).data('view');
         $('.view-container.view-advanced .subview').hide();
         $('.view-container.view-advanced #view-' + view).show();
+        // Reflow curve charts when their container becomes visible so they
+        // render at the correct size (they may have been initialised while hidden).
+        window.setTimeout(() => {
+            const prefix = view === 'advanced-powercurves' ? 'pc' : (view === 'advanced-materials' ? 'tfr' : null);
+            if (prefix && window.curveCharts) {
+                Object.keys(window.curveCharts).forEach(key => {
+                    if (key.startsWith(prefix)) {
+                        window.curveCharts[key].reflow();
+                    }
+                });
+            }
+        }, 0);
     });
 
     $('.tab-group#controls .tab-item').click(function () {
@@ -113,20 +150,34 @@ function uiInitTabs() {
 
 function uiScreenLayoutView(skin) {
     // 96x16 displays use Classic (0) and Lite (1); Lite uses the Small layout tab.
+    // Large (64x128) displays expose all five skins: Classic(0), Circle(1), Foxy(2),
+    // Small(3), Medium(4). NToolbox-style: only the active mode's fields are shown.
     const isSmallDisplay = config && config.DisplaySize === 1;
     const names = isSmallDisplay
         ? ['classic', 'small']
         : ['classic', 'circle', 'foxy', 'small', 'medium'];
-    const name = names[skin] || 'classic';
-    $('.tab-group#screen-layout .tab-item').removeClass('active');
-    $('[data-view="screen-layout-' + name + '"]').addClass('active');
+    const skinVal = Number(skin) || 0;
+    const name = names[skinVal] || 'classic';
+
+    // Show only the active mode's subview. The manual mode tab bar is gone; this is
+    // the sole driver, kept in sync with Appearance → Main Screen Skin.
     $('.view-container.view-screen-layout .subsubview').hide();
     $('.view-container.view-screen-layout #view-screen-layout-' + name).show();
+
+    // Reflect the active mode in a small caption so the user knows which mode's
+    // fields are being edited.
+    const skinLabels = isSmallDisplay
+        ? ['Skin.Classic', 'Skin.Lite']
+        : ['Skin.Classic', 'Skin.Circle', 'Skin.Foxy', 'Skin.Small', 'Skin.Medium'];
+    const label = skinLabels[skinVal] || 'Skin.Classic';
+    $('#layout-mode-name').text(_(label));
+    $('#layout-mode-bar').show();
 }
 
 // DEVIATION: The original fork had a fixed Classic/Circle/Foxy skin dropdown.
-// For 96x16 displays ArcticFox uses value 1 for the "Lite" skin, so we repopulate
-// the dropdown dynamically and relabel the Small layout tab accordingly.
+// ArcticFox exposes five main-screen skins (Classic, Circle, Foxy, Small, Medium);
+// 96x16 displays instead use value 1 for the "Lite" skin. The Layout page reflects
+// the active skin (NToolbox-style) and no longer offers a manual mode tab bar.
 function uiUpdateSkinOptions() {
     const $skin = $('#MainScreenSkin');
     const isSmallDisplay = config && config.DisplaySize === 1;
@@ -138,17 +189,19 @@ function uiUpdateSkinOptions() {
         $skin.append('<option value="0" data-lang="Skin.Classic">' + _('Skin.Classic') + '</option>');
         $skin.append('<option value="1" data-lang="Skin.Circle">' + _('Skin.Circle') + '</option>');
         $skin.append('<option value="2" data-lang="Skin.Foxy">' + _('Skin.Foxy') + '</option>');
+        $skin.append('<option value="3" data-lang="Skin.Small">' + _('Skin.Small') + '</option>');
+        $skin.append('<option value="4" data-lang="Skin.Medium">' + _('Skin.Medium') + '</option>');
     }
 
-    // Show/hide layout tabs that don't apply to this display size.
-    $('[data-view="screen-layout-circle"]').toggle(!isSmallDisplay);
-    $('[data-view="screen-layout-foxy"]').toggle(!isSmallDisplay);
-    $('[data-view="screen-layout-medium"]').toggle(!isSmallDisplay);
-    const $smallTab = $('[data-view="screen-layout-small"]');
+    // Hide layout subviews that don't apply to this display size. (The classic
+    // subview is the fallback and is always shown; Small applies to both, but is
+    // labelled Lite on 96x16 displays.)
+    const smallSub = $('.view-container.view-screen-layout #view-screen-layout-small');
+    $('.view-container.view-screen-layout #view-screen-layout-circle').toggle(!isSmallDisplay);
+    $('.view-container.view-screen-layout #view-screen-layout-foxy').toggle(!isSmallDisplay);
+    $('.view-container.view-screen-layout #view-screen-layout-medium').toggle(!isSmallDisplay);
     if (isSmallDisplay) {
-        $smallTab.show().attr('data-lang', 'Skin.Lite').html(_('Skin.Lite'));
-    } else {
-        $smallTab.hide();
+        smallSub.show();
     }
 }
 
@@ -225,6 +278,14 @@ function uiProfile(p) {
         }
     });
 
+    // DEVIATION: Show the profile temperature unit as plain text derived from the
+    // global TemperatureUnits regional setting. Keep the per-profile IsCelcius
+    // flag in sync so uploads reflect the same choice.
+    const isCelsius = Number(config.TemperatureUnits) === 1;
+    config.profiles[p].IsCelcius = isCelsius;
+    $('#IsCelcius').text(isCelsius ? '°C' : '°F');
+    $('#Temperature').attr('step', isCelsius ? '5' : '10');
+
     uiPreheat($('#PreheatType').val());
     uiTcr(config.profiles[p].Material);
     uiTempControl(config.profiles[p].Material !== 0);
@@ -282,6 +343,14 @@ function uiInitButtons() {
         const index = $('#BatteryModel').val() - 1;
         ipc.send('bat', { index, table: config.CustomBatteryProfiles[index] });
     });
+
+    $('#firmware-editor').click(function () {
+        ipc.send('firmware', {});
+    });
+
+    $('#device-monitor').click(function () {
+        ipc.send('monitor', {});
+    });
 }
 
 function uiUpdate() {
@@ -300,102 +369,150 @@ function uiUpdate() {
     const $MaterialTable = $('#table-material');
     $Material.html('');
     $MaterialTable.html('');
+    // DEVIATION: Keep the original ArcticFox coil material labels so the dropdown
+    // matches the mod's firmware choices: Nickel 200, Titanium 1, SS 316, TCR,
+    // and the eight user-editable TFR tables (TFR1..TFR8).
     $Material.append('<option value="1">Nickel 200</option>');
     $Material.append('<option value="2">Titanium 1</option>');
     $Material.append('<option value="3">SS 316</option>');
     $Material.append('<option value="4">TCR</option>');
 
+    // DEVIATION: Render the user-editable TFR tables in the same grid layout the
+    // original NToolbox/NFirmwareEditor Advanced Materials list used: each item
+    // shows a curve preview above the [TFR] name, and clicking the card opens the
+    // TFR plot editor. Fixed display names match the NFE defaults: Ni, Ti, 304,
+    // 316, 316L, 321, NF30, NiFe.
+    const tfrDisplayNames = ['Ni', 'Ti', '304', '316', '316L', '321', 'NF30', 'NiFe'];
+    $MaterialTable.addClass('curve-grid');
     config.TFRTables.forEach((tfr, index) => {
-        $Material.append('<option value="' + (index + 5) + '">[TFR] ' + tfr.Name + '</option>');
-        $MaterialTable.append('<tr><td>' + tfr.Name + '</td><td><button class="tfr-button btn btn-default" data-tfr="' + index + '">Edit</button></td></tr>');
+        $Material.append('<option value="' + (index + 5) + '">TFR' + (index + 1) + '</option>');
+        const displayName = tfrDisplayNames[index] || tfr.Name.replace(/\u0000/g, '');
+        $MaterialTable.append(
+            '<div class="curve-card tfr-card" data-tfr="' + index + '">' +
+            '<div class="curve-preview tfr-preview" id="tfr' + index + '"></div>' +
+            '<div class="curve-label">[TFR] ' + displayName + '</div>' +
+            '</div>'
+        );
+        window.curveCharts = window.curveCharts || {};
+        window.curveCharts['tfr' + index] = new Highcharts.Chart({
+            chart: {
+                renderTo: 'tfr' + index,
+                width: 100,
+                height: 48,
+                margin: [0, 0, 0, 0],
+                style: { overflow: 'visible' }
+            },
+            title: { text: '' },
+            credits: { enabled: false },
+            legend: { enabled: false },
+            xAxis: {
+                labels: { enabled: false },
+                tickLength: 0,
+                lineWidth: 0,
+                min: 0,
+                max: 800
+            },
+            yAxis: {
+                title: { text: null },
+                maxPadding: 0,
+                minPadding: 0,
+                gridLineWidth: 0,
+                endOnTick: false,
+                labels: { enabled: false },
+                min: 1,
+                max: 4
+            },
+            tooltip: { enabled: false },
+            plotOptions: {
+                series: {
+                    enableMouseTracking: false,
+                    lineWidth: 1,
+                    shadow: false,
+                    marker: { enabled: false }
+                }
+            },
+            series: [{
+                type: 'spline',
+                color: '#9acd32',
+                data: tfr.Points.map(p => [p.Temperature, p.Factor])
+            }]
+        });
     });
 
-    $('.tfr-button').click(function () {
+    $(document).on('click', '.tfr-card', function () {
         const index = $(this).data('tfr');
         ipc.send('tfr', { index, table: config.TFRTables[index] });
     });
 
     const $PowerTable = $('#table-power');
     $PowerTable.html('');
-    Highcharts.setOptions({
-        chart: {
-            margin: [0, 0, 0, 0],
-            style: {
-                overflow: 'visible'
-            }
-        },
-        title: {
-            text: ''
-        },
-        credits: {
-            enabled: false
-        },
-        legend: {
-            enabled: false
-        },
-        xAxis: {
-            labels: {
-                enabled: false
-            },
-            tickLength: 0,
-            min: 0,
-            max: 8
-        },
-        yAxis: {
-            title: {
-                text: null
-            },
-            maxPadding: 0,
-            minPadding: 0,
-            gridLineWidth: 0,
-            ticks: false,
-            endOnTick: false,
-            labels: {
-                enabled: false
-            },
-            min: 0,
-            max: 250
-        },
-        tooltip: {
-            enabled: false
-        },
-        plotOptions: {
-            series: {
-                enableMouseTracking: false,
-                lineWidth: 1,
-                shadow: false,
-                states: {
-                    hover: {
-                        lineWidth: 1
-                    }
-                },
-                marker: {
-                    enabled: false
-                }
-            }
-        }
-    });
 
+    // DEVIATION: Render power curves in the original NToolbox grid layout with
+    // fixed display names: Soft, Boost 1s, Boost 2s, Sine 1, Sine 2, Cooldown,
+    // Triangle, Linear. Clicking a card opens the Power Curve plot editor.
+    const powerCurveDisplayNames = ['Soft', 'Boost 1s', 'Boost 2s', 'Sine 1', 'Sine 2', 'Cooldown', 'Triangle', 'Linear'];
+    $PowerTable.addClass('curve-grid');
     config.PowerCurves.forEach((pc, index) => {
-        $PowerTable.append('<tr><td style="width: 80px;">' + pc.Name + '</td><td style="width: 160px;"><div class="sparkline" id="pc' + index + '"></div></td><td><button class="power-button btn btn-default" data-pc="' + index + '">Edit</button></td></tr>');
+        const displayName = powerCurveDisplayNames[index] || pc.Name;
+        $PowerTable.append(
+            '<div class="curve-card pc-card" data-pc="' + index + '">' +
+            '<div class="curve-preview pc-preview" id="pc' + index + '"></div>' +
+            '<div class="curve-label">' + displayName + '</div>' +
+            '</div>'
+        );
         const data = [];
         pc.Points.forEach(p => {
             data.push({ x: p.Time, y: p.Percent });
         });
-        new Highcharts.Chart({
+        window.curveCharts = window.curveCharts || {};
+        window.curveCharts['pc' + index] = new Highcharts.Chart({
             chart: {
                 renderTo: 'pc' + index,
+                width: 100,
+                height: 48,
+                margin: [0, 0, 0, 0],
+                style: { overflow: 'visible' }
+            },
+            title: { text: '' },
+            credits: { enabled: false },
+            legend: { enabled: false },
+            xAxis: {
+                labels: { enabled: false },
+                tickLength: 0,
+                lineWidth: 0,
+                min: 0,
+                max: 8
+            },
+            yAxis: {
+                title: { text: null },
+                maxPadding: 0,
+                minPadding: 0,
+                gridLineWidth: 0,
+                endOnTick: false,
+                labels: { enabled: false },
+                min: 0,
+                max: 250
+            },
+            tooltip: { enabled: false },
+            plotOptions: {
+                series: {
+                    enableMouseTracking: false,
+                    lineWidth: 1,
+                    shadow: false,
+                    marker: { enabled: false }
+                }
             },
             series: [{
-                fillColor: 'rgba(124, 181, 236, 0.3)',
+                fillColor: 'rgba(154, 205, 50, 0.25)',
+                lineColor: '#9acd32',
                 type: 'area',
-                name: pc.Name,
+                name: displayName,
                 data
             }]
         });
     });
 
-    $('.power-button').click(function () {
+    $(document).on('click', '.pc-card', function () {
         const index = $(this).data('pc');
         ipc.send('pc', { index, table: config.PowerCurves[index] });
     });
@@ -403,7 +520,8 @@ function uiUpdate() {
     const $SelectedCurve = $('#SelectedCurve');
     $SelectedCurve.html('');
     config.PowerCurves.forEach((pc, index) => {
-        $SelectedCurve.append('<option value="' + index + '">' + pc.Name + '</option>');
+        const displayName = powerCurveDisplayNames[index] || pc.Name;
+        $SelectedCurve.append('<option value="' + index + '">' + displayName + '</option>');
     });
 
     $('.fox-val').each(function () {
@@ -615,6 +733,11 @@ async function uiInit() {
 
     $(document).on('change', '.fox-pval', function () {
         const id = $(this).attr('id');
+        // DEVIATION: IsCelcius is now a read-only label driven by TemperatureUnits;
+        // ignore change events from it.
+        if (id === 'IsCelcius') {
+            return;
+        }
         const currentVal = config.profiles[activeProfile][id];
         let newVal;
         if ($(this).attr('type') === 'checkbox') {
@@ -635,11 +758,6 @@ async function uiInit() {
                 }
                 break;
             default:
-        }
-        // DEVIATION: IsCelcius comes from a <select> with string values, so coerce it
-        // to a boolean explicitly before storing it on the profile.
-        if (id === 'IsCelcius') {
-            newVal = (newVal === true || newVal === 'true');
         }
         config.profiles[activeProfile][id] = newVal;
     });
@@ -676,7 +794,8 @@ function syncConfigFromUi() {
 
     $('.fox-pval').each(function () {
         const id = $(this).attr('id');
-        if (!id || !config.profiles[activeProfile]) return;
+        // DEVIATION: IsCelcius is a read-only label driven by TemperatureUnits.
+        if (!id || !config.profiles[activeProfile] || id === 'IsCelcius') return;
         const currentVal = config.profiles[activeProfile][id];
         let newVal;
         if ($(this).attr('type') === 'checkbox') {
@@ -692,11 +811,6 @@ function syncConfigFromUi() {
                 newVal = (newVal === 'false') ? false : Boolean(newVal);
                 break;
             default:
-        }
-        // DEVIATION: IsCelcius is stored as a boolean but rendered as a <select>;
-        // normalize the string value before upload.
-        if (id === 'IsCelcius') {
-            newVal = (newVal === true || newVal === 'true');
         }
         config.profiles[activeProfile][id] = newVal;
     });
@@ -891,10 +1005,11 @@ function uiInitBootIcon() {
     stack.addEventListener('click', onBootIconClick);
 }
 
-// Wrap the main tab bar and the view container in a fixed-width, centered
-// wrapper so they scale as a single block. The HTML keeps them as direct
-// children of .window-content for backward compatibility; we relocate them at
-// runtime so the transform/scale applies to the whole content area.
+// Wrap the main tab bar and the view container in a full-width wrapper so
+// the tab bars extend to the window borders while the view content scales
+// from the center. The HTML keeps them as direct children of .window-content
+// for backward compatibility; we relocate them at runtime so the transform
+// applies consistently.
 function uiWrapContentForScaling() {
     const main = document.getElementById('main');
     const content = document.querySelector('.window-content');
@@ -909,10 +1024,10 @@ function uiWrapContentForScaling() {
     content.appendChild(wrap);
 }
 
-// Scale the whole content area (main tabs + views) to fit the window while
-// keeping the header/footer at their natural size. The content block is fixed
-// at the 536px design width and centered horizontally, matching the centered
-// header/footer layout.
+// Scale the view content to fit the window while keeping the header/footer
+// at their natural size. The wrapper is sized to the base window dimensions
+// and centered in the content area; the tab bars stretch to the wrapper edges
+// and scale with it so they reach the window borders while staying centered.
 function updateContentZoom() {
     const header = document.querySelector('.toolbar-header');
     const footer = document.querySelector('.toolbar-footer');
@@ -920,16 +1035,52 @@ function updateContentZoom() {
     if (!header || !footer || !content) return;
 
     const baseWidth = 536;
-    const baseHeight = 596;
+    const baseHeight = 621;
     const headerHeight = header.offsetHeight;
     const footerHeight = footer.offsetHeight;
 
     const baseContentHeight = baseHeight - headerHeight - footerHeight;
-    const availableWidth = window.innerWidth;
-    const availableContentHeight = window.innerHeight - headerHeight - footerHeight;
+    // Measure the REAL flex container instead of reconstructing it from
+    // window.innerHeight - header - footer: transient header/footer heights
+    // (web fonts, i18n text) made the first estimate wrong, and with
+    // zoom-based layout an oversized wrapper gets clipped under the header
+    // until the next resize.
+    const availableWidth = content.clientWidth;
+    const availableContentHeight = content.clientHeight;
 
     const scale = Math.min(availableWidth / baseWidth, availableContentHeight / baseContentHeight);
+    document.documentElement.style.setProperty('--base-width', `${baseWidth}px`);
+    document.documentElement.style.setProperty('--base-content-height', `${baseContentHeight}px`);
     document.documentElement.style.setProperty('--content-scale', scale.toFixed(4));
+}
+
+// DEVIATION: Lock the Tauri window to the base aspect ratio so every resize is
+// diagonal. This keeps the fixed 536x621 UI layout proportional and avoids the
+// dead-space / tab-bar-stretch problems that come from free-form resizing.
+const BASE_WINDOW_WIDTH = 536;
+const BASE_WINDOW_HEIGHT = 621;
+const BASE_ASPECT = BASE_WINDOW_WIDTH / BASE_WINDOW_HEIGHT;
+
+function lockWindowAspectRatio() {
+    const win = getCurrentWindow();
+    let enforcing = false;
+    win.onResized(({ payload: size }) => {
+        if (enforcing) return;
+        const { width, height } = size;
+        const aspect = width / height;
+        if (Math.abs(aspect - BASE_ASPECT) < 0.001) return;
+        let newWidth = width;
+        let newHeight = height;
+        if (aspect > BASE_ASPECT) {
+            newWidth = Math.round(height * BASE_ASPECT);
+        } else {
+            newHeight = Math.round(width / BASE_ASPECT);
+        }
+        enforcing = true;
+        win.setSize(new PhysicalSize(newWidth, newHeight)).finally(() => {
+            enforcing = false;
+        });
+    });
 }
 
 window.addEventListener('resize', updateContentZoom);
@@ -939,3 +1090,14 @@ uiInit();
 uiInitStatsIcon();
 uiInitBootIcon();
 updateContentZoom();
+lockWindowAspectRatio();
+
+// Re-run once fonts and i18n text have settled: the header/footer heights at
+// first paint can differ from their final values, which would leave the
+// zoom-scaled wrapper mis-sized (tab bar clipped under the header) until the
+// next window resize.
+if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(updateContentZoom);
+}
+requestAnimationFrame(() => requestAnimationFrame(updateContentZoom));
+window.addEventListener('load', updateContentZoom);
