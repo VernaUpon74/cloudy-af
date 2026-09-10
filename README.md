@@ -56,7 +56,7 @@ sudo dnf install ./builds/Cloudy\ AF-<version>-1.x86_64.rpm
 
 ### macOS (experimental, less testing)
 
-A manual GitHub Actions workflow (`.github/workflows/macos-build.yml`) builds a `.dmg` from source using Homebrew. It works but is tested rarely — expect rough edges, and HID access needs manual permission grants (below). macOS devs welcome.
+A manual GitHub Actions workflow (`.github/workflows/macos-build.yml`) builds a `.dmg` from source using Homebrew. ~~It works~~ but is tested rarely — expect rough edges, and HID access needs manual permission grants (below). macOS devs welcome.
 
 ```bash
 brew install node@22 rust
