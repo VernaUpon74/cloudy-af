@@ -3,8 +3,8 @@
 
 > The project is Cloudy AF (originally Arcticfox Config), a Linux desktop configuration utility for vape battery mods that run the ArcticFox firmware. It is a community fork that modernizes the decade-old Electron-based app into a Tauri desktop application, packaged as a Flatpak.
 
-  This fork reworks hobbyquaker's Electron-based Linux/macOS [project](https://github.com/hobbyquaker/arcticfox-config) as a Rust [Tauri](https://tauri.app/) desktop app, packaging it as a sandboxed [Flatpak](https://flatpak.org) image for Linux, permission-controllable (through [Flatseal](https://github.com/tchx84/Flatseal)), because current npm is a minefield, Wine USB passthrough is a headache, and so is creating Windows VMs.
-  The fork also adds quality-of-life improvements such as built-in Device Monitor, light/dark UI detection, window scaling, Freedom Unit selection that works (original defaulted to Celsius and capped F at 400), enhanced tooltip description, device auto-reconnect, a "Lite" appearance mode for small devices with all five ArcticFox skins available on large displays, STM32 support and a Firmware Editor.
+  This fork modernizes hobbyquaker's Electron-based Linux/macOS [project].
+  The fork also adds quality-of-life improvements such as built-in Device Monitor, light/dark UI detection, window scaling, Freedom Unit selection that works (original defaulted to Celsius and capped F at 400), temperature value scaling by unit, enhanced tooltip description, device auto-reconnect, a "Lite" appearance mode for small devices with all five ArcticFox skins available on large displays, STM32 support and a Firmware Editor.
   Planned developments include unique device timeout and charge animations- proving complicated.
 
 ![demo](demo.png)
