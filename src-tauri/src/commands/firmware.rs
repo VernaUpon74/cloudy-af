@@ -5,11 +5,16 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
 use uuid::Uuid;
 
+use crate::firmware::anim::asm::AnimError;
+use crate::firmware::anim::effects::{
+    build_center_pulse_patch, build_diagonal_sweep_patch, build_gradient_fade_patch,
+    image_supports_animation, load_animation_desc,
+};
 use crate::firmware::definition::{parse_definition, FirmwareDefinition};
 use crate::firmware::encryption::{decrypt, encrypt, EncryptionType};
 use crate::firmware::flasher::{flash_firmware_guarded, read_dataflash, read_product_id, restart_device};
 use crate::firmware::loader::{load_firmware, FirmwareImage};
-use crate::firmware::patch::{apply_patch, parse_patch, rollback_patch};
+use crate::firmware::patch::{apply_patch, parse_patch, rollback_patch, rollback_other_animations, Patch};
 use crate::firmware::state::{FirmwareState, OpenFirmware};
 use crate::firmware::stock::{line_for_definition, line_for_product, load_library, match_build, MatchKind};
 
@@ -117,6 +122,81 @@ fn load_available_patches(
     result
 }
 
+/// Locate bundled animation descriptors (`resources/animations/*.json`),
+/// mirroring the candidate-list pattern of `patch_dirs`.
+fn animation_descriptor_paths(app: &AppHandle) -> Vec<PathBuf> {
+    let resource_dir = app.path().resource_dir().ok();
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+
+    let dirs: Vec<PathBuf> = [
+        resource_dir.clone().map(|d| d.join("animations")),
+        resource_dir.clone().map(|d| d.join("../animations")),
+        exe_dir.clone().map(|d| d.join("../lib/cloudy-af/resources/animations")),
+        exe_dir.clone().map(|d| d.join("resources/animations")),
+        exe_dir.clone().map(|d| d.join("animations")),
+        option_env!("CARGO_MANIFEST_DIR").map(|s| {
+            PathBuf::from(s)
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join("resources/animations")
+        }),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+
+    let mut result = Vec::new();
+    for dir in dirs {
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.filter_map(|e| e.ok()) {
+                let path = entry.path();
+                if path.extension().map(|x| x == "json").unwrap_or(false) {
+                    result.push(path);
+                }
+            }
+        }
+    }
+    result
+}
+
+/// Animation-effect patches for an opened image: one patch per effect for
+/// every bundled descriptor whose build matches the image. The effects are
+/// only offered when the image passes `image_supports_animation` (stock
+/// hook-site bytes + erased code cave, per the af_190602 RE notes), so they
+/// never attach to an incompatible or already-patched image.
+fn animation_patches(app: &AppHandle, image: &[u8]) -> Vec<Patch> {
+    let mut result = Vec::new();
+    let mut seen_descs = std::collections::HashSet::new();
+    for path in animation_descriptor_paths(app) {
+        // Candidate dirs can overlap (dev resource dir next to the exe plus
+        // the CARGO_MANIFEST_DIR fallback); list each descriptor only once.
+        if !seen_descs.insert(path.file_name().map(|n| n.to_owned()).unwrap_or_default()) {
+            continue;
+        }
+        let Ok(desc_json) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(anim) = load_animation_desc(&desc_json) else {
+            continue;
+        };
+        if !image_supports_animation(image, &anim) {
+            continue;
+        }
+        for build in [
+            build_gradient_fade_patch as fn(&str) -> Result<Patch, AnimError>,
+            build_center_pulse_patch,
+            build_diagonal_sweep_patch,
+        ] {
+            if let Ok(patch) = build(&desc_json) {
+                result.push(patch);
+            }
+        }
+    }
+    result
+}
+
 /// Locate the bundled `firmware` resource directory (stock builds +
 /// devices.json), mirroring the candidate-list pattern of `load_definitions`.
 fn firmware_resource_dir(app: &AppHandle) -> Option<PathBuf> {
@@ -172,7 +252,7 @@ fn insert_opened(
     }
 
     let patches = load_available_patches(app, &image.definition);
-    let parsed_patches: Vec<_> = patches
+    let mut parsed_patches: Vec<_> = patches
         .into_iter()
         .filter_map(|(id, path)| {
             std::fs::read_to_string(&path)
@@ -184,6 +264,7 @@ fn insert_opened(
                 })
         })
         .collect();
+    parsed_patches.extend(animation_patches(app, &image.bytes));
 
     state.insert(
         handle.clone(),
@@ -367,6 +448,15 @@ pub async fn apply_patch_cmd(
         .with(&handle, |fw| {
             let patch_index = fw.patches.iter().position(|p| p.id == patch_id);
             if let Some(index) = patch_index {
+                // The animation effects share one hook site and one code
+                // cave; the device config byte selects the active effect, so
+                // only one may be applied at a time.
+                rollback_other_animations(
+                    &mut fw.image.bytes,
+                    &mut fw.patches,
+                    &mut fw.rollback_log,
+                    &patch_id,
+                );
                 let patch = &mut fw.patches[index];
                 match apply_patch(&mut fw.image.bytes, patch, &mut fw.rollback_log) {
                     Ok(()) => serde_json::json!({ "ok": true }),

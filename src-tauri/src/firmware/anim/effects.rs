@@ -24,6 +24,48 @@ use crate::firmware::anim::asm::{bw_pair, AnimError, Asm, AsmError};
 use crate::firmware::emu::harness::de_hex;
 use crate::firmware::patch::{Patch, PatchModification};
 
+/// Stock bytes at the af_190602 hook site: `tst.w r2, #0x20000`
+/// (`resources/re/af_190602-dispatcher-analy.md` §7.4). An image without
+/// these 4 bytes at `hook_site` is a different build (or already detoured)
+/// and must not receive an animation patch.
+pub const HOOK_SITE_STOCK_BYTES: [u8; 4] = [0xF4, 0x12, 0x3F, 0x00];
+
+/// Parse and validate the descriptor's `"animation"` block. Shared by the
+/// effect builders and the firmware-editor gate (`image_supports_animation`).
+pub fn load_animation_desc(desc_json: &str) -> Result<AnimationDesc, AnimError> {
+    let v: serde_json::Value =
+        serde_json::from_str(desc_json).map_err(|e| AnimError::Descriptor(e.to_string()))?;
+    let anim: AnimationDesc = serde_json::from_value(v["animation"].clone())
+        .map_err(|e| AnimError::Descriptor(format!("animation block: {e}")))?;
+    if anim.status_base_addr + 4 != anim.status_word_addr {
+        return Err(AnimError::Descriptor(format!(
+            "status_base_addr {:#x} must be status_word_addr {:#x} - 4",
+            anim.status_base_addr, anim.status_word_addr
+        )));
+    }
+    Ok(anim)
+}
+
+/// Gate for offering animation patches on an opened image: the hook site must
+/// still hold the stock timeout test (right build, not already patched) and
+/// the code cave must be erased flash (all 0xFF), so the detour can never
+/// clobber live code. A cave region past the image end counts as erased —
+/// `apply_patch` grows the image into it.
+pub fn image_supports_animation(image: &[u8], anim: &AnimationDesc) -> bool {
+    let hook = anim.hook_site as usize;
+    if image.len() < hook + HOOK_SITE_STOCK_BYTES.len()
+        || image[hook..hook + HOOK_SITE_STOCK_BYTES.len()] != HOOK_SITE_STOCK_BYTES
+    {
+        return false;
+    }
+    let cave = anim.code_cave.start as usize;
+    let cave_end = cave.saturating_add(anim.code_cave.size).min(image.len());
+    image
+        .get(cave..cave_end)
+        .map(|region| region.iter().all(|b| *b == 0xFF))
+        .unwrap_or(true)
+}
+
 /// 16-entry quarter-wave sine LUT, values 0..=255.
 pub const SINE_LUT: [u8; 16] = [0, 25, 50, 74, 98, 120, 142, 162, 180, 197, 212, 225, 236, 245, 251, 255];
 
@@ -244,16 +286,9 @@ fn build_effect_patch(
     description: &str,
     emit: EmitFn,
 ) -> Result<Patch, AnimError> {
+    let anim = load_animation_desc(desc_json)?;
     let v: serde_json::Value =
         serde_json::from_str(desc_json).map_err(|e| AnimError::Descriptor(e.to_string()))?;
-    let anim: AnimationDesc = serde_json::from_value(v["animation"].clone())
-        .map_err(|e| AnimError::Descriptor(format!("animation block: {e}")))?;
-    if anim.status_base_addr + 4 != anim.status_word_addr {
-        return Err(AnimError::Descriptor(format!(
-            "status_base_addr {:#x} must be status_word_addr {:#x} - 4",
-            anim.status_base_addr, anim.status_word_addr
-        )));
-    }
     let hex = |key: &str| -> Result<u32, AnimError> {
         let s = v["display_buffer"][key]
             .as_str()
@@ -532,6 +567,49 @@ mod tests {
         assert_cave_matches_reference("gradient", emit_gradient_fade, CONFIG_GRADIENT_FADE);
         assert_cave_matches_reference("center", emit_center_pulse, CONFIG_CENTER_PULSE);
         assert_cave_matches_reference("diagonal", emit_diagonal_sweep, CONFIG_DIAGONAL_SWEEP);
+    }
+
+    #[test]
+    fn test_image_supports_animation_gate() {
+        let anim = load_animation_desc(DESC).unwrap();
+        // DESC hook_site 0x100, cave 0x8000 (past any test image).
+
+        let mut img = vec![0u8; 0x1000];
+        assert!(!image_supports_animation(&img, &anim), "all-zero hook site");
+
+        img[0x100..0x104].copy_from_slice(&HOOK_SITE_STOCK_BYTES);
+        assert!(image_supports_animation(&img, &anim));
+
+        // Different build / already detoured at the hook site.
+        img[0x102] = 0x00;
+        assert!(!image_supports_animation(&img, &anim), "hook site tampered");
+        img[0x102] = 0x3F;
+
+        // Image too small to contain the hook site.
+        assert!(!image_supports_animation(&img[..0x100], &anim));
+
+        // Cave inside the image must be erased flash.
+        let cave_json = r#"{"animation": { "hook_site": "0x100", "hook_resume": "0x104",
+            "code_cave": {"start": "0x400", "size": 256},
+            "config_byte_addr": "0x1F100", "phase_global": "0x20000000",
+            "status_word_addr": "0x20000008",
+            "status_base_addr": "0x20000004" }}"#;
+        let cave_anim = load_animation_desc(cave_json).unwrap();
+        let mut erased = vec![0xFFu8; 0x1000];
+        erased[0x100..0x104].copy_from_slice(&HOOK_SITE_STOCK_BYTES);
+        assert!(image_supports_animation(&erased, &cave_anim));
+        erased[0x4FF] = 0x42;
+        assert!(!image_supports_animation(&erased, &cave_anim), "cave not erased");
+    }
+
+    #[test]
+    fn test_load_animation_desc_rejects_bad_status_base() {
+        let bad = r#"{"animation": { "hook_site": "0x100", "hook_resume": "0x104",
+            "code_cave": {"start": "0x8000", "size": 512},
+            "config_byte_addr": "0x1F100", "phase_global": "0x20000000",
+            "status_word_addr": "0x20000008",
+            "status_base_addr": "0x20000000" }}"#;
+        assert!(load_animation_desc(bad).is_err());
     }
 
     #[test]

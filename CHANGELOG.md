@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Timeout animation effects in the Firmware Editor's Patches tab**: Gradient Fade, Center Pulse and Diagonal Sweep are now listed as regular patches when an opened image matches a bundled animation descriptor (currently af_190602) — applicable and rollback-able like any other patch. Only one effect can be applied at a time since all three share one hook site and code cave; applying one rolls back the other. `resources/animations/` is now bundled with the app.
+
 ## 1.18.0 — 2026-09-10
 
 ### Added

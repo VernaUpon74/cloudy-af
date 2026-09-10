@@ -56,6 +56,7 @@ modules:
         cp -r resources/definitions /app/lib/cloudy-af/resources/
         cp -r resources/patches /app/lib/cloudy-af/resources/
         cp -r resources/firmware /app/lib/cloudy-af/resources/
+        cp -r resources/animations /app/lib/cloudy-af/resources/
         # Strip dev tooling, documentation, examples, tests, and platform-specific
         # native prebuilds from the sidecar to reduce the Flatpak size.
         cd /app/lib/cloudy-af/resources/sidecar

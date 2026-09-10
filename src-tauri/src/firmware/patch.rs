@@ -209,6 +209,23 @@ pub fn find_conflicts(patches: &[Patch]) -> Vec<(String, String, usize)> {
     conflicts
 }
 
+/// Animation effect patches all detour the SAME hook site into the SAME code
+/// cave; the device config byte selects which effect runs, so at most one may
+/// be applied at a time. Roll back every other applied animation patch (id
+/// prefix `anim-`) so applying one never layers two effects' cave bodies.
+pub fn rollback_other_animations(
+    firmware: &mut [u8],
+    patches: &mut [Patch],
+    rollback_log: &mut HashMap<usize, u8>,
+    except_id: &str,
+) {
+    for patch in patches.iter_mut() {
+        if patch.id != except_id && patch.applied && patch.id.starts_with("anim-") {
+            let _ = rollback_patch(firmware, patch, rollback_log);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,6 +287,36 @@ mod tests {
         let conflicts = find_conflicts(&[patch_a, patch_b]);
         assert_eq!(conflicts.len(), 1);
         assert_eq!(conflicts[0].2, 0x10);
+    }
+
+    #[test]
+    fn test_rollback_other_animations() {
+        // Two animations claiming the same hook site; applying the second
+        // must roll back the first so only one cave body is live.
+        let xml_a = r#"<Patch Name="A"><Data>0x10: * - 0xAA</Data></Patch>"#;
+        let xml_b = r#"<Patch Name="B"><Data>0x10: * - 0xBB</Data></Patch>"#;
+        let xml_c = r#"<Patch Name="C"><Data>0x20: * - 0xCC</Data></Patch>"#;
+        let mut patches = vec![
+            parse_patch(xml_a, "anim-a").unwrap(),
+            parse_patch(xml_b, "anim-b").unwrap(),
+            parse_patch(xml_c, "plain-c").unwrap(),
+        ];
+        let mut firmware = vec![0u8; 32];
+        let mut log = HashMap::new();
+        apply_patch(&mut firmware, &mut patches[0], &mut log).unwrap();
+        apply_patch(&mut firmware, &mut patches[2], &mut log).unwrap();
+
+        rollback_other_animations(&mut firmware, &mut patches, &mut log, "anim-b");
+        assert!(!patches[0].applied, "other animation rolled back");
+        assert_eq!(firmware[0x10], 0x00, "hook site restored");
+        assert!(patches[2].applied, "non-animation patch untouched");
+        assert_eq!(firmware[0x20], 0xCC);
+
+        apply_patch(&mut firmware, &mut patches[1], &mut log).unwrap();
+        assert_eq!(firmware[0x10], 0xBB);
+        rollback_other_animations(&mut firmware, &mut patches, &mut log, "anim-b");
+        assert!(patches[1].applied, "excepted patch survives");
+        assert_eq!(firmware[0x10], 0xBB);
     }
 
     #[test]
