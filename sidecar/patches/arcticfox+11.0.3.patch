@@ -1,5 +1,5 @@
 diff --git a/node_modules/arcticfox/index.js b/node_modules/arcticfox/index.js
-index 9363c3c..1e27e60 100644
+index 9363c3c..51756ad 100644
 --- a/node_modules/arcticfox/index.js
 +++ b/node_modules/arcticfox/index.js
 @@ -1,5 +1,10 @@
@@ -13,7 +13,7 @@ index 9363c3c..1e27e60 100644
  const put = require('put');
  const HID = require('node-hid');
  
-@@ -61,7 +66,9 @@ class ArcticFox extends events.EventEmitter {
+@@ -61,10 +66,18 @@ class ArcticFox extends events.EventEmitter {
          this.callbackTimeout = 1000;
  
          this.minimumSupportedBuildNumber = 170909;
@@ -24,7 +24,16 @@ index 9363c3c..1e27e60 100644
  
          this.vendorId = 0x0416;
          this.productId = 0x5020;
-@@ -95,8 +102,16 @@ class ArcticFox extends events.EventEmitter {
++        // STM32-line ArcticFox devices (e.g. Eleaf iStick Rim C) enumerate
++        // with the STMicro VID and a custom PID instead of the Nuvoton pair.
++        this.supportedDeviceIds = [
++            { vendorId: 0x0416, productId: 0x5020 },
++            { vendorId: 0x0483, productId: 0x5750 }
++        ];
+ 
+         this.dataflashLength = 2048;
+         this.configurationLength = 1088;
+@@ -95,8 +108,17 @@ class ArcticFox extends events.EventEmitter {
  
      connect() {
          try {
@@ -34,7 +43,8 @@ index 9363c3c..1e27e60 100644
 +            // vendor/product ID can use a stale cached enumeration and fail to
 +            // detect a device that was plugged in after the sidecar started.
 +            const devices = HID.devices();
-+            const device = devices.find(d => d.vendorId === this.vendorId && d.productId === this.productId);
++            const device = devices.find(d =>
++                this.supportedDeviceIds.some(id => d.vendorId === id.vendorId && d.productId === id.productId));
 +            if (!device) {
 +                throw new Error('device not found');
 +            }
@@ -43,7 +53,7 @@ index 9363c3c..1e27e60 100644
              this.hid.on('data', data => {
                  clearTimeout(this.timeout);
                  switch (this.expectedAnswer) {
-@@ -108,9 +123,9 @@ class ArcticFox extends events.EventEmitter {
+@@ -108,9 +130,9 @@ class ArcticFox extends events.EventEmitter {
                          break;
                      case 'configuration':
                          if (this.callback) {
@@ -56,7 +66,7 @@ index 9363c3c..1e27e60 100644
                                      this.callback(err, config);
                                      this.callback = null;
                                  });
-@@ -119,9 +134,9 @@ class ArcticFox extends events.EventEmitter {
+@@ -119,9 +141,9 @@ class ArcticFox extends events.EventEmitter {
                          break;
                      case 'screenshot':
                          if (this.callback) {
@@ -69,7 +79,7 @@ index 9363c3c..1e27e60 100644
                                  this.callback = null;
                              }
                          }
-@@ -131,7 +146,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -131,7 +153,7 @@ class ArcticFox extends events.EventEmitter {
              });
              this.hid.on('error', err => {
                  this.emit('error', err);
@@ -78,7 +88,7 @@ index 9363c3c..1e27e60 100644
                      this.disconnect();
                  }
              });
-@@ -259,6 +274,9 @@ class ArcticFox extends events.EventEmitter {
+@@ -259,6 +281,9 @@ class ArcticFox extends events.EventEmitter {
          if (profile.IsTemperatureDominant) {
              flags += 0x10;
          }
@@ -88,7 +98,7 @@ index 9363c3c..1e27e60 100644
          if (profile.IsResistanceLocked) {
              flags += 0x40;
          }
-@@ -281,14 +299,14 @@ class ArcticFox extends events.EventEmitter {
+@@ -281,14 +306,14 @@ class ArcticFox extends events.EventEmitter {
              .put(Buffer.from((profile.Name + '\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000').substr(0, 8), 'ascii'))
              .word8(flags)
              .word8(flags2)
@@ -108,7 +118,7 @@ index 9363c3c..1e27e60 100644
              .word16le(profile.TCR)
              .word8(profile.PIRegulatorRange)
              .word16le(profile.PIRegulatorPValue)
-@@ -330,6 +348,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -330,6 +355,7 @@ class ArcticFox extends events.EventEmitter {
          data.PreheatPower /= 10;
          data.Material = data.Flags & 0x0F;
          data.IsTemperatureDominant = Boolean(data.Flags & 0x10);
@@ -116,7 +126,7 @@ index 9363c3c..1e27e60 100644
          data.IsResistanceLocked = Boolean(data.Flags & 0x40);
          data.IsEnabled = Boolean(data.Flags & 0x80);
  
-@@ -774,13 +793,13 @@ class ArcticFox extends events.EventEmitter {
+@@ -774,13 +800,13 @@ class ArcticFox extends events.EventEmitter {
          for (let i = 0; i < 11; i++) {
              bin = Buffer.concat([bin, put()
                  .word16le(battery.PercentsVoltage[i].Percents)
@@ -132,7 +142,7 @@ index 9363c3c..1e27e60 100644
              .buffer()
          ]);
  
-@@ -833,7 +852,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -833,7 +859,7 @@ class ArcticFox extends events.EventEmitter {
          for (let i = 0; i < 7; i++) {
              bin = Buffer.concat([bin, put()
                  .word16le(table.Points[i].Temperature)
@@ -141,7 +151,7 @@ index 9363c3c..1e27e60 100644
                  .buffer()
              ]);
          }
-@@ -878,7 +897,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -878,7 +904,7 @@ class ArcticFox extends events.EventEmitter {
  
          for (let i = 0; i < 12; i++) {
              bin = Buffer.concat([bin, put()
@@ -150,7 +160,7 @@ index 9363c3c..1e27e60 100644
                  .word8(curve.Points[i].Percent)
                  .buffer()
              ]);
-@@ -918,9 +937,17 @@ class ArcticFox extends events.EventEmitter {
+@@ -918,9 +944,17 @@ class ArcticFox extends events.EventEmitter {
      }
  
      encodeAdvancedConfiguration(config) {
@@ -171,7 +181,7 @@ index 9363c3c..1e27e60 100644
  
              .word8((((config.BatteryVoltageOffset1 < 0)) ? 0x80 : 0) + ((config.BatteryVoltageOffset1 * 100) & 0x7F))
              .word8((((config.BatteryVoltageOffset2 < 0)) ? 0x80 : 0) + ((config.BatteryVoltageOffset2 * 100) & 0x7F))
-@@ -935,7 +962,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -935,7 +969,7 @@ class ArcticFox extends events.EventEmitter {
              .word8(config.ResetCountersOnStartup ? 1 : 0)
  
              .word8(config.ShuntCorrection)
@@ -180,7 +190,7 @@ index 9363c3c..1e27e60 100644
  
              .word8(config.BatteryModel)
              .buffer();
-@@ -961,10 +988,13 @@ class ArcticFox extends events.EventEmitter {
+@@ -961,10 +995,13 @@ class ArcticFox extends events.EventEmitter {
          return bin;
      }
  
@@ -198,7 +208,7 @@ index 9363c3c..1e27e60 100644
  
              .word8s('BatteryVoltageOffset1')
              .word8s('BatteryVoltageOffset2')
-@@ -1098,7 +1128,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -1098,7 +1135,7 @@ class ArcticFox extends events.EventEmitter {
          res = this.parseUiConiguration(res.buf);
          this.extend(data, res.data);
  
@@ -207,7 +217,7 @@ index 9363c3c..1e27e60 100644
          this.extend(data, res.data);
  
          callback(null, data);
-@@ -1163,6 +1193,7 @@ class ArcticFox extends events.EventEmitter {
+@@ -1163,6 +1200,7 @@ class ArcticFox extends events.EventEmitter {
      }
  
      readConfiguration(callback) {

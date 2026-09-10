@@ -10,8 +10,8 @@ struct DeviceId {
 }
 
 const SUPPORTED_DEVICES: &[DeviceId] = &[
-    DeviceId { vid: 0x0416, pid: 0x5020 }, // Pico / Joyetech
-    DeviceId { vid: 0x3434, pid: 0x0430 }, // Eleaf Rim C
+    DeviceId { vid: 0x0416, pid: 0x5020 }, // Pico / Joyetech (Nuvoton line)
+    DeviceId { vid: 0x0483, pid: 0x5750 }, // Eleaf Rim C / STM32-line ArcticFox
 ];
 
 const CMD_READ_DATAFLASH: u8 = 0x35;
