@@ -7,7 +7,9 @@ let lang = {};
 
 async function uiTranslate() {
     try {
-        const locale = await getLocale();
+        // Locale files are two-letter (de.json, en.json); getLocale() returns
+        // full BCP-47 tags like "de-DE" that would miss every file.
+        const locale = (await getLocale()).substr(0, 2);
         const fp = await resolveResourcePath('i18n/' + locale + '.json');
         const text = await readTextFile(fp);
         lang = JSON.parse(text);
@@ -72,7 +74,7 @@ function buildLegend() {
         const $row = $('<label class="monitor-sensor"></label>');
         $row.append($('<input type="checkbox" checked>').attr('data-sensor', s.id));
         $row.append($('<span class="swatch"></span>').css('background', s.color));
-        $row.append($('<span></span>').attr('data-lang', s.langKey).text(phrase(s.langKey, s.id)));
+        $row.append($('<span class="name"></span>').attr('data-lang', s.langKey).text(phrase(s.langKey, s.id)));
         $row.append($('<span class="value">—</span>').attr('id', 'val-' + s.id));
         $legend.append($row);
     });
@@ -108,6 +110,12 @@ function updateStatus(sample) {
 
 function draw() {
     const canvas = document.getElementById('monitor-chart');
+    // The canvas fills its container via CSS; keep the backing store in sync
+    // with the laid-out size so the graph tracks window resizes.
+    const cw = canvas.clientWidth || 640;
+    const ch = canvas.clientHeight || 400;
+    if (canvas.width !== cw) canvas.width = cw;
+    if (canvas.height !== ch) canvas.height = ch;
     const ctx = canvas.getContext('2d');
     const w = canvas.width;
     const h = canvas.height;

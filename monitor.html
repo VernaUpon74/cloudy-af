@@ -5,48 +5,49 @@
     <title>Device Monitor</title>
     <style>
         body { margin: 0; }
+        /* .window-content is a row flexbox in photon; stack our panes in a
+           full-height column of our own, like the other sub-windows do. */
+        .monitor-root {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+        }
         .monitor-toolbar {
             display: flex;
             align-items: center;
             gap: 10px;
             padding: 6px 12px;
+            flex: none;
         }
         #monitor-status {
             font-weight: bold;
             font-size: 12px;
         }
         #monitor-status.disconnected { color: #c0392b; }
-        #monitor-chart-wrap {
-            position: relative;
-            padding: 0 12px;
+        .monitor-body {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+            padding: 0 12px 12px;
+            gap: 12px;
         }
-        #monitor-chart {
-            width: 100%;
-            height: 340px;
-            background: #1b1b1b;
-            border: 1px solid #444;
-            border-radius: 3px;
-        }
-        #monitor-overlay {
-            display: none;
-            position: absolute;
-            inset: 0 12px;
-            background: rgba(0, 0, 0, 0.65);
-            color: #eee;
-            text-align: center;
-            padding-top: 130px;
-        }
+        /* Single left-hand column: one row per sensor. */
         #monitor-legend {
             display: flex;
-            flex-wrap: wrap;
-            gap: 4px 14px;
-            padding: 8px 12px;
+            flex-direction: column;
+            gap: 2px;
+            width: 190px;
+            flex: none;
+            overflow-y: auto;
             font-size: 11px;
+            padding: 2px 0;
         }
         .monitor-sensor {
             display: flex;
             align-items: center;
             gap: 5px;
+            padding: 1px 2px;
             white-space: nowrap;
         }
         .monitor-sensor .swatch {
@@ -54,12 +55,49 @@
             height: 10px;
             border-radius: 2px;
             display: inline-block;
+            flex: none;
+        }
+        .monitor-sensor .name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .monitor-sensor .value {
             font-weight: bold;
-            min-width: 58px;
+            min-width: 62px;
             text-align: right;
             display: inline-block;
+            flex: none;
+        }
+        #monitor-chart-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 0;
+        }
+        #monitor-chart {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #1b1b1b;
+            border: 1px solid #444;
+            border-radius: 3px;
+        }
+        #monitor-overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.65);
+            color: #eee;
+            text-align: center;
+        }
+        /* Centered independently of the overlay's display mode so jQuery
+           .show()/.hide() (display:block/none) keeps working. */
+        #monitor-overlay-box {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            transform: translateY(-50%);
         }
     </style>
 </head>
@@ -71,22 +109,28 @@
     </header>
 
     <div class="window-content">
-        <div class="monitor-toolbar">
-            <span id="monitor-status" data-lang="Monitor.Connecting">Connecting…</span>
-            <span id="monitor-flags"></span>
-            <span style="flex:1"></span>
-            <button id="monitor-pause" class="btn btn-default" data-lang="Monitor.PauseButton">Pause</button>
-        </div>
-        <div id="monitor-chart-wrap">
-            <canvas id="monitor-chart" width="820" height="340"></canvas>
-            <div id="monitor-overlay">
-                <div id="monitor-overlay-text" data-lang="Monitor.Disconnected">Device disconnected.</div>
-                <div style="margin-top: 10px;">
-                    <button id="monitor-retry" class="btn btn-default" data-lang="Monitor.RetryButton">Retry</button>
+        <div class="monitor-root">
+            <div class="monitor-toolbar">
+                <span id="monitor-status" data-lang="Monitor.Connecting">Connecting…</span>
+                <span id="monitor-flags"></span>
+                <span style="flex:1"></span>
+                <button id="monitor-pause" class="btn btn-default" data-lang="Monitor.PauseButton">Pause</button>
+            </div>
+            <div class="monitor-body">
+                <div id="monitor-legend"></div>
+                <div id="monitor-chart-wrap">
+                    <canvas id="monitor-chart" width="640" height="400"></canvas>
+                    <div id="monitor-overlay">
+                        <div id="monitor-overlay-box">
+                            <div id="monitor-overlay-text" data-lang="Monitor.Disconnected">Device disconnected.</div>
+                            <div style="margin-top: 10px;">
+                                <button id="monitor-retry" class="btn btn-default" data-lang="Monitor.RetryButton">Retry</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-        <div id="monitor-legend"></div>
     </div>
 </div>
 <script type="module" src="/src/renderer-monitor.js"></script>

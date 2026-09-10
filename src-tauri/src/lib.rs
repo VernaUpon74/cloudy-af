@@ -177,7 +177,7 @@ async fn open_sub_window(
         "pc" => ("pc", "Power Curve", 545, 520, "power.html"),
         "pireg" => ("pireg", "PI Regulator", 400, 275, "pireg.html"),
         "firmware" => ("firmware", "Firmware Editor", 900, 600, "firmware.html"),
-        "monitor" => ("monitor", "Device Monitor", 860, 560, "monitor.html"),
+        "monitor" => ("monitor", "Device Monitor", 940, 640, "monitor.html"),
         _ => return Err("Unknown sub-window".to_string()),
     };
 
