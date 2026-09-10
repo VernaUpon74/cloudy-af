@@ -347,6 +347,10 @@ function uiInitButtons() {
     $('#firmware-editor').click(function () {
         ipc.send('firmware', {});
     });
+
+    $('#device-monitor').click(function () {
+        ipc.send('monitor', {});
+    });
 }
 
 function uiUpdate() {

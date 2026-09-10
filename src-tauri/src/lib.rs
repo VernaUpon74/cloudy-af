@@ -141,7 +141,7 @@ async fn ipc_send(
     request: IpcSendRequest,
 ) -> Result<(), String> {
     match request.channel.as_str() {
-        "bat" | "tfr" | "pc" | "pireg" | "firmware" => {
+        "bat" | "tfr" | "pc" | "pireg" | "firmware" | "monitor" => {
             open_sub_window(&app, &request.channel, request.data).await
         }
         "piregchange" | "batchange" | "tfrchange" | "pcchange" => {
@@ -177,6 +177,7 @@ async fn open_sub_window(
         "pc" => ("pc", "Power Curve", 545, 520, "power.html"),
         "pireg" => ("pireg", "PI Regulator", 400, 275, "pireg.html"),
         "firmware" => ("firmware", "Firmware Editor", 900, 600, "firmware.html"),
+        "monitor" => ("monitor", "Device Monitor", 860, 560, "monitor.html"),
         _ => return Err("Unknown sub-window".to_string()),
     };
 
@@ -686,6 +687,7 @@ pub fn run() {
             commands::firmware::read_device_product_id,
             commands::firmware::flash_firmware_to_device,
             commands::firmware::restart_device_cmd,
+            commands::firmware::read_monitoring_data_cmd,
             commands::firmware::undo_firmware_changes,
             commands::firmware::list_hid_devices,
             commands::firmware::recovery_flash,

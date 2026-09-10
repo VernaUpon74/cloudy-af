@@ -4,6 +4,7 @@ pub mod definition;
 pub mod encryption;
 pub mod flasher;
 pub mod loader;
+pub mod monitoring;
 pub mod patch;
 pub mod state;
 pub mod stock;

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Device Monitor</title>
+    <style>
+        body { margin: 0; }
+        .monitor-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 12px;
+        }
+        #monitor-status {
+            font-weight: bold;
+            font-size: 12px;
+        }
+        #monitor-status.disconnected { color: #c0392b; }
+        #monitor-chart-wrap {
+            position: relative;
+            padding: 0 12px;
+        }
+        #monitor-chart {
+            width: 100%;
+            height: 340px;
+            background: #1b1b1b;
+            border: 1px solid #444;
+            border-radius: 3px;
+        }
+        #monitor-overlay {
+            display: none;
+            position: absolute;
+            inset: 0 12px;
+            background: rgba(0, 0, 0, 0.65);
+            color: #eee;
+            text-align: center;
+            padding-top: 130px;
+        }
+        #monitor-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 14px;
+            padding: 8px 12px;
+            font-size: 11px;
+        }
+        .monitor-sensor {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+        .monitor-sensor .swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            display: inline-block;
+        }
+        .monitor-sensor .value {
+            font-weight: bold;
+            min-width: 58px;
+            text-align: right;
+            display: inline-block;
+        }
+    </style>
+</head>
+
+<body>
+<div class="window">
+    <header class="toolbar toolbar-header">
+        <h1 class="title" data-lang="Advanced.Settings.DeviceMonitorButton">Device Monitor</h1>
+    </header>
+
+    <div class="window-content">
+        <div class="monitor-toolbar">
+            <span id="monitor-status" data-lang="Monitor.Connecting">Connecting…</span>
+            <span id="monitor-flags"></span>
+            <span style="flex:1"></span>
+            <button id="monitor-pause" class="btn btn-default" data-lang="Monitor.PauseButton">Pause</button>
+        </div>
+        <div id="monitor-chart-wrap">
+            <canvas id="monitor-chart" width="820" height="340"></canvas>
+            <div id="monitor-overlay">
+                <div id="monitor-overlay-text" data-lang="Monitor.Disconnected">Device disconnected.</div>
+                <div style="margin-top: 10px;">
+                    <button id="monitor-retry" class="btn btn-default" data-lang="Monitor.RetryButton">Retry</button>
+                </div>
+            </div>
+        </div>
+        <div id="monitor-legend"></div>
+    </div>
+</div>
+<script type="module" src="/src/renderer-monitor.js"></script>
+</body>
+</html>

@@ -503,6 +503,26 @@ pub async fn restart_device_cmd() -> Result<(), String> {
     restart_device().map_err(|e| e.to_string())
 }
 
+/// Read and decode one live monitoring sample (0x66) for the Device Monitor
+/// window. Device access is guarded exactly like the other direct-device
+/// commands: the HID sidecar is suspended for the duration and the flash
+/// mutex serializes against flashes/dataflash reads.
+#[tauri::command]
+pub async fn read_monitoring_data_cmd(
+    sidecar: State<'_, crate::SidecarState>,
+) -> Result<crate::firmware::monitoring::MonitoringData, String> {
+    let _ = crate::suspend_sidecar(&sidecar).await;
+    let _flash_guard = FLASH_MUTEX.lock().await;
+    let result = tauri::async_runtime::spawn_blocking(|| {
+        let raw = crate::firmware::flasher::read_monitoring_data_auto().map_err(|e| e.to_string())?;
+        crate::firmware::monitoring::decode_monitoring_data(&raw).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let _ = crate::resume_sidecar(&sidecar).await;
+    result
+}
+
 #[tauri::command]
 pub async fn undo_firmware_changes(
     sidecar: State<'_, crate::SidecarState>,

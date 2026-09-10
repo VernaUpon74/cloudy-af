@@ -148,6 +148,10 @@ export async function restartDeviceCmd() {
     return invoke('restart_device_cmd');
 }
 
+export async function readMonitoringData() {
+    return invoke('read_monitoring_data_cmd');
+}
+
 export async function undoFirmwareChanges(handle) {
     return invoke('undo_firmware_changes', { handle });
 }
