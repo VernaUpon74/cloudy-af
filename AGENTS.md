@@ -3,14 +3,24 @@
 ## Delegation hardware profile
 
 The workstation: 12 CPU cores, 62 GB RAM, RTX 4050 Laptop with only 6 GB
-VRAM. There are NO cgroup limits on ollama (CPUQuota/MemoryMax = infinity) —
-delegates already get full hardware access, but any model larger than ~4.5 GB
-quantized spills to CPU (the 20 GB qwen3-coder runs 81/19 CPU/GPU and is
-slow). Prefer `qwen2.5-coder:7b` (fits VRAM, ~5-10× faster) for mechanical
-tasks; reserve the 30B for genuinely open-ended analysis. Cloud models are
-not to be used (see energy policy above). RAM cannot substitute for VRAM on
-this hardware (CUDA has no unified-memory mode; Intel iGPU would need the
-IPEX-LLM fork).
+VRAM. There are NO cgroup limits on ollama (CPUQuota/MemoryMax = infinity).
+
+BEST SETTINGS (benchmarked 2026-09-12, one-test-at-a-time, `keep_alive:0`;
+artifacts `/tmp/clean-bench`): `ollama serve` with
+OLLAMA_FLASH_ATTENTION=1 + OLLAMA_KV_CACHE_TYPE=q8_0 on the RTX 4050 (CUDA).
+With that config `qwen3-coder:latest` (18 GB MoE, ~3B active params) runs
+at ~24 tok/s — full parity with `qwen2.5-coder:7b` (23.9 tok/s) — so use
+qwen3-coder for coding tasks with no speed penalty. The Intel iGPU
+shared-memory path (OLLAMA_IGPU_ENABLE=1 + OLLAMA_VULKAN=1; Vulkan sees
+46.8 GiB) works and holds the whole 18 GB model, but is 2.5× slower
+(9.7 tok/s) — reserve it for when the dGPU is busy. 7B on iGPU is 6×
+slower than CUDA (4.2 tok/s). Cloud models are not to be used (see energy
+policy above).
+
+Benchmarking convention: run exactly ONE test at a time (single request,
+nothing else loaded, `keep_alive:0` between tests so models unload) —
+parallel or back-to-back runs without unloading pollute VRAM/KV-cache state
+and skew tok/s. Stop the other ollama instance before measuring.
 
 ## Task delegation
 
@@ -27,8 +37,8 @@ Use local models for subagent/task delegation whenever possible —
 tasks (UI markup, mechanical ports from a complete spec, drafting
 tests), and ollama (`ollama serve` then`ollama run <model>` / the local
 API at `127.0.0.1:11434`) for drafting and review work; check
-`ollama list` for what's pulled. Currently useful: `qwen3-coder:30b`
-(coding), `gemma4:26b-chat`, `llama3:70b`. Fall back to cloud CLIs
+`ollama list` for what's pulled. Currently pulled: `qwen3-coder:latest`
+(18 GB MoE, primary coding model), `qwen2.5-coder:7b` (light alternative). Fall back to cloud CLIs
 (qwen, etc.) only when local models can't handle the task. Only use
 sustainable energy cloud models. Reserve full agent dispatches for
 multi-step work that needs tool use across the repo.
