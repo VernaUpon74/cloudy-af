@@ -264,6 +264,8 @@ fn insert_opened(
         "handle": handle,
         "name": image.definition.name,
         "encryption": format!("{:?}", image.encryption),
+        "definition": image.definition.name,
+        "size": image.bytes.len(),
     });
 
     // Save a backup of the original firmware bytes for the Undo Changes feature.
