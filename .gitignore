@@ -28,3 +28,4 @@ work/
 vp_aes_key.txt
 # Local Rust tool build artifacts
 tools/telemetry_dump/target/
+local-flags.json

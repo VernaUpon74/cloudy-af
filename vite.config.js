@@ -1,7 +1,22 @@
 import { defineConfig } from 'vite';
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
+// Build-time feature flags from an OPTIONAL, untracked local-flags.json
+// ({"patches": true}). Default is off: the Patches tab ships disabled on
+// GitHub builds; the ~/cloudy-af dev checkout enables it locally via that
+// file until the feature passes testing. See AGENTS.md.
+let localFlags = {};
+try {
+  localFlags = JSON.parse(readFileSync(resolve(__dirname, 'local-flags.json'), 'utf8'));
+} catch {
+  // no local flag file — defaults apply
+}
+
 export default defineConfig({
+  define: {
+    __CLOUDY_PATCHES__: JSON.stringify(localFlags.patches === true),
+  },
   clearScreen: false,
   server: {
     port: 1420,

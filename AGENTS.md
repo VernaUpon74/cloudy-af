@@ -1,5 +1,17 @@
 # Cloudy AF — agent conventions
 
+## Delegation hardware profile
+
+The workstation: 12 CPU cores, 62 GB RAM, RTX 4050 Laptop with only 6 GB
+VRAM. There are NO cgroup limits on ollama (CPUQuota/MemoryMax = infinity) —
+delegates already get full hardware access, but any model larger than ~4.5 GB
+quantized spills to CPU (the 20 GB qwen3-coder runs 81/19 CPU/GPU and is
+slow). Prefer `qwen2.5-coder:7b` (fits VRAM, ~5-10× faster) for mechanical
+tasks; reserve the 30B for genuinely open-ended analysis. Cloud models are
+not to be used (see energy policy above). RAM cannot substitute for VRAM on
+this hardware (CUDA has no unified-memory mode; Intel iGPU would need the
+IPEX-LLM fork).
+
 ## Task delegation
 
 **Convention: run local-model delegates ONE AT A TIME.** The box only has
