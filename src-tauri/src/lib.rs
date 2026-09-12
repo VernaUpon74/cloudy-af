@@ -88,6 +88,23 @@ fn find_sidecar_script(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Err("Could not find sidecar/hid-bridge.js".to_string())
 }
 
+// Resolve the Node.js runtime used to spawn the sidecar. A .app bundle has no
+// node on PATH, so a binary bundled in the app resources wins; flatpak
+// (/app/bin) and AppImage (apprun PATH hook) fall through to PATH lookup.
+fn find_node_binary(app: &tauri::AppHandle) -> PathBuf {
+    if let Some(candidate) = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|p| p.join("sidecar-runtime/node"))
+    {
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+    PathBuf::from("node")
+}
+
 async fn sidecar_send(state: &SidecarState, mut cmd: serde_json::Value, request_id: Option<String>) -> Result<(), String> {
     if let Some(id) = request_id {
         if let serde_json::Value::Object(ref mut map) = cmd {
@@ -480,8 +497,9 @@ async fn export_bat(
 
 async fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
     let script = find_sidecar_script(app)?;
+    let node = find_node_binary(app);
 
-    let mut child = Command::new("node")
+    let mut child = Command::new(&node)
         .arg(&script)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -688,9 +706,18 @@ pub fn run() {
             commands::firmware::flash_firmware_to_device,
             commands::firmware::restart_device_cmd,
             commands::firmware::read_monitoring_data_cmd,
+            commands::firmware::screenshot_cmd,
             commands::firmware::undo_firmware_changes,
             commands::firmware::list_hid_devices,
             commands::firmware::recovery_flash,
+            commands::firmware::force_product_id_cmd,
+            commands::firmware::list_image_tables,
+            commands::firmware::read_image_cmd,
+            commands::firmware::write_image_cmd,
+            commands::firmware::list_strings_cmd,
+            commands::firmware::write_string_cmd,
+            commands::firmware::list_resource_packs,
+            commands::firmware::apply_resource_pack_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

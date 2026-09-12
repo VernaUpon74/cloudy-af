@@ -240,6 +240,44 @@ function uiTcr(material) {
     }
 }
 
+// Convert a temperature value between Celsius and Fahrenheit, rounding to the
+// nearest whole degree. Used when the global TemperatureUnits regional setting
+// changes so the profile setpoint stays physically correct.
+function convertTemperature(value, toCelsius) {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num === 0) return num;
+    if (toCelsius) {
+        return Math.round((num - 32) * 5 / 9);
+    }
+    return Math.round(num * 9 / 5 + 32);
+}
+
+// Format PuffsTime (seconds) as HH:MM:SS for display when that format is selected.
+function formatPuffsTime(seconds) {
+    const total = Math.max(0, Math.floor(Number(seconds) || 0));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return String(h).padStart(2, '0') + ':' +
+           String(m).padStart(2, '0') + ':' +
+           String(s).padStart(2, '0');
+}
+
+// Update the Puffs Time input's unit label and formatted display based on the
+// current PuffsTimeFormat value. Reads from the DOM so it works regardless of
+// whether the generic .fox-val handler has run yet.
+function updatePuffsTimeDisplay() {
+    const format = Number($('#PuffsTimeFormat').val());
+    const seconds = Number($('#PuffsTime').val()) || 0;
+    if (format === 1) {
+        $('#PuffsTimeUnit').text('');
+        $('#PuffsTimeFormatted').text(formatPuffsTime(seconds));
+    } else {
+        $('#PuffsTimeUnit').text('s');
+        $('#PuffsTimeFormatted').text('');
+    }
+}
+
 function uiInitChangeHandlers() {
     $('#mode').change(function () {
         uiTempControl($(this).val() === 'tc');
@@ -256,6 +294,26 @@ function uiInitChangeHandlers() {
     $('#MainScreenSkin').change(function () {
         uiScreenLayoutView($(this).val());
     });
+
+    // Convert all profile temperature setpoints when the regional unit changes.
+    $('#TemperatureUnits').change(function () {
+        const newVal = Number($(this).val());
+        const oldVal = config.TemperatureUnits;
+        if (newVal === oldVal) return;
+        const toCelsius = newVal === 1;
+        config.profiles.forEach(p => {
+            if (typeof p.Temperature === 'number' && p.Temperature !== 0) {
+                p.Temperature = convertTemperature(p.Temperature, toCelsius);
+            }
+            p.IsCelcius = toCelsius;
+        });
+        config.TemperatureUnits = newVal;
+        uiProfile(activeProfile);
+    });
+
+    // Keep the Puffs Time formatted display in sync with the input and format.
+    $(document).on('change input', '#PuffsTime', updatePuffsTimeDisplay);
+    $(document).on('change', '#PuffsTimeFormat', updatePuffsTimeDisplay);
 }
 
 function uiProfile(p) {
@@ -542,6 +600,9 @@ function uiUpdate() {
             $(this).find('option[value="' + val + '"]').prop('selected', true);
         }
     });
+
+    // Keep the Puffs Time formatted readout in sync after config loads.
+    updatePuffsTimeDisplay();
 
     uiScreenLayoutView(config.MainScreenSkin);
     uiProfile(config.SelectedProfile);

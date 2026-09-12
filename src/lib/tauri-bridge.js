@@ -152,6 +152,10 @@ export async function readMonitoringData() {
     return invoke('read_monitoring_data_cmd');
 }
 
+export async function screenshot() {
+    return invoke('screenshot_cmd');
+}
+
 export async function undoFirmwareChanges(handle) {
     return invoke('undo_firmware_changes', { handle });
 }
@@ -166,4 +170,41 @@ export async function recoveryFlash(path, expectedProductId) {
 
 export function onRecoveryProgress(callback) {
     return listen('recovery-progress', (event) => callback(event.payload));
+}
+
+export async function forceProductId(pid) {
+    return invoke('force_product_id_cmd', { pid });
+}
+
+export function onFlashProgress(callback) {
+    return listen('flash-progress', (event) => callback(event.payload));
+}
+
+// Firmware Editor: Images / Strings / Resource Packs tabs (1bpp image data).
+export async function listImageTables(handle) {
+    return invoke('list_image_tables', { handle });
+}
+
+export async function readImageCmd(handle, block, index) {
+    return invoke('read_image_cmd', { handle, block, index });
+}
+
+export async function writeImageCmd(handle, block, index, width, height, pixelsBase64) {
+    return invoke('write_image_cmd', { handle, block, index, width, height, pixelsBase64 });
+}
+
+export async function listStringsCmd(handle) {
+    return invoke('list_strings_cmd', { handle });
+}
+
+export async function writeStringCmd(handle, index, glyphs) {
+    return invoke('write_string_cmd', { handle, index, glyphs });
+}
+
+export async function listResourcePacks() {
+    return invoke('list_resource_packs');
+}
+
+export async function applyResourcePackCmd(handle, packPath) {
+    return invoke('apply_resource_pack_cmd', { handle, packPath });
 }

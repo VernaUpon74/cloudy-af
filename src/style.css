@@ -49,6 +49,14 @@ tr td {
     overflow-x: hidden !important;
 }
 
+/* The scalable window zooms content to fit (updateContentZoom in
+   renderer.js), so Advanced subviews never genuinely overflow — their
+   scrollbar was a rounding artifact of the fractional zoom. Hide it.
+   Scrolling stays available on every other view. */
+#view-advanced .subview {
+    overflow-y: hidden !important;
+}
+
 #SelectedProfile {
     display: inline;
     width: 60px;

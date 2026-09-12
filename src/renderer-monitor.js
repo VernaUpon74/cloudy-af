@@ -2,7 +2,7 @@ import 'photonkit/dist/css/photon.css';
 import './style.css';
 import $ from 'jquery';
 import Highcharts from 'highcharts';
-import { getLocale, readTextFile, resolveResourcePath, readMonitoringData } from './lib/tauri-bridge.js';
+import { getLocale, readTextFile, resolveResourcePath, readMonitoringData, screenshot } from './lib/tauri-bridge.js';
 
 let lang = {};
 
@@ -23,6 +23,13 @@ async function uiTranslate() {
             $(this).html(phrase);
         }
     });
+    // Same flat-key lookup for tooltip titles (data-lang-title).
+    $('[data-lang-title]').each(function () {
+        const phrase = lang[$(this).data('langTitle')];
+        if (phrase) {
+            $(this).attr('title', phrase);
+        }
+    });
 }
 
 // Sensor registry. `value(sample)` returns the value to plot; battery cells
@@ -41,8 +48,8 @@ const SENSORS = [
     { id: 'temperatureSet', color: '#8b0000', unitOf: s => s.is_celsius ? '°C' : '°F', langKey: 'Monitor.TemperatureSet', value: s => s.temperature_set }, // dark red
     { id: 'outputCurrent', color: '#ffa500', unit: 'A', langKey: 'Monitor.OutputCurrent', value: s => s.output_current }, // orange
     { id: 'outputVoltage', color: '#87cefa', unit: 'V', langKey: 'Monitor.OutputVoltage', value: s => s.output_voltage }, // light sky blue
-    { id: 'resistance', color: '#ee82ee', unit: 'Ω', langKey: 'Monitor.Resistance', value: s => s.resistance }, // violet
-    { id: 'realResistance', color: '#8a2be2', unit: 'Ω', langKey: 'Monitor.RealResistance', value: s => s.real_resistance }, // blue violet
+    { id: 'resistance', color: '#ee82ee', unit: 'Ω', langKey: 'Monitor.Resistance', value: s => s.resistance, yAxis: 1 }, // violet
+    { id: 'realResistance', color: '#8a2be2', unit: 'Ω', langKey: 'Monitor.RealResistance', value: s => s.real_resistance, yAxis: 1 }, // blue violet
     { id: 'boardTemperature', color: '#8b4513', unitOf: s => s.is_celsius ? '°C' : '°F', langKey: 'Monitor.BoardTemperature', value: s => s.board_temperature }, // saddle brown
 ];
 
@@ -154,12 +161,13 @@ function chartOptions(theme) {
             ...axis,
             dateTimeLabelFormats: { second: '%H:%M:%S' },
         },
-        yAxis: {
-            min: 0,
-            startOnTick: false,
-            ...axis,
-            title: { text: null },
-        },
+        // Dual y-axes: left for power/voltage/current/temperature, right
+        // for resistance. Resistance (typically ~0.3–1 Ω) is unreadable when
+        // overlaid on the high-magnitude left axis, so it gets its own scale.
+        yAxis: [
+            { min: 0, ...axis, title: { text: null } },
+            { min: 0, opposite: true, ...axis, title: { text: null } },
+        ],
         tooltip: {
             shared: true,
             crosshairs: true,
@@ -194,16 +202,16 @@ function buildChart() {
                 states: {
                     hover: { lineWidthPlus: 1, halo: { size: 3 } },
                 },
-                // Snap the shared tooltip to the nearest real sample rather
-                // than interpolating along the segment.
-                findNearestPointBy: 'xy',
+                // Shared tooltips require default (sticky) tracking —
+                // stickyTracking:false breaks hover detection entirely.
+                tooltip: { snap: 15 },
             },
-            series: { stickyTracking: false },
         },
         series: SENSORS.map(s => ({
             name: phrase(s.langKey, s.id),
             color: s.color,
             lineWidth: 1.4,
+            yAxis: s.yAxis || 0,
             data: [],
             _sample: null,
         })),
@@ -212,6 +220,7 @@ function buildChart() {
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
         chart.update(chartOptions(chartTheme()), true, false);
     });
+    window.__monitorChart = chart; // debug/testing hook
 }
 
 function showDisconnected() {
@@ -266,9 +275,106 @@ function start() {
     timer = setTimeout(tick, 0);
 }
 
-$('#monitor-pause').click(function () {
-    paused = !paused;
-    $(this).text(phrase(paused ? 'Monitor.ResumeButton' : 'Monitor.PauseButton', paused ? 'Resume' : 'Pause'));
+function setPaused(p) {
+    paused = p;
+    $('#monitor-pause').text(phrase(paused ? 'Monitor.ResumeButton' : 'Monitor.PauseButton', paused ? 'Resume' : 'Pause'));
+}
+
+$('#monitor-pause').click(() => setPaused(!paused));
+
+// --- Screenshot (0xC1) -------------------------------------------------
+// 1024 raw framebuffer bytes, 1bpp vertical packing: byte = x + (y/8)*width,
+// bit y%8, LSB = top pixel. Geometry: 96x16 if bytes 192..1024 are all zero
+// (its 1bpp image is 96*16/8 = 192 bytes and the tail is padding), else 64x128
+// (exactly 64*128/8 = 1024 bytes). ArcticFox firmware only — stock firmware
+// has no 0xC1 handler and the read times out.
+const SCREENSHOT_GEOMS = [
+    { width: 96, height: 16 },
+    { width: 64, height: 128 },
+];
+
+function decodeScreenshot(raw) {
+    let geom = SCREENSHOT_GEOMS[1];
+    let tailZero = true;
+    for (let i = 192; i < raw.length; i++) {
+        if (raw[i] !== 0) { tailZero = false; break; }
+    }
+    if (tailZero) geom = SCREENSHOT_GEOMS[0];
+    const { width, height } = geom;
+    const canvas = document.getElementById('screenshot-canvas');
+    const ZOOM = 4;
+    canvas.width = width * ZOOM;
+    canvas.height = height * ZOOM;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#9acd32'; // ArcticFox LCD green
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            if (raw[x + (y >> 3) * width] & (1 << (y & 7))) {
+                ctx.fillRect(x * ZOOM, y * ZOOM, ZOOM, ZOOM);
+            }
+        }
+    }
+    return geom;
+}
+
+function openScreenshotModal() {
+    $('#screenshot-modal').show();
+    $('#monitor-screenshot').focus();
+}
+
+function closeScreenshotModal() {
+    $('#screenshot-modal').hide();
+}
+
+$('#monitor-screenshot').click(() => {
+    const $btn = $('#monitor-screenshot').prop('disabled', true);
+    screenshot()
+        .then(b64 => {
+            const bin = atob(b64);
+            const raw = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
+            decodeScreenshot(raw);
+            openScreenshotModal();
+        })
+        .catch(err => {
+            $('#monitor-status').addClass('disconnected')
+                .text(phrase('Monitor.ScreenshotFailed', 'Screenshot failed') + ': ' + (err.message || err));
+        })
+        .finally(() => $btn.prop('disabled', false));
+});
+
+$('#screenshot-save').click(() => {
+    const canvas = document.getElementById('screenshot-canvas');
+    canvas.toBlob(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'screenshot_' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.png';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    });
+});
+
+$('#screenshot-close').click(closeScreenshotModal);
+
+// Esc closes the modal; the pause shortcut ignores it (not Space).
+$(document).on('keydown', (e) => {
+    if (e.code === 'Escape' && $('#screenshot-modal').is(':visible')) {
+        closeScreenshotModal();
+    }
+});
+
+// Space pauses/resumes too. When a control has focus, leave Space to its
+// native behavior (a focused pause button still toggles via its own click;
+// a focused checkbox toggles itself) so nothing fires twice.
+$(document).on('keydown', (e) => {
+    if (e.code !== 'Space' || e.repeat) return;
+    const t = e.target;
+    if (t && (t.tagName === 'BUTTON' || t.tagName === 'INPUT' || t.tagName === 'SELECT' ||
+              t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    e.preventDefault();
+    setPaused(!paused);
 });
 
 $('#monitor-retry').click(start);

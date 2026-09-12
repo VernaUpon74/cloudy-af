@@ -284,11 +284,16 @@ fn build_effect_patch(
     id: &str,
     name: &str,
     description: &str,
+    effect_key: &str,
     emit: EmitFn,
 ) -> Result<Patch, AnimError> {
     let anim = load_animation_desc(desc_json)?;
     let v: serde_json::Value =
         serde_json::from_str(desc_json).map_err(|e| AnimError::Descriptor(e.to_string()))?;
+    let effect = v["animation"]["effects"][effect_key]
+        .as_u64()
+        .ok_or_else(|| AnimError::Descriptor(format!("animation.effects.{effect_key} missing")))?
+        as u8;
     let hex = |key: &str| -> Result<u32, AnimError> {
         let s = v["display_buffer"][key]
             .as_str()
@@ -331,6 +336,15 @@ fn build_effect_patch(
             patched: *b,
         });
     }
+    // The config byte selects the effect at runtime (the cave loads it from
+    // `config_byte_addr`). It lives beyond the stock image in erased APROM,
+    // so this modification grows the image to cover it — without it a
+    // flashed animation would stay gated off (erased 0xFF = no effect).
+    modifications.push(PatchModification {
+        offset: anim.config_byte_addr as usize,
+        original: None,
+        patched: effect,
+    });
 
     Ok(Patch {
         id: id.into(),
@@ -349,6 +363,7 @@ pub fn build_gradient_fade_patch(desc_json: &str) -> Result<Patch, AnimError> {
         "anim-gradient-fade",
         "Gradient Fade (charge-screen animation)",
         "CRT-style gradient fade on screen timeout (config byte 2)",
+        "gradient_fade",
         emit_gradient_fade,
     )
 }
@@ -359,6 +374,7 @@ pub fn build_center_pulse_patch(desc_json: &str) -> Result<Patch, AnimError> {
         "anim-center-pulse",
         "Center Pulse (charge-screen animation)",
         "Brightness rings pulse outward from screen centre on timeout (config byte 3)",
+        "center_pulse",
         emit_center_pulse,
     )
 }
@@ -369,6 +385,7 @@ pub fn build_diagonal_sweep_patch(desc_json: &str) -> Result<Patch, AnimError> {
         "anim-diagonal-sweep",
         "Diagonal Sweep (charge-screen animation)",
         "Diagonal bands sweep the screen on timeout (config byte 4)",
+        "diagonal_sweep",
         emit_diagonal_sweep,
     )
 }
@@ -394,6 +411,90 @@ mod tests {
         );
     }
 
+    /// Measure exactly what applying the bundled gradient-fade patch does to
+    /// the bundled stock af_190602 image, mirroring the wiring in
+    /// `commands/firmware.rs::apply_patch_cmd` (rollback_other_animations on a
+    /// single-patch list is a no-op, then `apply_patch`). The patch writes
+    /// the hook-site branch, the cave body, and the config byte that enables
+    /// the effect at `config_byte_addr` — so the image grows past the stock
+    /// end to cover it. With `WRITE_PATCHED=1` the test also writes the
+    /// fully-applied image to /tmp/anim_patched.bin for hardware flash
+    /// experiments; the default run stays side-effect free.
+    #[test]
+    fn gradient_fade_patch_on_bundled_af190602_measures_image_effect() {
+        use crate::firmware::patch::{apply_patch, rollback_other_animations};
+
+        let desc_json = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../resources/animations/af_190602.json"
+        ))
+        .expect("read bundled descriptor");
+        let anim = load_animation_desc(&desc_json).expect("parse bundled descriptor");
+        let mut image = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../resources/firmware/decrypted/af_190602.bin"
+        ))
+        .expect("read bundled decrypted af_190602 image");
+        let stock_len = image.len();
+
+        let patch = build_gradient_fade_patch(&desc_json).expect("build gradient fade patch");
+        let mods = patch.modifications.len();
+        let min_off = patch.modifications.iter().map(|m| m.offset).min().unwrap();
+        let max_off = patch.modifications.iter().map(|m| m.offset).max().unwrap();
+
+        // Exactly what apply_patch_cmd does: single animation patch, so
+        // rollback_other_animations is a no-op; then apply_patch.
+        let mut rollback_log = std::collections::HashMap::new();
+        let mut patches = vec![patch.clone()];
+        rollback_other_animations(&mut image, &mut patches, &mut rollback_log, &patch.id);
+        apply_patch(&mut image, &mut patches[0], &mut rollback_log).expect("apply patch");
+
+        let patched_len = image.len();
+        let growth = patched_len - stock_len;
+        let max_aprom = 128 * 1024; // 0x20000
+        let config_addr = anim.config_byte_addr as usize;
+
+        println!("stock_len          = {stock_len} (0x{stock_len:x})");
+        println!("patched_len        = {patched_len} (0x{patched_len:x})");
+        println!("growth_bytes       = {growth}");
+        println!("modification_count = {mods}");
+        println!("min_modified_off   = 0x{min_off:x}");
+        println!("max_modified_off   = 0x{max_off:x}");
+        println!("within_stock_image = {}", max_off < stock_len);
+        println!("plausible_aprom    = {} (<= {max_aprom})", patched_len <= max_aprom);
+        println!(
+            "reaches_config_byte_0x{config_addr:x} = {}",
+            patched_len > config_addr
+        );
+        println!(
+            "config_byte_in_mods = {}",
+            patch.modifications.iter().any(|m| m.offset == config_addr)
+        );
+        // The growth is exactly the cave body — apply_patch only extends to
+        // max_offset+1, leaving no trailing 0xFF padding.
+        let padding = image[max_off + 1..].iter().filter(|b| **b == 0xFF).count();
+        println!("trailing_padding_bytes = {padding}");
+        assert_eq!(max_off + 1, patched_len, "no trailing padding after the last modification");
+        // The patch must stay inside plausible APROM and must write the
+        // config byte so the flashed animation is actually enabled.
+        assert!(patched_len <= max_aprom, "patched image exceeds 128 KiB APROM");
+        assert!(patched_len > config_addr, "image must reach the config byte addr 0x1f7f0");
+        assert_eq!(
+            patch
+                .modifications
+                .iter()
+                .find(|m| m.offset == config_addr)
+                .map(|m| m.patched),
+            Some(2),
+            "config byte must be written with the gradient-fade effect id (2)"
+        );
+
+        if std::env::var("WRITE_PATCHED").ok().as_deref() == Some("1") {
+            std::fs::write("/tmp/anim_patched.bin", &image).expect("write /tmp/anim_patched.bin");
+            println!("wrote /tmp/anim_patched.bin ({patched_len} bytes)");
+        }
+    }
+
     const DESC: &str = r#"{
         "build": "t",
         "render_entry": "0x0",
@@ -403,7 +504,9 @@ mod tests {
             "code_cave": {"start": "0x8000", "size": 512},
             "config_byte_addr": "0x1F100", "phase_global": "0x20000000",
             "status_word_addr": "0x20000008",
-            "status_base_addr": "0x20000004" }
+            "status_base_addr": "0x20000004",
+            "effects": {"gradient_fade": 2, "center_pulse": 3,
+                        "diagonal_sweep": 4} }
     }"#;
 
     /// Reference apply per effect, uniform signature for the shared tests.
@@ -421,6 +524,112 @@ mod tests {
         match effect {
             "gradient" => 64, // 16 LUT entries << 2
             _ => 16,
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Parametric panel-geometry property tests (drafted by a local ollama
+    // agent, corrected + reviewed by hand). The geometries are the known
+    // ArcticFox panels (see the table in flasher.rs above read_product_id).
+    // The effects' index math is 64x128-shaped, so these tests document
+    // safe behaviour (no OOB, byte-clearing only) on every panel size.
+    // ------------------------------------------------------------------
+
+    const PANEL_GEOMETRIES: [(usize, usize, usize); 5] = [
+        (64, 128, 1024), // default/fallback, stride 8
+        (96, 16, 192),   // Pico / Pico Dual / ASTER / TC family, stride 12
+        (128, 32, 512),  // Pico 25 / Sinuous CB-80, stride 16
+        (64, 48, 384),   // Wismec RX family
+        (64, 32, 256),   // Pico Squeeze 2 / ASTER RT
+    ];
+
+    #[test]
+    fn test_geometry_sweep_no_panic_and_size_invariant() {
+        for &(w, h, bytes) in &PANEL_GEOMETRIES {
+            for phase in 0..64 {
+                let mut g = vec![0xFFu8; bytes];
+                gradient_fade_apply(&mut g, w, h, phase);
+                assert_eq!(g.len(), bytes, "gradient {w}x{h} phase {phase}: length changed");
+
+                let mut c = vec![0xFFu8; bytes];
+                center_pulse_apply(&mut c, w, phase);
+                assert_eq!(c.len(), bytes, "center {w}x{h} phase {phase}: length changed");
+
+                let mut d = vec![0xFFu8; bytes];
+                diagonal_sweep_apply(&mut d, w, phase);
+                assert_eq!(d.len(), bytes, "diagonal {w}x{h} phase {phase}: length changed");
+            }
+        }
+    }
+
+    #[test]
+    fn test_effects_only_clear_bytes() {
+        for &(w, h, bytes) in &PANEL_GEOMETRIES {
+            for phase in 0..64 {
+                for effect in ["gradient", "center", "diagonal"] {
+                    let mut buf = vec![0xFFu8; bytes];
+                    apply(effect, &mut buf, phase);
+                    assert!(
+                        buf.iter().all(|b| *b == 0x00 || *b == 0xFF),
+                        "{effect} {w}x{h} phase {phase}: fade family only clears whole bytes in place"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_gradient_fade_band_monotonic_in_phase() {
+        let mut a = vec![0xFFu8; 64 * 128 / 8];
+        let mut b = vec![0xFFu8; 64 * 128 / 8];
+        // The band steps one LUT entry per 4 phases ((strip*8 + phase) >> 2);
+        // adjacent LUT entries are all on the same side of THRESHOLD, so a
+        // 4-phase step changes nothing — 8 phases crosses it (strip 2:
+        // index 4 -> 6, 98 -> 142).
+        gradient_fade_apply(&mut a, 64, 128, 0);
+        gradient_fade_apply(&mut b, 64, 128, 8);
+        assert_ne!(a, b, "frames at phases 0 and 8 must differ");
+        // band is horizontal: each 64-byte strip is constant along its columns
+        for s in 0..16 {
+            let base = s * 64;
+            for i in 0..64 {
+                assert_eq!(a[base + i], a[base], "strip {s} constant along columns");
+            }
+        }
+    }
+
+    #[test]
+    fn test_diagonal_sweep_full_cycle_covers_bands() {
+        // Bands march over any fixed byte: byte 0 (strip 0, column group 0)
+        // must survive at every phase whose LUT index >= 6 (index == phase
+        // for byte 0), i.e. phases 6..=15.
+        let mut survives = vec![false; 16];
+        for phase in 0..16 {
+            let mut buf = vec![0xFFu8; 64 * 128 / 8];
+            diagonal_sweep_apply(&mut buf, 64, phase);
+            survives[phase as usize] = buf[0] == 0xFF;
+        }
+        assert!(
+            survives[6..].iter().all(|s| *s),
+            "byte 0 must survive the marching band at phases 6..=15"
+        );
+        assert!(
+            survives[..6].iter().all(|s| !*s),
+            "byte 0 must be covered by the band at phases 0..=5"
+        );
+    }
+
+    #[test]
+    fn test_center_pulse_symmetry() {
+        let mut buf = vec![0xFFu8; 64 * 128 / 8];
+        center_pulse_apply(&mut buf, 64, 0);
+        // Dark LUT indices are 0..=5 (values < 128). d = s ^ 7 lands in 0..=5
+        // for strips 2..=7; everything else is kept at phase 0.
+        for s in 2..=7 {
+            assert_eq!(buf[s * 64], 0, "strip {s} cleared at phase 0 (d = {} ^ 7)", s);
+        }
+        for s in [0usize, 1, 8, 9, 10, 11, 12, 13, 14, 15] {
+            assert_eq!(buf[s * 64], 0xFF, "strip {s} kept at phase 0");
         }
     }
 
@@ -504,9 +713,17 @@ mod tests {
         assert_eq!(at(0x101), (h1 >> 8) as u8);
         assert_eq!(at(0x102), (h2 & 0xFF) as u8);
         assert_eq!(at(0x103), (h2 >> 8) as u8);
-        // cave body starts at 0x8000, fits in 512 bytes
-        let max = p.modifications.iter().map(|m| m.offset).max().unwrap();
-        assert!(max < 0x8000 + 512);
+        // cave body starts at 0x8000, fits in 512 bytes; the config byte at
+        // 0x1F100 is a separate modification beyond the cave.
+        let max_cave = p
+            .modifications
+            .iter()
+            .filter(|m| m.offset != 0x1F100)
+            .map(|m| m.offset)
+            .max()
+            .unwrap();
+        assert!(max_cave < 0x8000 + 512);
+        assert_eq!(at(0x1F100), 2, "config byte = gradient-fade effect id");
     }
 
     #[test]
@@ -517,8 +734,14 @@ mod tests {
             build_diagonal_sweep_patch,
         ] {
             let p = build(DESC).unwrap();
-            let max = p.modifications.iter().map(|m| m.offset).max().unwrap();
-            assert!(max < 0x8000 + 512, "{} overflows cave", p.id);
+            let max_cave = p
+                .modifications
+                .iter()
+                .filter(|m| m.offset != 0x1F100)
+                .map(|m| m.offset)
+                .max()
+                .unwrap();
+            assert!(max_cave < 0x8000 + 512, "{} overflows cave", p.id);
         }
     }
 

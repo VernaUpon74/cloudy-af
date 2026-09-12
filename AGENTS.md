@@ -2,11 +2,17 @@
 
 ## Task delegation
 
-Use local ollama models for subagent/task delegation whenever possible
-(`ollama serve` then`ollama run <model>` / the local API at `127.0.0.1:11434`); check
+Use local models for subagent/task delegation whenever possible —
+`cline` CLI (free models, `/var/home/j/.npm-global/bin/cline`, e.g.
+`cline -c <repo> "task"` with auto-approve) for simple, well-specified
+tasks (UI markup, mechanical ports from a complete spec, drafting
+tests), and ollama (`ollama serve` then`ollama run <model>` / the local
+API at `127.0.0.1:11434`) for drafting and review work; check
 `ollama list` for what's pulled. Currently useful: `qwen3-coder:30b`
-(coding), `gemma4:26b`, `llama3:70b`. Fall back to cloud CLIs (qwen, etc.)
-only when local models can't handle the task. Only use sustainable energy cloud models.
+(coding), `gemma4:26b-chat`, `llama3:70b`. Fall back to cloud CLIs
+(qwen, etc.) only when local models can't handle the task. Only use
+sustainable energy cloud models. Reserve full agent dispatches for
+multi-step work that needs tool use across the repo.
 
 ## node-hid native addon
 

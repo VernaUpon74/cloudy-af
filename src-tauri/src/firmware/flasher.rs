@@ -312,6 +312,32 @@ pub fn read_monitoring_data(device: &mut hidapi::HidDevice) -> Result<Vec<u8>> {
 
 /// Read the product ID from dataflash bytes 316..320 (ASCII), opening the
 /// device automatically.
+///
+/// **Why this 4-byte string matters beyond identification** (NFE ground
+/// truth, traced from af_190602): ArcticFox is ONE universal binary per MCU
+/// line — there are no per-device or per-screen firmware builds. Boot
+/// dispatch (`0x302C`) reads the PID from dataflash offset `0x13C` (316),
+/// maps it to a device class (`0x20002C2E`), then a display model
+/// (`0x20002750`), then a panel init table + render geometry. Unknown/erased
+/// PID → no dispatch match → the firmware hangs in an infinite loop
+/// (`bl 0x2FF8`) and the device crash-loops or drops off USB. Screen size is
+/// therefore selected at RUNTIME per PID:
+///
+/// | Panel | Devices (NFE IDs) | Framebuffer |
+/// |---|---|---|
+/// | 64×128 (default/fallback) | classic Joyetech VTC/Cuboid/Primo family | 1024 B, stride 8 |
+/// | 96×16 | Pico M041, Pico Dual M065, Pico Mega M045, Pico RDTA M038, ASTER M037, TC100W/200W/QC200W | 192 B, stride 12 |
+/// | 128×32 | Pico 25 M077, Sinuous CB-80 J070 | 512 B, stride 16 |
+/// | 64×48 | Wismec RX family, Presa, Predator, Sinuous P80, Invoke M095, ES300 | 384 B |
+/// | 64×32 | Pico Squeeze 2 M105, ASTER RT M064 | 256 B |
+///
+/// Consequences for the flasher:
+/// - After ANY flash, the dataflash PID must still read correctly at
+///   316..320 or the device boots into the dispatch hang (observed on the
+///   Pico Dual: repeated Nuvoton→Joyetech re-enumeration, then silence).
+/// - A "Force PID" repair (rewrite df[316..320] with the expected ID and
+///   reboot) is the recovery operation when a flash leaves the PID erased —
+///   NToolbox exposes the same tool.
 pub fn read_product_id() -> Result<String> {
     let data = read_dataflash()?;
     if data.len() < 320 {
@@ -319,6 +345,51 @@ pub fn read_product_id() -> Result<String> {
     }
     let bytes = &data[316..320];
     String::from_utf8(bytes.to_vec()).map_err(|_| FirmwareError::Other("invalid Product ID".into()))
+}
+
+/// NFE "Force PID": repair the dataflash product ID (bytes 316..320) when a
+/// flash left it erased or wrong, so boot dispatch resolves the right device
+/// class and panel geometry instead of hanging on the unknown-PID loop
+/// (`bl 0x2FF8`, see the table above `read_product_id`). The boot flag is
+/// cleared in the same write so the device restarts into the flashed
+/// firmware; the LDROM updater stays reachable via `ensure_ldrom_mode`.
+/// No-op when the ID already matches. Verifies the write stuck before
+/// returning.
+pub fn force_product_id(expected: &str) -> Result<()> {
+    let pid_bytes = expected.as_bytes();
+    if pid_bytes.len() != 4 {
+        return Err(FirmwareError::Other("product ID must be 4 ASCII bytes".into()));
+    }
+    let data = read_dataflash()?;
+    if data.len() < 320 {
+        return Err(FirmwareError::Other("dataflash too short".into()));
+    }
+    if &data[316..320] == pid_bytes {
+        return Ok(()); // already correct
+    }
+    // Preserve everything, patch only the ID slot (absolute 316 = user 312)
+    // and clear the boot flag so the restart boots the flashed firmware.
+    let mut user_data = [0u8; 2044];
+    user_data.copy_from_slice(&data[4..]);
+    user_data[312..316].copy_from_slice(pid_bytes);
+    user_data[9] = 0;
+    write_dataflash(&user_data)?;
+    // NToolbox sleeps 100 ms here: give the device time to commit the
+    // dataflash sector before the restart command arrives.
+    thread::sleep(Duration::from_millis(100));
+    restart_device()?;
+    // Wait for re-enumeration and confirm the ID stuck.
+    for _ in 0..30 {
+        thread::sleep(Duration::from_millis(500));
+        if let Ok(after) = read_dataflash() {
+            if after.len() >= 320 && &after[316..320] == pid_bytes {
+                return Ok(());
+            }
+        }
+    }
+    Err(FirmwareError::Other(
+        "device did not come back with the repaired product ID".into(),
+    ))
 }
 
 /// Switch the device to LDROM bootloader mode if needed.
@@ -354,7 +425,7 @@ pub fn ensure_ldrom_mode() -> Result<()> {
             }
         }
     }
-    Err(FirmwareError::Other("device did not re-enumerate in bootloader mode".into()))
+    Err(FirmwareError::DidNotReenumerate)
 }
 
 /// One firmware-write attempt: open the device, send the 0xC3 WriteData
@@ -363,16 +434,37 @@ pub fn ensure_ldrom_mode() -> Result<()> {
 fn write_firmware_stream(bytes: &[u8]) -> Result<()> {
     let mut device = open_device()?;
 
+    // The stock LDROM updater programs whole flash rows and cannot handle a
+    // ragged final partial report: observed on real hardware (Pico Dual,
+    // M065), it drops off USB deterministically at the last <64 B chunk,
+    // leaving a partially written APROM crash-looping the MCU. Pad the
+    // stream with 0xFF (erased flash) to a whole 512-byte flash row and
+    // declare the padded length, so every report is a full 64 bytes and
+    // every programmed row is complete.
+    const FLASH_ROW: usize = 512;
+    let padded_len = bytes.len().div_ceil(FLASH_ROW) * FLASH_ROW;
+    if padded_len > 128 * 1024 {
+        return Err(FirmwareError::Other(format!(
+            "firmware image too large after row padding: {padded_len} bytes"
+        )));
+    }
+
     send_command(
         &mut device,
         CMD_WRITE_DATA,
         current_family().firmware_start_address(),
-        bytes.len() as i32,
+        padded_len as i32,
     )?;
 
-    for chunk in bytes.chunks(REPORT_SIZE) {
-        let mut report = vec![0u8; REPORT_SIZE + 1];
-        report[1..1 + chunk.len()].copy_from_slice(chunk);
+    for chunk_start in (0..padded_len).step_by(REPORT_SIZE) {
+        // 0xFF fill: any padding past the image end must look like erased
+        // flash, and the leading report-ID byte stays 0.
+        let mut report = vec![0xFFu8; REPORT_SIZE + 1];
+        report[0] = 0;
+        let end = (chunk_start + REPORT_SIZE).min(bytes.len());
+        if chunk_start < bytes.len() {
+            report[1..1 + end - chunk_start].copy_from_slice(&bytes[chunk_start..end]);
+        }
         // The LDROM programs flash slower than USB can stream; it NAKs the
         // OUT endpoint while busy, so retry with backoff instead of failing.
         let mut tries = 0;
@@ -412,7 +504,11 @@ fn check_image_size(bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-pub fn flash_firmware_guarded(bytes: &[u8], expected_product_id: Option<&str>) -> Result<()> {
+pub fn flash_firmware_guarded(
+    bytes: &[u8],
+    expected_product_id: Option<&str>,
+    on_progress: &dyn Fn(&str),
+) -> Result<()> {
     check_image_size(bytes)?;
 
     // Check the Product ID guard before switching to LDROM, so a refused
@@ -431,7 +527,37 @@ pub fn flash_firmware_guarded(bytes: &[u8], expected_product_id: Option<&str>) -
         }
     }
 
-    ensure_ldrom_mode()?;
+    match ensure_ldrom_mode() {
+        Ok(()) => {}
+        // Some devices (observed: Pico Dual) ignore the soft boot-flag switch
+        // and stay in APROM mode. Fall back to the recovery-style protocol:
+        // wait for the user to bring the device up in bootloader mode
+        // (unplug/replug, holding a button while plugging in if needed), then
+        // stream as usual.
+        Err(FirmwareError::DidNotReenumerate) => {
+            on_progress(
+                "device did not enter bootloader mode — unplug it and replug it \
+                 (hold a button while plugging in if it doesn't come up); waiting…",
+            );
+            let mut waited = 0u32;
+            loop {
+                thread::sleep(Duration::from_millis(500));
+                waited += 1;
+                if let Ok(mut device) = open_device() {
+                    if let Ok(data) = read_dataflash_from(&mut device) {
+                        if data.len() > 4 + 9 && data[4 + 9] == 1 {
+                            on_progress("device found in bootloader mode — flashing…");
+                            break;
+                        }
+                    }
+                }
+                if waited % 8 == 0 {
+                    on_progress("still waiting for the device in bootloader mode…");
+                }
+            }
+        }
+        Err(e) => return Err(e),
+    }
 
     // NToolbox retries the ENTIRE WriteFirmware (0xC3 command + full stream)
     // for 15 s on any failure. Do the same: aborting mid-stream leaves a
@@ -485,7 +611,7 @@ pub fn flash_firmware_guarded(bytes: &[u8], expected_product_id: Option<&str>) -
 
 /// Flash a decrypted firmware image to the device (no product-id guard).
 pub fn flash_firmware(bytes: &[u8]) -> Result<()> {
-    flash_firmware_guarded(bytes, None)
+    flash_firmware_guarded(bytes, None, &|_| {})
 }
 
 /// Emergency recovery flash.
@@ -537,7 +663,7 @@ pub fn recovery_flash(
         // Phase 2: flash with retries and verify the reboot. On failure
         // (e.g. the device flapped away mid-flash) go back to waiting.
         on_progress("flashing…");
-        match flash_firmware_guarded(bytes, expected_product_id) {
+        match flash_firmware_guarded(bytes, expected_product_id, &on_progress) {
             Ok(()) => {
                 on_progress("flash complete, device rebooted into flashed firmware");
                 return Ok(());

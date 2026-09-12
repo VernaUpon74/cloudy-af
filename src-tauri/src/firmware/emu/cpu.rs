@@ -878,6 +878,77 @@ impl Cpu {
                 self.set_reg(rd, (v >> lsbit) & mask);
                 self.pc = self.pc.wrapping_add(4);
             }
+            Instr::Thumb2(Thumb2::LdrdStrd { load, rt, rt2, rn, imm, pre, sub, wb }) => {
+                // Load/store dual word: byte offset = imm << 2, applied
+                // pre-indexed (writeback only when W=1) or post-indexed
+                // (always writeback). No flags.
+                let base = self.reg(rn);
+                let off = (imm as u32) << 2;
+                let addr = if pre {
+                    if sub { base.wrapping_sub(off) } else { base.wrapping_add(off) }
+                } else {
+                    base
+                };
+                if load {
+                    self.set_reg(rt, bus.read_u32(addr)?);
+                    self.set_reg(rt2, bus.read_u32(addr.wrapping_add(4))?);
+                } else {
+                    bus.write_u32(addr, self.reg(rt))?;
+                    bus.write_u32(addr.wrapping_add(4), self.reg(rt2))?;
+                }
+                if wb || !pre {
+                    let new_base = if sub { base.wrapping_sub(off) } else { base.wrapping_add(off) };
+                    self.set_reg(rn, new_base);
+                }
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::Clz { rd, rm }) => {
+                self.set_reg(rd, self.reg(rm).leading_zeros());
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::Mrs { rd, sysreg }) => {
+                // M-profile: only MSP (8), PSP (9) and XPSR (3) appear in the
+                // firmware. This emulator runs in Thread mode with no PSP, so
+                // MSP/PSP both read the main sp; XPSR reads as 0x0100_0000
+                // (Thumb T bit set, no flags).
+                let v = match sysreg {
+                    8 | 9 => self.sp,
+                    3 => 0x0100_0000,
+                    _ => 0,
+                };
+                self.set_reg(rd, v);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::BfiBfc { rd, rn, lsbit, width }) => {
+                // Bit-field insert (Rn != 15) / clear (Rn == 15): replace the
+                // `width`-bit field at `lsbit` of Rd with Rn's field / with 0.
+                // No flags.
+                let mask = if width >= 32 { u32::MAX } else { (1u32 << width) - 1 };
+                let field = if rn == 15 { 0 } else { self.reg(rn) & mask };
+                let v = (self.reg(rd) & !(mask << lsbit)) | (field << lsbit);
+                self.set_reg(rd, v);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::Subw { rd, rn, imm }) => {
+                // Subtract with plain 12-bit immediate (no shifter carry,
+                // never sets flags — S=1 is UNPREDICTABLE).
+                let r = self.reg(rn).wrapping_sub(imm);
+                self.set_reg(rd, r);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::TbbTbh { half, rm }) => {
+                // Table branch: base = align4(pc+4); the table entry (byte for
+                // TBB, halfword for TBH) at base + Rm (*2 for TBH) is a
+                // halfword-scaled offset: target = base + 2 * entry.
+                let base = self.pc.wrapping_add(4) & !3;
+                let idx = self.reg(rm);
+                let entry = if half {
+                    bus.read_u16(base.wrapping_add(idx.wrapping_mul(2)))? as u32
+                } else {
+                    bus.read_u8(base.wrapping_add(idx))? as u32
+                };
+                self.pc = base.wrapping_add(entry.wrapping_mul(2));
+            }
             Instr::Thumb2(Thumb2::LdrStrReg { load, size, rt, rn, rm, shift }) => {
                 // 32-bit LDR/STR (register): positive LSL offset, no writeback.
                 // Byte offset = Rm << shift. No flags.
@@ -1456,6 +1527,101 @@ mod tests {
         assert_eq!(cpu.r[4], 0x1122_3344);
         assert_eq!(cpu.sp, RAM_BASE + 0x800);
         assert_eq!(cpu.pc, 0x60);
+    }
+
+    #[test]
+    fn test_strd_ldrd_roundtrip() {
+        // strd r12, lr, [sp, #-0x10]! = E96D CE04, then ldrd r2, r3,
+        // [sp, #0] (E9DD 2300) reading the same two words back.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..4].copy_from_slice(&[0x6d, 0xe9, 0x04, 0xce]); // strd r12, lr, [sp, #-0x10]!
+        flash[4..8].copy_from_slice(&[0xdd, 0xe9, 0x00, 0x23]); // ldrd r2, r3, [sp, #0]
+        let mut bus = Bus::new(flash, 0x1000);
+        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.sp = RAM_BASE + 0x800;
+        cpu.r[12] = 0x1122_3344;
+        cpu.lr = 0x5566_7788;
+        cpu.step(&mut bus).unwrap();
+        // Pre-indexed subtract, writeback: sp = 0x7F0; words at 0x7F0/0x7F4.
+        assert_eq!(cpu.sp, RAM_BASE + 0x7F0);
+        assert_eq!(bus.read_u32(RAM_BASE + 0x7F0).unwrap(), 0x1122_3344);
+        assert_eq!(bus.read_u32(RAM_BASE + 0x7F4).unwrap(), 0x5566_7788);
+        cpu.r[2] = 0;
+        cpu.r[3] = 0;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[2], 0x1122_3344);
+        assert_eq!(cpu.r[3], 0x5566_7788);
+        // Offset 0, writeback sp += 0: sp unchanged.
+        assert_eq!(cpu.sp, RAM_BASE + 0x7F0);
+    }
+
+    #[test]
+    fn test_bfi_bfc_semantics() {
+        // bfi r3, r2, #8, #1 = F362 2308 (af_190602 0x1d7c): set bit 8 of r3
+        // to bit 0 of r2; other bits preserved.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..4].copy_from_slice(&[0x62, 0xf3, 0x08, 0x23]); // bfi r3, r2, #8, #1
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[3] = 0xFFFF_FEFF;
+        cpu.r[2] = 0x1;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[3], 0xFFFF_FFFF);
+        // bfc r3, #0, #1 = F36F 0300 (af_190602 0x27f2): clear bit 0.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..4].copy_from_slice(&[0x6f, 0xf3, 0x00, 0x03]); // bfc r3, #0, #1
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[3] = 0xFFFF_FFFF;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[3], 0xFFFF_FFFE);
+    }
+
+    #[test]
+    fn test_subw_plain_imm() {
+        // subw r1, r1, #0x726 = F2A1 7126 (af_190602 0x1e08): plain imm12.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..4].copy_from_slice(&[0xa1, 0xf2, 0x26, 0x71]); // subw r1, r1, #0x726
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[1] = 0x800;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[1], 0x800 - 0x726);
+    }
+
+    #[test]
+    fn test_tbh_branch_target() {
+        // tbh [pc, r2] at 0 with base = align4(0+4) = 4; halfwords at
+        // 4 + 2*r2 scale the target: target = 4 + 2 * entry.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..4].copy_from_slice(&[0xdf, 0xe8, 0x12, 0xf0]); // tbh [pc, r2]
+        flash[4..6].copy_from_slice(&0x0010u16.to_le_bytes()); // entry 0 -> 4 + 32 = 36
+        flash[8..10].copy_from_slice(&0x0002u16.to_le_bytes()); // entry 1 (r2=2) -> 4 + 4 = 8
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[2] = 2;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.pc, 8);
+    }
+
+    #[test]
+    fn test_clz_and_mrs() {
+        // clz lr, r2 = FAB2 FE82 (af_190602 0x19b6).
+        let mut flash = vec![0u8; 0x100];
+        flash[0..4].copy_from_slice(&[0xb2, 0xfa, 0x82, 0xfe]); // clz lr, r2
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[2] = 0x00F0_0000;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.lr, 8);
+        // mrs r4, xpsr = F3EF 8403 (af_190602 0x1cfe): reads 0x0100_0000.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..4].copy_from_slice(&[0xef, 0xf3, 0x03, 0x84]); // mrs r4, xpsr
+        let mut bus = Bus::new(flash, 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[4], 0x0100_0000);
     }
 
     #[test]

@@ -9,6 +9,33 @@
         #patch-details { padding: 12px; }
         .status-applied { color: #0a0; }
         .status-pending { color: #888; }
+        /* .window-content is a centered flexbox with overflow hidden, which
+           clips tall tab panes at both edges in small windows. Fill the
+           width and scroll instead. */
+        .window-content > div[id^="tab-"] {
+            width: 100%;
+            max-height: 100%;
+            overflow-y: auto;
+            align-self: flex-start;
+            box-sizing: border-box;
+        }
+        /* Images / Strings / Resource Packs editor tabs */
+        .fw-main { display: flex; width: 100%; height: 100%; box-sizing: border-box; }
+        .fw-side { width: 220px; min-width: 200px; border-right: 1px solid var(--border-color); overflow: auto; box-sizing: border-box; }
+        .fw-edit { flex: 1; overflow: auto; padding: 8px; box-sizing: border-box; }
+        .fw-scroll { overflow: auto; }
+        .fw-title { font-weight: bold; color: var(--fg-color); margin: 4px 0; }
+        .fw-entry, .fw-info { color: var(--fg-color); }
+        .fw-entry { cursor: pointer; padding: 2px 6px; }
+        .fw-entry:hover, .fw-entry.selected { background-color: var(--hover-bg); }
+        .fw-actions { display: flex; gap: 6px; margin-top: 8px; }
+        canvas.fw-pixelated { image-rendering: pixelated; }
+        .fw-cell { border: 1px solid var(--border-color); image-rendering: pixelated; cursor: pointer; }
+        .fw-cell.selected { border: 2px solid var(--accent-color); }
+        .fw-thumb { width: 20px; height: 20px; image-rendering: pixelated; border: 1px solid var(--border-color); cursor: pointer; margin: 1px; }
+        .fw-pack-img { image-rendering: pixelated; border: 1px solid var(--border-color); }
+        .fw-pack-bad td { color: #888; }
+        .fw-pack-list { margin: 4px 0; }
     </style>
 </head>
 <body>
@@ -17,9 +44,10 @@
         <h1 class="title">Firmware Editor</h1>
     </header>
 
-    <div class="toolbar toolbar-actions" style="padding: 8px;">
+    <div class="toolbar toolbar-actions" style="padding: 8px; display: flex; align-items: center; gap: 10px;">
+        <span id="fw-device-name" style="font-weight: bold; min-width: 180px;">No device</span>
         <button id="open-firmware" class="btn btn-default">Open Firmware</button>
-        <button id="download-stock" class="btn btn-default">Download Stock</button>
+        <button id="download-stock" class="btn btn-default">Download FW</button>
         <button id="save-firmware" class="btn btn-default">Save</button>
         <button id="save-as-firmware" class="btn btn-default">Save As</button>
         <button id="flash-firmware" class="btn btn-default" disabled>Flash to Device</button>
@@ -28,7 +56,8 @@
     </div>
 
     <div class="tab-group">
-        <div class="tab-item active" data-tab="patches">Patches</div>
+        <div class="tab-item active" data-tab="status">Status</div>
+        <div class="tab-item" data-tab="patches">Patches</div>
         <div class="tab-item" data-tab="images">Images</div>
         <div class="tab-item" data-tab="strings">Strings</div>
         <div class="tab-item" data-tab="resourcepacks">Resource Packs</div>
@@ -36,7 +65,21 @@
     </div>
 
     <div class="window-content">
-        <div id="tab-patches">
+        <div id="tab-status" style="padding: 12px;">
+            <h3>Device Status</h3>
+            <table class="table">
+                <tbody>
+                    <tr><td>Connection</td><td id="status-connection">Disconnected</td></tr>
+                    <tr><td>Product ID</td><td id="status-product-id">—</td></tr>
+                    <tr><td>Device Name</td><td id="status-device-name">—</td></tr>
+                    <tr><td>ArcticFox Line</td><td id="status-device-line">—</td></tr>
+                </tbody>
+            </table>
+            <p style="margin-top: 12px; font-size: 11px; color: var(--fg-color);">
+                Open a firmware file or connect a device to populate this page.
+            </p>
+        </div>
+        <div id="tab-patches" style="display: none;">
             <table id="patch-list">
                 <thead>
                     <tr>
@@ -54,28 +97,74 @@
             </div>
         </div>
         <div id="tab-images" style="display: none;">
-            <p>Image editor coming soon.</p>
+            <p id="images-min" style="display: none;">Open a firmware file first.</p>
+            <div id="images-main" class="fw-main" style="display: none;">
+                <div class="fw-side">
+                    <div id="images-blocks"></div>
+                </div>
+                <div class="fw-edit">
+                    <canvas id="images-canvas" class="fw-pixelated" width="0" height="0"></canvas>
+                    <div id="images-info" class="fw-info"></div>
+                    <div class="fw-actions">
+                        <button id="images-export" class="btn btn-default" disabled title="Export the current image as image_0x{index}.png">Export PNG</button>
+                        <button id="images-import" class="btn btn-default" disabled title="Import a PNG/JPG/BMP/GIF, resized to this slot's exact dimensions">Import…</button>
+                        <button id="images-invert" class="btn btn-default" disabled title="Invert all pixels">Invert</button>
+                        <button id="images-clear" class="btn btn-default" disabled title="Clear all pixels to blank">Clear</button>
+                    </div>
+                </div>
+            </div>
         </div>
         <div id="tab-strings" style="display: none;">
-            <p>String editor coming soon.</p>
+            <p id="strings-min" style="display: none;">Open a firmware file first.</p>
+            <div id="strings-main" class="fw-main" style="display: none;">
+                <div class="fw-side">
+                    <div id="strings-list"></div>
+                </div>
+                <div class="fw-edit">
+                    <div id="strings-capacity" class="fw-info"></div>
+                    <canvas id="strings-canvas" class="fw-pixelated" width="0" height="0"></canvas>
+                    <div id="strings-cells" class="fw-scroll"></div>
+                    <div class="fw-actions">
+                        <button id="strings-truncate" class="btn btn-default" disabled title="Zero this slot and all following slots">Truncate Here</button>
+                    </div>
+                    <div class="fw-info">Glyph palette:</div>
+                    <div id="strings-palette" class="fw-scroll"></div>
+                </div>
+            </div>
         </div>
         <div id="tab-resourcepacks" style="display: none;">
-            <p>Resource pack importer coming soon.</p>
+            <p id="rp-min" style="display: none;">Open a firmware file first.</p>
+            <div id="rp-main" class="fw-main" style="display: none;">
+                <div class="fw-edit">
+                    <div class="fw-scroll" style="max-height: 200px;">
+                        <table id="rp-table">
+                            <thead>
+                                <tr><th>Name</th><th>Version</th><th>Author</th><th>Images</th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div id="rp-images" class="fw-scroll"></div>
+                    <div class="fw-actions">
+                        <button id="rp-apply" class="btn btn-default" disabled title="Apply the selected resource pack to this firmware">Apply Pack</button>
+                    </div>
+                </div>
+            </div>
         </div>
         <div id="tab-recovery" style="display: none; padding: 12px;">
             <h3>Emergency Recovery</h3>
             <p>
-                Flashes firmware to a device stuck in a boot loop. The flasher
-                waits for the device to enumerate, checks the Product ID,
-                streams the image, restarts and verifies it boots.
+                Flash a firmware image to a device stuck in a boot loop.
+                The flasher waits for the device, checks the Product ID,
+                flashes, restarts, and verifies it boots.
             </p>
             <p>
-                <strong>Flash stock first.</strong> A bricked device must be
-                restored with the original manufacturer firmware before
-                ArcticFox can boot. The bundled stock image is selected
-                automatically; after it succeeds you will be offered the
-                matching ArcticFox build. If no stock image is bundled for
-                your device, choose the manufacturer firmware file manually.
+                <strong>Flash stock first.</strong> A bricked device needs its
+                original manufacturer firmware back before ArcticFox can boot.
+                The bundled stock image is picked automatically; after it
+                succeeds you will be offered the matching ArcticFox build.
+                If no stock image is bundled for your device, choose the
+                manufacturer file manually.
             </p>
             <div class="form-group">
                 <label>Recovery image (.bin):</label>
@@ -89,12 +178,30 @@
             <div class="form-group">
                 <button id="recovery-start" class="btn btn-negative" disabled>Start Recovery Flash</button>
             </div>
+            <h4>Repair Product ID</h4>
+            <p>
+                If a device crash-loops or is not detected after a flash, its
+                dataflash Product ID may be erased and the firmware hangs at
+                boot unable to pick a screen geometry. This rewrites the ID,
+                clears the boot flag, restarts, and verifies the write
+                (NFE "Force PID").
+            </p>
+            <div class="form-group">
+                <label for="force-pid">Product ID (e.g. M065):</label>
+                <input id="force-pid" type="text" maxlength="4" style="width: 80px;">
+                <button id="force-pid-btn" class="btn btn-default">Write &amp; Reboot</button>
+            </div>
             <h4>Connected devices</h4>
             <ul id="recovery-devices"><li>none</li></ul>
             <h4>Log</h4>
-            <pre id="recovery-log" style="height: 160px; overflow-y: auto; background: #f5f5f5; padding: 8px;"></pre>
+            <pre id="recovery-log" style="height: 160px; overflow-y: auto; padding: 8px;"></pre>
         </div>
     </div>
+    <footer class="toolbar toolbar-footer">
+        <div id="fw-connection-status" style="padding: 8px 12px; font-size: 12px;">
+            <span>Device</span> <span id="fw-connection-text">is disconnected</span>
+        </div>
+    </footer>
 </div>
 <script type="module" src="/src/renderer-firmware.js"></script>
 </body>

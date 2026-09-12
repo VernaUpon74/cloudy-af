@@ -18,6 +18,11 @@ use crate::firmware::loader::{load_firmware, FirmwareImage};
 use crate::firmware::patch::{apply_patch, parse_patch, rollback_patch, rollback_other_animations, Patch};
 use crate::firmware::state::{FirmwareState, OpenFirmware};
 use crate::firmware::stock::{line_for_definition, line_for_product, load_library, match_build, MatchKind};
+use crate::firmware::resources::respack::{apply_respack, parse_respack};
+use crate::firmware::resources::{
+    pack_1bpp, parse_image_table, parse_string_table, read_image_pixels, read_string_glyphs,
+    unpack_1bpp, write_image, write_string_glyphs,
+};
 
 /// Serializes every command that talks to the device directly (flashes AND
 /// dataflash reads). Two concurrent flashes interleave 0x35/0xC3 traffic and
@@ -564,6 +569,7 @@ pub async fn read_device_product_id(
 /// belongs to a different device line than the firmware's definition (e.g.
 /// an STM32-line build onto a Nuvoton device).
 fn flash_guarded_for_image(app: &AppHandle, bytes: &[u8], definition: &str) -> Result<(), String> {
+    use tauri::Emitter;
     let pid = read_product_id().map_err(|e| e.to_string())?;
     let (lib, _) = load_stock_library(app)?;
     let device_line = line_for_product(&lib, &pid)
@@ -576,7 +582,10 @@ fn flash_guarded_for_image(app: &AppHandle, bytes: &[u8], definition: &str) -> R
             device_line.name
         ));
     }
-    flash_firmware_guarded(bytes, Some(&pid)).map_err(|e| e.to_string())
+    flash_firmware_guarded(bytes, Some(&pid), &|msg| {
+        let _ = app.emit("flash-progress", msg);
+    })
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -641,12 +650,32 @@ pub async fn read_monitoring_data_cmd(
     crate::firmware::monitoring::decode_monitoring_data(&raw).map_err(|e| e.to_string())
 }
 
+/// Capture the device screen (0xC1): 1024 raw framebuffer bytes, returned
+/// base64-encoded. Served by the HID sidecar like the monitoring sample.
+/// ArcticFox firmware only — stock firmware has no 0xC1 handler and the
+/// read times out (see flasher::screenshot).
+#[tauri::command]
+pub async fn screenshot_cmd(
+    sidecar: State<'_, crate::SidecarState>,
+) -> Result<String, String> {
+    let res = crate::sidecar_request(&sidecar, serde_json::json!({ "type": "screenshot" })).await?;
+    if let Some(msg) = res.get("message").and_then(|v| v.as_str()) {
+        return Err(format!("Sidecar error: {}", msg));
+    }
+    res.get("data")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or("Missing screenshot data in sidecar reply".to_string())
+}
+
 #[tauri::command]
 pub async fn undo_firmware_changes(
+    app: AppHandle,
     sidecar: State<'_, crate::SidecarState>,
     state: State<'_, FirmwareState>,
     handle: String,
 ) -> Result<(), String> {
+    use tauri::Emitter;
     let backup = state
         .with(&handle, |fw| fw.original_backup_path.clone())
         .ok_or_else(|| "Firmware handle not found".to_string())?;
@@ -656,7 +685,10 @@ pub async fn undo_firmware_changes(
     let _ = crate::suspend_sidecar(&sidecar).await;
     let _flash_guard = FLASH_MUTEX.lock().await;
     let result = tauri::async_runtime::spawn_blocking(move || {
-        flash_firmware_guarded(&bytes, None).map_err(|e| e.to_string())
+        flash_firmware_guarded(&bytes, None, &|msg| {
+            let _ = app.emit("flash-progress", msg);
+        })
+        .map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?;
@@ -667,6 +699,27 @@ pub async fn undo_firmware_changes(
 #[tauri::command]
 pub async fn list_hid_devices() -> Result<Vec<crate::firmware::flasher::DeviceInfo>, String> {
     crate::firmware::flasher::list_devices().map_err(|e| e.to_string())
+}
+
+/// NFE-style "Force PID": repair the dataflash product ID (bytes 316..320)
+/// after a flash erased or corrupted it, so boot dispatch can select the
+/// right screen geometry again. Clears the boot flag and restarts into the
+/// flashed firmware; verifies the write stuck. Takes the same sidecar
+/// suspend + flash mutex as any device operation.
+#[tauri::command]
+pub async fn force_product_id_cmd(
+    sidecar: State<'_, crate::SidecarState>,
+    pid: String,
+) -> Result<(), String> {
+    let _ = crate::suspend_sidecar(&sidecar).await;
+    let _flash_guard = FLASH_MUTEX.lock().await;
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::firmware::flasher::force_product_id(&pid).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    let _ = crate::resume_sidecar(&sidecar).await;
+    result
 }
 
 /// Emergency recovery: wait for the device, flash the given image file,
@@ -698,4 +751,248 @@ pub async fn recovery_flash(
     .map_err(|e| e.to_string())?;
     let _ = crate::resume_sidecar(&sidecar).await;
     result
+}
+/// List the two image tables (Block1/Block2) of the opened firmware. Blocks
+/// whose table is absent (either pointer is 0) are skipped.
+#[tauri::command]
+pub async fn list_image_tables(
+    state: State<'_, FirmwareState>,
+    handle: String,
+) -> Result<Value, String> {
+    state
+        .with(&handle, |fw| {
+            let bytes = &fw.image.bytes;
+            let def = &fw.image.definition;
+            let mut blocks = Vec::new();
+            for (block, range) in [
+                (1u8, def.image_table_1.clone()),
+                (2u8, def.image_table_2.clone()),
+            ] {
+                let slots = parse_image_table(bytes, range, block).map_err(|e| e.to_string())?;
+                if slots.is_empty() {
+                    continue;
+                }
+                let slot_json: Vec<Value> = slots
+                    .iter()
+                    .map(|s| {
+                        serde_json::json!({
+                            "index": s.index,
+                            "reference_offset": s.reference_offset,
+                            "data_offset": s.data_offset,
+                            "width": s.width,
+                            "height": s.height,
+                        })
+                    })
+                    .collect();
+                blocks.push(serde_json::json!({ "block": block, "slots": slot_json }));
+            }
+            Ok(serde_json::json!({ "definition": def.name, "blocks": blocks }))
+        })
+        .ok_or_else(|| "Firmware handle not found".to_string())?
+}
+
+/// Read one image slot's pixels from the opened firmware.
+///
+/// `pixels_base64` is a base64 1bpp row-major payload, MSB-first within each
+/// byte (each row is `ceil(width/8)` bytes). The returned JSON carries the
+/// canonical slot `width`/`height`.
+#[tauri::command]
+pub async fn read_image_cmd(
+    state: State<'_, FirmwareState>,
+    handle: String,
+    block: u8,
+    index: u32,
+) -> Result<Value, String> {
+    state
+        .with(&handle, |fw| {
+            let bytes = &fw.image.bytes;
+            let def = &fw.image.definition;
+            let range = if block == 1 {
+                def.image_table_1.clone()
+            } else {
+                def.image_table_2.clone()
+            };
+            let slots = parse_image_table(bytes, range, block).map_err(|e| e.to_string())?;
+            let slot = slots
+                .iter()
+                .find(|s| s.index == index as usize)
+                .ok_or_else(|| format!("image slot {index} not found in block {block}"))?;
+            let pixels = read_image_pixels(bytes, slot).map_err(|e| e.to_string())?;
+            let packed = pack_1bpp(&pixels);
+            Ok(serde_json::json!({
+                "width": slot.width,
+                "height": slot.height,
+                "pixels_base64": base64::engine::general_purpose::STANDARD.encode(&packed),
+            }))
+        })
+        .ok_or_else(|| "Firmware handle not found".to_string())?
+}
+/// Replace one image slot's record in the opened firmware's in-memory bytes.
+///
+/// `pixels_base64` is a base64 1bpp row-major payload (MSB-first) of exactly
+/// `width * height` bits. The write is guarded so a growing record can never
+/// clobber the next record (see `resources::write_image`).
+#[tauri::command]
+pub async fn write_image_cmd(
+    state: State<'_, FirmwareState>,
+    handle: String,
+    block: u8,
+    index: u32,
+    width: u32,
+    height: u32,
+    pixels_base64: String,
+) -> Result<(), String> {
+    state
+        .with(&handle, |fw| {
+            let def = &fw.image.definition;
+            let range = if block == 1 {
+                def.image_table_1.clone()
+            } else {
+                def.image_table_2.clone()
+            };
+            let slots =
+                parse_image_table(&fw.image.bytes, range, block).map_err(|e| e.to_string())?;
+            slots
+                .iter()
+                .find(|s| s.index == index as usize)
+                .ok_or_else(|| format!("image slot {index} not found in block {block}"))?;
+
+            let packed = base64::engine::general_purpose::STANDARD
+                .decode(&pixels_base64)
+                .map_err(|e| e.to_string())?;
+            let w = width as usize;
+            let h = height as usize;
+            let pixels = unpack_1bpp(&packed, w * h).map_err(|e| e.to_string())?;
+            write_image(&mut fw.image.bytes, &slots, index as usize, w, h, &pixels)
+                .map_err(|e| e.to_string())
+        })
+        .ok_or_else(|| "Firmware handle not found".to_string())?
+}
+
+/// List the opened firmware's strings (glyph IDs per string).
+#[tauri::command]
+pub async fn list_strings_cmd(
+    state: State<'_, FirmwareState>,
+    handle: String,
+) -> Result<Vec<Value>, String> {
+    state
+        .with(&handle, |fw| {
+            let bytes = &fw.image.bytes;
+            let def = &fw.image.definition;
+            let strings = parse_string_table(bytes, def.string_table_1.clone(), def.char_width)
+                .map_err(|e| e.to_string())?;
+            Ok(strings
+                .iter()
+                .map(|s| {
+                    let glyphs = read_string_glyphs(bytes, s);
+                    serde_json::json!({
+                        "index": s.index,
+                        "byte_length": s.byte_length,
+                        "glyphs": glyphs,
+                    })
+                })
+                .collect())
+        })
+        .ok_or_else(|| "Firmware handle not found".to_string())?
+}
+
+/// Replace one string's glyphs in the opened firmware (in place; the string's
+/// total byte length is fixed by the format).
+#[tauri::command]
+pub async fn write_string_cmd(
+    state: State<'_, FirmwareState>,
+    handle: String,
+    index: u32,
+    glyphs: Vec<u16>,
+) -> Result<(), String> {
+    state
+        .with(&handle, |fw| {
+            let def = &fw.image.definition;
+            let strings =
+                parse_string_table(&fw.image.bytes, def.string_table_1.clone(), def.char_width)
+                    .map_err(|e| e.to_string())?;
+            let s = strings
+                .iter()
+                .find(|s| s.index == index as usize)
+                .ok_or_else(|| format!("string {index} not found"))?;
+            write_string_glyphs(&mut fw.image.bytes, s, &glyphs).map_err(|e| e.to_string())
+        })
+        .ok_or_else(|| "Firmware handle not found".to_string())?
+}
+/// List `.respack` manifests from `<firmware_resource_dir>/respacks/`, creating
+/// the directory if absent (empty list when there are none). Each entry carries
+/// the full pixel data (1bpp row-major MSB-first) so the UI can preview without
+/// extra round-trips.
+#[tauri::command]
+pub async fn list_resource_packs(app: AppHandle) -> Result<Vec<Value>, String> {
+    let dir = firmware_resource_dir(&app)
+        .ok_or_else(|| "firmware resource directory not found".to_string())?
+        .join("respacks");
+    let _ = std::fs::create_dir_all(&dir);
+
+    let mut result = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.extension().map(|x| x == "respack").unwrap_or(false) {
+                let Ok(xml) = std::fs::read_to_string(&path) else {
+                    continue;
+                };
+                let Ok(pack) = parse_respack(&xml) else {
+                    continue;
+                };
+                let images: Vec<Value> = pack
+                    .images
+                    .iter()
+                    .map(|im| {
+                        let packed = pack_1bpp(&im.pixels);
+                        serde_json::json!({
+                            "index": im.index,
+                            "width": im.width,
+                            "height": im.height,
+                            "pixels_base64": base64::engine::general_purpose::STANDARD.encode(&packed),
+                        })
+                    })
+                    .collect();
+                result.push(serde_json::json!({
+                    "path": path.to_string_lossy().to_string(),
+                    "definition": pack.definition,
+                    "name": pack.name,
+                    "version": pack.version,
+                    "author": pack.author,
+                    "description": pack.description,
+                    "image_count": pack.images.len(),
+                    "images": images,
+                }));
+            }
+        }
+    }
+    result.sort_by(|a, b| {
+        a["name"]
+            .as_str()
+            .unwrap_or_default()
+            .cmp(b["name"].as_str().unwrap_or_default())
+    });
+    Ok(result)
+}
+
+/// Apply a `.respack` manifest to the opened firmware's in-memory bytes.
+/// Returns `{ applied, skipped }`.
+#[tauri::command]
+pub async fn apply_resource_pack_cmd(
+    state: State<'_, FirmwareState>,
+    handle: String,
+    pack_path: String,
+) -> Result<Value, String> {
+    state
+        .with(&handle, |fw| {
+            let xml =
+                std::fs::read_to_string(&pack_path).map_err(|e| format!("cannot read pack {pack_path}: {e}"))?;
+            let pack = parse_respack(&xml).map_err(|e| e.to_string())?;
+            let def = fw.image.definition.clone();
+            let (applied, skipped) =
+                apply_respack(&mut fw.image.bytes, &pack, &def).map_err(|e| e.to_string())?;
+            Ok(serde_json::json!({ "applied": applied, "skipped": skipped }))
+        })
+        .ok_or_else(|| "Firmware handle not found".to_string())?
 }

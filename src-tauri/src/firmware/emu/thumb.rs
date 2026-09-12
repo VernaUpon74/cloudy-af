@@ -149,6 +149,47 @@ pub enum Thumb2 {
     /// hw2 = imm3 Rd imm2 0 widthm1 (same layout as Sbfx).
     /// Capstone-verified: ubfx r1, r2, #0, #9 = F3C2 0108 (af_190602 0x18e).
     Ubfx { rd: u8, rn: u8, lsbit: u8, width: u8 },
+    /// Load/store DUAL (STRD/LDRD immediate) T1. hw1 = 11101 00 P U 1 W L Rn
+    /// (bit 6 = 1 distinguishes dual from the multiple forms, which all have
+    /// bit 6 = 0 in this firmware), hw2 = Rt Rt2 imm8; byte offset = imm8 << 2.
+    /// P=1: pre-indexed (writeback only when W=1); P=0: post-indexed, always
+    /// writeback. No flags.
+    /// Capstone-verified: strd r12, lr, [sp, #-0x10]! = E96D CE04
+    /// (af_190602 0x18f6); ldrd r2, r3, [sp, #8] = E9DD 2302 (af_190602 0x190a).
+    LdrdStrd { load: bool, rt: u8, rt2: u8, rn: u8, imm: u8, pre: bool, sub: bool, wb: bool },
+    /// CLZ.W Rd, Rm: count leading zeros. No flags.
+    /// hw1 = 11111 010 1 010 1111 (0xFAB0; Rn field fixed 1111;
+    /// Capstone-verified: clz lr, r2 = FAB2 FE82, af_190602 0x19b6),
+    /// hw2 = 1111 Rd 1000 Rm.
+    Clz { rd: u8, rm: u8 },
+    /// MRS.W Rd, SYSm: move special register to general register.
+    /// hw1 = 1111 0011 1110 1111 (0xF3EF), hw2 = 100001 Rd SYSm (bits 15:10
+    /// = 0b100001; SYSm 3 = XPSR, 8 = MSP, 9 = PSP). Capstone (5.0.7) refuses
+    /// to decode MRS in plain THUMB mode; encoding verified against Ghidra:
+    /// mrs r6,psp = F3EF 8609, mrs r6,msp = F3EF 8608, mrs r4,xpsr = F3EF 8403
+    /// (af_190602 0x1cf4/0x1cfa/0x1cfe).
+    Mrs { rd: u8, sysreg: u8 },
+    /// BFI/BFC T1: bit-field insert (Rn != 15) / clear (Rn == 15). Rd =
+    /// (Rd & ~(mask << lsbit)) | ((Rn & mask) << lsbit); BFC inserts 0.
+    /// hw1 = 11110 11 0 110 0 Rn (0xF360|Rn; same field layout as SBFX),
+    /// hw2 = imm3 Rd imm2 0 widthm1; lsbit = imm3:imm2, width = widthm1+1.
+    /// Capstone-verified: bfi r3, r2, #8, #1 = F362 2308 (af_190602 0x1d7c);
+    /// bfc r3, #0, #1 = F36F 0300 (af_190602 0x27f2).
+    BfiBfc { rd: u8, rn: u8, lsbit: u8, width: u8 },
+    /// SUBW.W Rd, Rn, #imm12: subtract with a PLAIN 12-bit immediate
+    /// (i:imm3:imm8, NO ThumbExpandImm — unlike DpImm). hw1 = 11110 i 1010 1 0
+    /// Rn (mask 0xFBF0 = 0xF2A0; i = bit 10 = top imm bit), hw2 = 0 imm3 Rd
+    /// imm8. Never sets flags (S = 1 is UNPREDICTABLE and pinned 0 by the
+    /// mask). Capstone-verified: subw r1, r1, #0x726 = F2A1 7126
+    /// (af_190602 0x1e08).
+    Subw { rd: u8, rn: u8, imm: u32 },
+    /// Table branch: TBB (half = false) / TBH (half = true). Base is
+    /// align4(pc+4); the target = base + 2 * mem[base + Rm (*2 for TBH)].
+    /// hw1 = 11101000 1101 1111 (0xE8DF — Rn is fixed 1111; the H bit is
+    /// hw2 bit 4, NOT a hw1 bit), hw2 = 1111 000H Rm.
+    /// Capstone-verified: tbh [pc, r2, lsl #1] = E8DF F012 (af_190602 0x5992);
+    /// tbb [pc, r3] = E8DF F003 (af_190602 0xc4fc).
+    TbbTbh { half: bool, rm: u8 },
     /// LDR/STR (register) T2 family, positive LSL offset, no writeback:
     /// hw1 = 11111 000 0 op Rn with op (bits 7:4) 0000=STRB, 0001=LDRB,
     /// 0010=STRH, 0011=LDRH, 0100=STR, 0101=LDR; hw2 = Rt imm2 000000 Rm.
@@ -402,8 +443,39 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
     let op1 = hw1 >> 11; // full 5-bit prefix: 11101 or 11111 for non-BL 32-bit
     let op2 = (hw1 >> 9) & 0b11; // bits 10:9
 
+    // Table branch TBB/TBH: hw1 = 11101000 1101 1111 (Rn fixed 1111 — pins
+    // bits 7:4 = 1101, disjoint from every dual/multiple encoding used by the
+    // firmware), hw2 = 1111 000H Rm (H = bit 4 selects TBH; bits 15:8 = 1111
+    // 0000 and bits 7:5 = 000 — the mask keeps bit 4 out since it IS the H
+    // bit). Capstone-verified: tbh [pc, r2, lsl #1] = E8DF F012 (af_190602
+    // 0x5992); tbb [pc, r3] = E8DF F003 (af_190602 0xc4fc). MUST precede the
+    // load/store multiple/dual block below (same op1/op2 prefix; a dual
+    // would misread hw2 as Rt/Rt2/imm8).
+    if (hw1 & 0xFFF0) == 0xE8D0 {
+        let top = hw2 & 0xFFE0;
+        if top == 0xF000 || top == 0xF010 {
+            let half = (hw2 >> 4) & 1 == 1;
+            let rm = (hw2 & 0xF) as u8;
+            return Some(Instr::Thumb2(Thumb2::TbbTbh { half, rm }));
+        }
+    }
+
     // Load/store multiple / dual / table branch (op1 == 0b11101, op2 == 0b00)
     if op1 == 0b11101 && op2 == 0b00 {
+        // Load/store DUAL (STRD/LDRD): bit 6 = 1 (all multiple forms used by
+        // the firmware have bit 6 = 0 — push.w E92D, pop.w E8BD, stm.w E88D
+        // all verified below). hw2 = Rt Rt2 imm8, byte offset = imm8 << 2.
+        if (hw1 >> 6) & 1 == 1 {
+            let pre = (hw1 >> 8) & 1 == 1;  // P
+            let sub = (hw1 >> 7) & 1 == 0;  // U: 0 = subtract
+            let wb = (hw1 >> 5) & 1 == 1;   // W
+            let load = (hw1 >> 4) & 1 == 1; // L
+            let rn = (hw1 & 0xF) as u8;
+            let rt = ((hw2 >> 12) & 0xF) as u8;
+            let rt2 = ((hw2 >> 8) & 0xF) as u8;
+            let imm = (hw2 & 0xFF) as u8;
+            return Some(Instr::Thumb2(Thumb2::LdrdStrd { load, rt, rt2, rn, imm, pre, sub, wb }));
+        }
         // Encoding: 1110_100P USW L Rn, hw2 = register list.
         //   push.w = P1U0W1L0 (STMDB sp!), pop.w = P0U1W1L1 (LDMIA sp!),
         //   stm.w (no `!`) = P?U?W0L0 (STMIA, NO writeback).
@@ -590,6 +662,16 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         return Some(Instr::Thumb2(Thumb2::Udiv { rd, rn, rm }));
     }
 
+    // 32-bit CLZ: `clz.w rd, rm`.
+    // Capstone-verified: clz lr, r2 = hw1 0xFAB2, hw2 0xFE82 (af_190602
+    // 0x19b6). hw1 bits 7:4 = 1010 with Rn = 1111 pins the encoding (SDIV/
+    // UDIV use 0xFB90/0xFBB0 — disjoint).
+    if op1 == 0b11111 && (hw1 & 0xFFF0) == 0xFAB0 && (hw2 & 0xF0F0) == 0xF080 {
+        let rd = ((hw2 >> 8) & 0xF) as u8;
+        let rm = (hw2 & 0xF) as u8;
+        return Some(Instr::Thumb2(Thumb2::Clz { rd, rm }));
+    }
+
     // 32-bit SBFX (signed bit-field extract) T1. Capstone-verified:
     // sbfx r6, r6, #0x12, #1 = hw1 0xF346, hw2 0x4680 (af_190602 0x8ce8).
     // Neighbors differ only in hw1 bits 7:4: ssat 0xF32x, ubfx 0xF3Cx, so
@@ -624,6 +706,37 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
             return None; // UNPREDICTABLE per ARM ARM
         }
         return Some(Instr::Thumb2(Thumb2::Ubfx { rd, rn, lsbit, width }));
+    }
+
+    // 32-bit BFI (bit-field insert) / BFC (bit-field clear) T1. UNLIKE
+    // SBFX/UBFX, hw2 bits 4:0 hold msbit (not widthm1): the inserted field
+    // spans lsbit..msbit, so width = msbit - lsbit + 1. lsbit = imm3:imm2
+    // (same position as SBFX). hw1 = 0xF360|Rn with Rn = 1111 encoding BFC.
+    // Capstone-verified: bfi r3, r2, #8, #1 = F362 2308 (af_190602 0x1d7c;
+    // lsbit 8, msbit 8 -> width 1); bfc r3, #0, #1 = F36F 0300 (af_190602
+    // 0x27f2).
+    if op1 == 0b11110 && (hw1 & 0xFFF0) == 0xF360 {
+        let rn = (hw1 & 0xF) as u8;
+        let imm3 = (hw2 >> 12) & 0b111;
+        let rd = ((hw2 >> 8) & 0xF) as u8;
+        let imm2 = (hw2 >> 6) & 0b11;
+        let lsbit = ((imm3 << 2) | imm2) as u8;
+        let msbit = (hw2 & 0x1F) as u8;
+        if msbit < lsbit {
+            return None; // UNPREDICTABLE per ARM ARM
+        }
+        let width = msbit - lsbit + 1;
+        return Some(Instr::Thumb2(Thumb2::BfiBfc { rd, rn, lsbit, width }));
+    }
+
+    // 32-bit MRS: `mrs.w rd, sysreg`. hw1 = 0xF3EF, hw2 bits 15:10 = 0b100001.
+    // Encoding verified against Ghidra (Capstone 5.0.7 refuses MRS in plain
+    // THUMB mode): mrs r6,psp = F3EF 8609, mrs r6,msp = F3EF 8608,
+    // mrs r4,xpsr = F3EF 8403 (af_190602 0x1cf4/0x1cfa/0x1cfe).
+    if op1 == 0b11110 && hw1 == 0xF3EF && (hw2 & 0xFC00) == 0x8400 {
+        let rd = ((hw2 >> 8) & 0xF) as u8;
+        let sysreg = (hw2 & 0xFF) as u8;
+        return Some(Instr::Thumb2(Thumb2::Mrs { rd, sysreg }));
     }
 
     // 32-bit LDR/STR (register) T2 family: `ldr.w rt, [rn, rm, lsl #imm2]`
@@ -669,6 +782,21 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         } else {
             Thumb2::Movw { rd, imm16 }
         }));
+    }
+
+    // 32-bit SUBW (immediate) T3: `subw rd, rn, #imm12`. PLAIN imm12
+    // (i:imm3:imm8) — NOT ThumbExpandImm, which is why the DpImm arm cannot
+    // cover it. hw1 = 11110 i 1010 1 0 Rn — the mask pins bit 4 = 0 (S = 1
+    // is UNPREDICTABLE per ARM ARM and assemblers never emit it), so SUBW
+    // never sets flags. Capstone-verified: subw r1, r1, #0x726 = F2A1 7126
+    // (af_190602 0x1e08).
+    if op1 == 0b11110 && (hw1 & 0xFBF0) == 0xF2A0 && hw2 & 0x8000 == 0 {
+        let i = ((hw1 >> 10) & 1) as u32;
+        let imm3 = ((hw2 >> 12) & 0b111) as u32;
+        let rd = ((hw2 >> 8) & 0xF) as u8;
+        let imm8 = (hw2 & 0xFF) as u32;
+        let imm = (i << 11) | (imm3 << 8) | imm8;
+        return Some(Instr::Thumb2(Thumb2::Subw { rd, rn: (hw1 & 0xF) as u8, imm }));
     }
 
     // 32-bit CONDITIONAL branch B<c>.W (T3): hw1 = 11110 S cond imm6,
@@ -1137,6 +1265,117 @@ mod tests {
                 assert_eq!((rd, rn, rm), (3, 3, 2));
             }
             _ => panic!("expected Udiv, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_strd_pre_sub_wb() {
+        // Capstone-verified: strd r12, lr, [sp, #-0x10]! = E96D CE04
+        // (af_190602 0x18f6): P=1, U=0 (subtract), W=1, L=0 (store),
+        // imm8=4 -> offset 0x10.
+        let i = decode32(0xE96D, 0xCE04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrdStrd { load, rt, rt2, rn, imm, pre, sub, wb }) => {
+                assert_eq!((load, rt, rt2, rn, imm), (false, 12, 14, 13, 4));
+                assert!(pre && sub && wb);
+            }
+            _ => panic!("expected LdrdStrd store, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_ldrd_pre_add_wb() {
+        // Capstone-verified: ldrd r2, r3, [sp, #8] = E9DD 2302
+        // (af_190602 0x190a): P=1, U=1 (add), W=0 — NO writeback (Ghidra
+        // prints no `!`; the following `add sp, #0x10` restores sp by hand),
+        // L=1, imm8=2 -> offset 8.
+        let i = decode32(0xE9DD, 0x2302).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrdStrd { load, rt, rt2, rn, imm, pre, sub, wb }) => {
+                assert_eq!((load, rt, rt2, rn, imm), (true, 2, 3, 13, 2));
+                assert!(pre && !sub && !wb);
+            }
+            _ => panic!("expected LdrdStrd load, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_clz() {
+        // Capstone-verified: clz lr, r2 = FAB2 FE82 (af_190602 0x19b6).
+        let i = decode32(0xFAB2, 0xFE82).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::Clz { rd, rm }) => {
+                assert_eq!((rd, rm), (14, 2));
+            }
+            _ => panic!("expected Clz, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_mrs() {
+        // Ghidra-verified (Capstone 5.0.7 refuses MRS in THUMB mode):
+        // mrs r6,psp = F3EF 8609, mrs r6,msp = F3EF 8608, mrs r4,xpsr =
+        // F3EF 8403 (af_190602 0x1cf4/0x1cfa/0x1cfe).
+        match decode32(0xF3EF, 0x8609).unwrap() {
+            Instr::Thumb2(Thumb2::Mrs { rd, sysreg }) => assert_eq!((rd, sysreg), (6, 9)),
+            other => panic!("expected Mrs psp, got {other:?}"),
+        }
+        match decode32(0xF3EF, 0x8608).unwrap() {
+            Instr::Thumb2(Thumb2::Mrs { rd, sysreg }) => assert_eq!((rd, sysreg), (6, 8)),
+            other => panic!("expected Mrs msp, got {other:?}"),
+        }
+        match decode32(0xF3EF, 0x8403).unwrap() {
+            Instr::Thumb2(Thumb2::Mrs { rd, sysreg }) => assert_eq!((rd, sysreg), (4, 3)),
+            other => panic!("expected Mrs xpsr, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode32_bfi_bfc() {
+        // Capstone-verified: bfi r3, r2, #8, #1 = F362 2308 (af_190602
+        // 0x1d7c); bfc r3, #0, #1 = F36F 0300 (af_190602 0x27f2).
+        match decode32(0xF362, 0x2308).unwrap() {
+            Instr::Thumb2(Thumb2::BfiBfc { rd, rn, lsbit, width }) => {
+                assert_eq!((rd, rn, lsbit, width), (3, 2, 8, 1));
+            }
+            other => panic!("expected BfiBfc insert, got {other:?}"),
+        }
+        match decode32(0xF36F, 0x0300).unwrap() {
+            Instr::Thumb2(Thumb2::BfiBfc { rd, rn, lsbit, width }) => {
+                assert_eq!((rd, rn, lsbit, width), (3, 15, 0, 1));
+            }
+            other => panic!("expected BfiBfc clear, got {other:?}"),
+        }
+        // msbit < lsbit is UNPREDICTABLE: imm3=7, imm2=3 -> lsbit 31,
+        // msbit = 0 -> 31 > 0.
+        assert!(decode32(0xF360, 0x70C0).is_none());
+    }
+
+    #[test]
+    fn test_decode32_subw() {
+        // Capstone-verified: subw r1, r1, #0x726 = F2A1 7126 (af_190602
+        // 0x1e08). Plain imm12 (no ThumbExpandImm); never sets flags.
+        let i = decode32(0xF2A1, 0x7126).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::Subw { rd, rn, imm }) => {
+                assert_eq!((rd, rn, imm), (1, 1, 0x726));
+            }
+            _ => panic!("expected Subw, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_tbh_tbb() {
+        // Capstone-verified: tbh [pc, r2, lsl #1] = E8DF F012 (af_190602
+        // 0x5992); tbb [pc, r3] = E8DF F003 (af_190602 0xc4fc). The H bit
+        // lives in hw2 bit 4, NOT in hw1 (both forms share hw1 = 0xE8DF).
+        match decode32(0xE8DF, 0xF012).unwrap() {
+            Instr::Thumb2(Thumb2::TbbTbh { half, rm }) => assert_eq!((half, rm), (true, 2)),
+            other => panic!("expected Tbh, got {other:?}"),
+        }
+        match decode32(0xE8DF, 0xF003).unwrap() {
+            Instr::Thumb2(Thumb2::TbbTbh { half, rm }) => assert_eq!((half, rm), (false, 3)),
+            other => panic!("expected Tbb, got {other:?}"),
         }
     }
 }

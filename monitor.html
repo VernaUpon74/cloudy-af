@@ -37,7 +37,7 @@
             display: flex;
             flex-direction: column;
             gap: 2px;
-            width: 190px;
+            width: 210px;
             flex: none;
             overflow-y: auto;
             font-size: 11px;
@@ -98,6 +98,38 @@
             right: 0;
             transform: translateY(-50%);
         }
+        /* Screenshot modal: fullscreen dim with a centered panel. */
+        #screenshot-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 100;
+        }
+        #screenshot-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--bg-color, #1b1b1b);
+            color: var(--fg-color, #ddd);
+            border: 1px solid var(--border-color, #444);
+            border-radius: 4px;
+            padding: 12px;
+            text-align: center;
+        }
+        #screenshot-canvas {
+            image-rendering: pixelated;
+            background: #000;
+            border: 1px solid var(--border-color, #444);
+            display: block;
+            margin: 0 auto 10px;
+        }
+        #screenshot-buttons {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
     </style>
 </head>
 
@@ -114,11 +146,12 @@
                 <span id="monitor-flags"></span>
                 <span style="flex:1"></span>
                 <button id="monitor-pause" class="btn btn-default" data-lang="Monitor.PauseButton">Pause</button>
+                <button id="monitor-screenshot" class="btn btn-default" data-lang="Monitor.ScreenshotButton" data-lang-title="Tooltips.MonitorScreenshot">Screenshot</button>
             </div>
             <div class="monitor-body">
                 <div id="monitor-legend"></div>
                 <div id="monitor-chart-wrap">
-                    <canvas id="monitor-chart" width="640" height="400"></canvas>
+                    <div id="monitor-chart"></div>
                     <div id="monitor-overlay">
                         <div id="monitor-overlay-box">
                             <div id="monitor-overlay-text" data-lang="Monitor.Disconnected">Device disconnected.</div>
@@ -129,6 +162,15 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+<div id="screenshot-modal">
+    <div id="screenshot-panel">
+        <canvas id="screenshot-canvas"></canvas>
+        <div id="screenshot-buttons">
+            <button id="screenshot-save" class="btn btn-default" data-lang="Monitor.ScreenshotSave">Save PNG</button>
+            <button id="screenshot-close" class="btn btn-default" data-lang="Monitor.ScreenshotClose">Close</button>
         </div>
     </div>
 </div>

@@ -1,0 +1,38 @@
+name: macOS build
+
+# Hybrid route (see docs/macos-ci.md): manual dispatch only. No push/PR
+# triggers — the Linux flatpak pipeline is the primary build; this exists
+# solely to produce an arm64 .dmg on demand.
+on:
+  workflow_dispatch:
+
+jobs:
+  dmg:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies (root postinstall installs sidecar deps)
+        run: npm ci
+
+      - name: Fetch darwin Node runtime + rebuild node-hid from source
+        run: scripts/prepare-macos-sidecar.sh
+
+      - name: Build Tauri app (.app bundle)
+        run: npm run tauri:build -- --bundles app
+
+      - name: Inject Node runtime, sign, create .dmg
+        run: scripts/package-macos-dmg.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cloudy-af-macos
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error

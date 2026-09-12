@@ -1692,7 +1692,7 @@ fn test_stock_cycle_hardware() {
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
-        match f::flash_firmware_guarded(&bytes, Some("M041")) {
+        match f::flash_firmware_guarded(&bytes, Some("M041"), &|s| println!("flash: {s}")) {
             Ok(()) => { flash_err = None; break; }
             Err(e) => {
                 println!("flash attempt {attempt} failed: {e}");

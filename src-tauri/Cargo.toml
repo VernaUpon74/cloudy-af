@@ -1,6 +1,6 @@
 [package]
 name = "cloudy-af"
-version = "1.18.2"
+version = "1.19.0"
 description = "Configuration Tool for Vape Battery Mods with Arcticfox Firmware"
 authors = ["Sebastian Raff", "OneButtFarting"]
 license = "GPL-3.0"

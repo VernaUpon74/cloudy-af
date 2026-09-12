@@ -34,6 +34,16 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
+    <release version="1.19.0" date="2026-09-10">
+      <description>
+        <p>Recovery tooling: "Repair Product ID" fixes a device whose dataflash product ID was erased or rewritten by the wrong stock firmware (crash-loop / not detected after flashing), flash progress reaches the status line in all paths, and STM32-line device coverage is broadened (M149/M172/M177). Also: flasher restart-retry after a successful write, and documentation of the device's two USB modes and dataflash layout.</p>
+      </description>
+    </release>
+    <release version="1.18.3" date="2026-09-10">
+      <description>
+        <p>Flash reliability: firmware is padded to whole flash rows so the updater no longer dies on a ragged final chunk, and applying a timeout animation also writes the config byte that enables it. Flashes now tolerate devices that won't soft-switch into bootloader mode (e.g. Pico Dual): the app waits for an unplug/replug and reports progress live. Firmware Editor auto-loads the stock firmware for the connected device, "Download Stock" is now "Download FW", and Device Monitor adds a pause button and Space shortcut.</p>
+      </description>
+    </release>
     <release version="1.18.2" date="2026-09-10">
       <description>
         <p>Sidecar crash fixed (node-hid handle freed while a read was in flight) — Firmware Editor and Device Monitor no longer die with a device plugged in. Timeout animations now actually appear under Firmware Editor → Patches. Device Monitor chart: hover any point for its value, restyled as an NToolbox-style Highcharts port. App follows the system dark/light theme. Configuration dropdown double-arrow fixed.</p>

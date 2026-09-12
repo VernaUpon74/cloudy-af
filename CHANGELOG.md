@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.19.0 — 2026-09-10
+
+### Added
+- **"Repair Product ID" (Force PID) in the Firmware Editor's Recovery tab**: when a flash leaves the device dataflash's product ID erased or wrong (symptom: the mod crash-loops or isn't detected after flashing — e.g. stock firmware from another model rewrote the identity), the app rewrites the ID to the expected value, clears the boot flag, restarts, and verifies the write stuck. Same recovery NToolbox exposes; diagnosed and proven on a Pico Dual that had been left with Pico 25 (M077) stock firmware on 96×16 hardware.
+- **Post-flash progress events end-to-end**: `flash-progress` lines (waiting for bootloader replug, flashing, verifying) now reach the Firmware Editor status line in every flash path.
+- **Broader STM32-line device support**: the Rim C entry now covers the ArcticFox STM32 device family reported by NFE post-190718 builds (M149/M172 alongside M177).
+
+### Fixed
+- **Recovery flash could fail to return after a successful write**: the LDROM finalizes a flash asynchronously and drops USB briefly, so a single-shot restart after streaming the image could fail transiently and report a good flash as failed. The restart is now retried before giving up.
+
+### Docs
+- `docs/firmware-validation.md` gains the device USB operation modes (APROM "Joyetech" vs LDROM "Nuvoton" — the latter is the normal updater state for flashing, not an error) and the dataflash info-block ground truth (version at 260, PID at 316, boot flag at 13, build stamp at 516), from the Pico Dual repair session.
+
+## 1.18.3 — 2026-09-10
+
+### Fixed
+- **Animation flashes failing on real hardware**: the stock LDROM updater dies deterministically on a ragged final partial 64-byte report — it dropped off USB at the last chunk and left the device crash-looping until a physical replug. The flash stream is now padded with 0xFF (erased flash) to a whole 512-byte flash row and the padded length is declared to the updater, so every report is a full 64 bytes. Verified: a padded animation-patched image flashes clean in ~6 s and the device boots ArcticFox 190602. Also, applying a timeout-animation patch now writes the dataflash config byte that gates animations — without it a successful flash would still show no animation.
+- **Firmware flash failing on devices that won't soft-switch to bootloader mode** (observed on the Pico Dual): when the boot-flag switch and restart don't re-enumerate the device in LDROM mode, the flash now falls back to the recovery-style protocol — it waits for the device to appear in bootloader mode (unplug and replug it, holding a button while plugging in if needed) and then streams as usual. Progress reaches the Firmware Editor status line via a new `flash-progress` event, so the user knows to replug.
+
+### Added
+- **Device Monitor pause**: a Pause/Resume button plus the Space key freeze and resume the live graph (Space is ignored while a button/input has focus, so native Space behavior is preserved).
+
+### Changed
+- **Firmware Editor auto-loads stock firmware**: on editor open (and when a device appears later), the matching stock ArcticFox build for the connected device is loaded automatically, as on Pico mods. "Download Stock" is now "Download FW".
+
 ## 1.18.2 — 2026-09-10
 
 ### Fixed

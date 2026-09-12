@@ -6,6 +6,7 @@ pub mod flasher;
 pub mod loader;
 pub mod monitoring;
 pub mod patch;
+pub mod resources;
 pub mod state;
 pub mod stock;
 pub mod emu;
@@ -30,6 +31,11 @@ pub enum FirmwareError {
     IncompatiblePatch { offset: usize, expected: u8, found: u8 },
     #[error("Conflict with patch {other} at offset {offset}")]
     Conflict { offset: usize, other: String },
+    /// The device accepted the boot-flag write and restart but never came
+    /// back in LDROM updater mode. Distinct from transient IO errors so the
+    /// flasher can fall back to waiting for a manual replug.
+    #[error("device did not re-enumerate in bootloader mode")]
+    DidNotReenumerate,
     #[error("{0}")]
     Other(String),
 }

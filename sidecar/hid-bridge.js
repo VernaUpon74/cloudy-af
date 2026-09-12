@@ -308,6 +308,33 @@ function handleCommand(cmd) {
             break;
         }
 
+        case 'screenshot': {
+            // 0xC1 screen capture: 1024 raw framebuffer bytes. ArcticFox
+            // firmware only — stock Joyetech v1.00 has no 0xC1 handler and
+            // the read times out (see flasher::screenshot).
+            const requestId = cmd.request_id || null;
+            if (suspended || !fox.connected) {
+                sendForRequest('error', {
+                    message: 'Screenshot failed',
+                    error: true,
+                    detail: 'device not connected'
+                }, requestId);
+                break;
+            }
+            fox.screenshot((err, data) => {
+                if (err) {
+                    sendForRequest('error', {
+                        message: 'Screenshot failed',
+                        error: true,
+                        detail: err.toString() + ' — ArcticFox firmware only; stock firmware has no screen-capture command (read times out)'
+                    }, requestId);
+                } else {
+                    sendForRequest('screenshot_ack', { data: data.toString('base64') }, requestId);
+                }
+            });
+            break;
+        }
+
         case 'suspend':
             // The Rust firmware flasher is about to own the HID device:
             // drop our handle and stop the reconnect loop until 'resume'.
