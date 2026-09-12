@@ -66,6 +66,8 @@ Loose ends carried over from the firmware read-back Phase 1 plan
 
 - [x] Address these two format errors- 1) switching Puffs Time Format corrupts data, is not displayed correctly if set to HH:MM:SS 
        2) After switching from C to F in Regional, the set profile temperature should be converted and rounded. Changing from F to C, the set temperature scales down correctly, but not the other way around. Describe code error when found
+       
+- [x] Investigated GitHub Dependabot `glib::VariantStrIter` unsoundness vulnerability. Tauri 2.11.5 pins `gtk = "0.18"` / `webkit2gtk = "2.0"`, which transitively locks `glib 0.18.5`. Newer `glib`/`gtk` versions exist but Tauri does not yet declare compatibility; a `[patch.crates-io]` override would likely break Linux webview/gtk compilation. Fix is blocked on a future Tauri/gtk-rs release. No local Cargo.lock change committed.
 
 - [x] M0 RE freeze: write `resources/re/af_190602-boot.md` + `resources/boot/af_190602.json` documenting the reset handler, SystemInit, C runtime startup, and main() dispatch loop for build af_190602.
 
