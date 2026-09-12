@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "Зберегти PNG",
   "Monitor.ScreenshotClose": "Закрити",
   "Monitor.ScreenshotFailed": "Не вдалося зробити скріншот",
-  "Tooltips.MonitorScreenshot": "Захоплює поточний екран пристрою як зображення. Лише прошивка ArcticFox — у початковій прошивці немає команди захоплення екрана."
+  "Tooltips.MonitorScreenshot": "Захоплює поточний екран пристрою як зображення. Лише прошивка ArcticFox — у початковій прошивці немає команди захоплення екрана.",
+  "ClickActions.ProfileEdit": "Редагування профілю",
+  "InfoLines.CoilTemperature": "Температура койла",
+  "Advanced.Settings.ChargingCurrent": "Струм зарядки",
+  "Screen.RegionalTab": "Регіональні",
+  "Screen.Regional.DateFormat": "Формат дати",
+  "Screen.Regional.TimeFormat": "Формат часу",
+  "Screen.Regional.TemperatureUnits": "Одиниці температури",
+  "Animation.ComingSoon": "Незабаром — для анімації годинника потрібен патч прошивки."
 }

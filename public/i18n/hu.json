@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "Mentés PNG-ként",
   "Monitor.ScreenshotClose": "Bezárás",
   "Monitor.ScreenshotFailed": "Képernyőkép sikertelen",
-  "Tooltips.MonitorScreenshot": "A készülék aktuális képernyőjének képként történő rögzítése. Csak ArcticFox-firmware — az eredeti firmware nem rendelkezik képernyőkép-parancsal."
+  "Tooltips.MonitorScreenshot": "A készülék aktuális képernyőjének képként történő rögzítése. Csak ArcticFox-firmware — az eredeti firmware nem rendelkezik képernyőkép-parancsal.",
+  "ClickActions.ProfileEdit": "Profil szerkesztése",
+  "InfoLines.CoilTemperature": "Tekercs hőmérséklete",
+  "Advanced.Settings.ChargingCurrent": "Töltési áram",
+  "Screen.RegionalTab": "Területi",
+  "Screen.Regional.DateFormat": "Dátumformátum",
+  "Screen.Regional.TimeFormat": "Időformátum",
+  "Screen.Regional.TemperatureUnits": "Hőmérsékleti egységek",
+  "Animation.ComingSoon": "Hamarosan — az óra-animációhoz firmware-javítás szükséges."
 }

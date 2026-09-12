@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "Zapisz PNG",
   "Monitor.ScreenshotClose": "Zamknij",
   "Monitor.ScreenshotFailed": "Nie udało się wykonać zrzutu ekranu",
-  "Tooltips.MonitorScreenshot": "Przechwytuje bieżący ekran urządzenia jako obraz. Tylko firmware ArcticFox — oryginalne firmware nie ma polecenia zrzutu ekranu."
+  "Tooltips.MonitorScreenshot": "Przechwytuje bieżący ekran urządzenia jako obraz. Tylko firmware ArcticFox — oryginalne firmware nie ma polecenia zrzutu ekranu.",
+  "ClickActions.ProfileEdit": "Edycja profilu",
+  "InfoLines.CoilTemperature": "Temperatura grzałki",
+  "Advanced.Settings.ChargingCurrent": "Prąd ładowania",
+  "Screen.RegionalTab": "Regionalne",
+  "Screen.Regional.DateFormat": "Format daty",
+  "Screen.Regional.TimeFormat": "Format czasu",
+  "Screen.Regional.TemperatureUnits": "Jednostki temperatury",
+  "Animation.ComingSoon": "Wkrótce — animacja zegara wymaga poprawki firmware."
 }

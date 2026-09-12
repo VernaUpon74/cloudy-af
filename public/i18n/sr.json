@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "Sačuvaj PNG",
   "Monitor.ScreenshotClose": "Zatvori",
   "Monitor.ScreenshotFailed": "Snimak ekrana nije uspeo",
-  "Tooltips.MonitorScreenshot": "Snima trenutni ekran uređaja kao sliku. Samo ArcticFox firmver — originalni firmver nema komandu za snimak ekrana."
+  "Tooltips.MonitorScreenshot": "Snima trenutni ekran uređaja kao sliku. Samo ArcticFox firmver — originalni firmver nema komandu za snimak ekrana.",
+  "ClickActions.ProfileEdit": "Измена профила",
+  "InfoLines.CoilTemperature": "Температура грејача",
+  "Advanced.Settings.ChargingCurrent": "Струја пуњења",
+  "Screen.RegionalTab": "Регионално",
+  "Screen.Regional.DateFormat": "Формат датума",
+  "Screen.Regional.TimeFormat": "Формат времена",
+  "Screen.Regional.TemperatureUnits": "Јединице температуре",
+  "Animation.ComingSoon": "Ускоро — за анимацију сата потребна је закрпа фирмвера."
 }

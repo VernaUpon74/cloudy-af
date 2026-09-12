@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "Uložiť PNG",
   "Monitor.ScreenshotClose": "Zavrieť",
   "Monitor.ScreenshotFailed": "Snímka obrazovky zlyhala",
-  "Tooltips.MonitorScreenshot": "Zachytáva aktuálnu obrazovku zariadenia ako obrázok. Iba firmware ArcticFox — pôvodný firmware nemá príkaz na snímku obrazovky."
+  "Tooltips.MonitorScreenshot": "Zachytáva aktuálnu obrazovku zariadenia ako obrázok. Iba firmware ArcticFox — pôvodný firmware nemá príkaz na snímku obrazovky.",
+  "ClickActions.ProfileEdit": "Úprava profilu",
+  "InfoLines.CoilTemperature": "Teplota cievky",
+  "Advanced.Settings.ChargingCurrent": "Nabíjací prúd",
+  "Screen.RegionalTab": "Regionálne",
+  "Screen.Regional.DateFormat": "Formát dátumu",
+  "Screen.Regional.TimeFormat": "Formát času",
+  "Screen.Regional.TemperatureUnits": "Jednotky teploty",
+  "Animation.ComingSoon": "Čoskoro — pre animáciu hodín je potrebný patch firmvéru."
 }

@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "PNG opslaan",
   "Monitor.ScreenshotClose": "Sluiten",
   "Monitor.ScreenshotFailed": "Screenshot mislukt",
-  "Tooltips.MonitorScreenshot": "Maakt een afbeelding van het huidige scherm van het apparaat. Alleen ArcticFox-firmware — de originele firmware heeft geen schermopnamecommando."
+  "Tooltips.MonitorScreenshot": "Maakt een afbeelding van het huidige scherm van het apparaat. Alleen ArcticFox-firmware — de originele firmware heeft geen schermopnamecommando.",
+  "ClickActions.ProfileEdit": "Profiel bewerken",
+  "InfoLines.CoilTemperature": "Coiltemperatuur",
+  "Advanced.Settings.ChargingCurrent": "Laadstroom",
+  "Screen.RegionalTab": "Regionaal",
+  "Screen.Regional.DateFormat": "Datumnotatie",
+  "Screen.Regional.TimeFormat": "Tijdnotatie",
+  "Screen.Regional.TemperatureUnits": "Temperatuureenheden",
+  "Animation.ComingSoon": "Binnenkort — klok-animatie vereist een firmware-patch."
 }

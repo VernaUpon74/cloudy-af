@@ -44,7 +44,7 @@ let currentFirmwareInfo = null; // { name, encryption, definition, size, buildId
 
 async function loadLocale() {
     try {
-        const locale = await getLocale();
+        const locale = (await getLocale()).substr(0, 2); // locale files are two-letter; getLocale() returns full BCP-47 tags like "de-DE"
         const fp = await resolveResourcePath('i18n/' + locale + '.json');
         const text = await readTextFile(fp);
         const lang = JSON.parse(text);

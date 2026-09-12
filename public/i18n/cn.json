@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "保存 PNG",
   "Monitor.ScreenshotClose": "关闭",
   "Monitor.ScreenshotFailed": "截图失败",
-  "Tooltips.MonitorScreenshot": "将设备当前屏幕捕获为图像。仅支持 ArcticFox 固件——原版固件没有截屏命令。"
+  "Tooltips.MonitorScreenshot": "将设备当前屏幕捕获为图像。仅支持 ArcticFox 固件——原版固件没有截屏命令。",
+  "ClickActions.ProfileEdit": "配置编辑",
+  "InfoLines.CoilTemperature": "线圈温度",
+  "Advanced.Settings.ChargingCurrent": "充电电流",
+  "Screen.RegionalTab": "区域设置",
+  "Screen.Regional.DateFormat": "日期格式",
+  "Screen.Regional.TimeFormat": "时间格式",
+  "Screen.Regional.TemperatureUnits": "温度单位",
+  "Animation.ComingSoon": "即将推出——时钟动画需要固件补丁支持。"
 }

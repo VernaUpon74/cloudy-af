@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "Сохранить PNG",
   "Monitor.ScreenshotClose": "Закрыть",
   "Monitor.ScreenshotFailed": "Не удалось сделать скриншот",
-  "Tooltips.MonitorScreenshot": "Захватывает текущий экран устройства в виде изображения. Только прошивка ArcticFox — в оригинальной прошивке нет команды захвата экрана."
+  "Tooltips.MonitorScreenshot": "Захватывает текущий экран устройства в виде изображения. Только прошивка ArcticFox — в оригинальной прошивке нет команды захвата экрана.",
+  "ClickActions.ProfileEdit": "Редактирование профиля",
+  "InfoLines.CoilTemperature": "Температура койла",
+  "Advanced.Settings.ChargingCurrent": "Ток зарядки",
+  "Screen.RegionalTab": "Региональные",
+  "Screen.Regional.DateFormat": "Формат даты",
+  "Screen.Regional.TimeFormat": "Формат времени",
+  "Screen.Regional.TemperatureUnits": "Единицы температуры",
+  "Animation.ComingSoon": "Скоро — для анимации часов требуется патч прошивки."
 }

@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "Enregistrer en PNG",
   "Monitor.ScreenshotClose": "Fermer",
   "Monitor.ScreenshotFailed": "Échec de la capture d'écran",
-  "Tooltips.MonitorScreenshot": "Capture l'écran actuel de l'appareil sous forme d'image. Firmware ArcticFox uniquement — le firmware d'origine n'a pas de commande de capture d'écran."
+  "Tooltips.MonitorScreenshot": "Capture l'écran actuel de l'appareil sous forme d'image. Firmware ArcticFox uniquement — le firmware d'origine n'a pas de commande de capture d'écran.",
+  "ClickActions.ProfileEdit": "Modifier le profil",
+  "InfoLines.CoilTemperature": "Température de la bobine",
+  "Advanced.Settings.ChargingCurrent": "Courant de charge",
+  "Screen.RegionalTab": "Régional",
+  "Screen.Regional.DateFormat": "Format de date",
+  "Screen.Regional.TimeFormat": "Format de l'heure",
+  "Screen.Regional.TemperatureUnits": "Unités de température",
+  "Animation.ComingSoon": "Bientôt disponible — l'animation d'horloge nécessite un patch firmware."
 }

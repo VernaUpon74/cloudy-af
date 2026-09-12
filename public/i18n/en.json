@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "Save PNG",
   "Monitor.ScreenshotClose": "Close",
   "Monitor.ScreenshotFailed": "Screenshot failed",
-  "Tooltips.MonitorScreenshot": "Capture the device's current screen as an image. ArcticFox firmware only — stock firmware has no screen-capture command."
+  "Tooltips.MonitorScreenshot": "Capture the device's current screen as an image. ArcticFox firmware only — stock firmware has no screen-capture command.",
+  "ClickActions.ProfileEdit": "Profile Edit",
+  "InfoLines.CoilTemperature": "Coil Temperature",
+  "Advanced.Settings.ChargingCurrent": "Charging Current",
+  "Screen.RegionalTab": "Regional",
+  "Screen.Regional.DateFormat": "Date Format",
+  "Screen.Regional.TimeFormat": "Time Format",
+  "Screen.Regional.TemperatureUnits": "Temperature Units",
+  "Animation.ComingSoon": "Coming soon — requires a firmware patch for clock animation support."
 }

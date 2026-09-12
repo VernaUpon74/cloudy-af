@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "PNG保存",
   "Monitor.ScreenshotClose": "閉じる",
   "Monitor.ScreenshotFailed": "スクリーンショットに失敗しました",
-  "Tooltips.MonitorScreenshot": "デバイスの現在の画面を画像としてキャプチャします。ArcticFoxファームウェアのみ——純正ファームウェアには画面キャプチャコマンドがありません。"
+  "Tooltips.MonitorScreenshot": "デバイスの現在の画面を画像としてキャプチャします。ArcticFoxファームウェアのみ——純正ファームウェアには画面キャプチャコマンドがありません。",
+  "ClickActions.ProfileEdit": "プロファイル編集",
+  "InfoLines.CoilTemperature": "コイル温度",
+  "Advanced.Settings.ChargingCurrent": "充電電流",
+  "Screen.RegionalTab": "地域設定",
+  "Screen.Regional.DateFormat": "日付の形式",
+  "Screen.Regional.TimeFormat": "時刻の形式",
+  "Screen.Regional.TemperatureUnits": "温度の単位",
+  "Animation.ComingSoon": "近日対応 — 時計アニメーションにはファームウェアパッチが必要です。"
 }

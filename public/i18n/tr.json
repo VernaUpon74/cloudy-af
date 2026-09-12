@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "PNG Kaydet",
   "Monitor.ScreenshotClose": "Kapat",
   "Monitor.ScreenshotFailed": "Ekran görüntüsü başarısız oldu",
-  "Tooltips.MonitorScreenshot": "Cihazın geçerli ekranını görüntü olarak yakalar. Yalnızca ArcticFox donanım yazılımı — orijinal yazılımda ekran görüntüsü komutu yok."
+  "Tooltips.MonitorScreenshot": "Cihazın geçerli ekranını görüntü olarak yakalar. Yalnızca ArcticFox donanım yazılımı — orijinal yazılımda ekran görüntüsü komutu yok.",
+  "ClickActions.ProfileEdit": "Profil düzenleme",
+  "InfoLines.CoilTemperature": "Coil sıcaklığı",
+  "Advanced.Settings.ChargingCurrent": "Şarj akımı",
+  "Screen.RegionalTab": "Bölgesel",
+  "Screen.Regional.DateFormat": "Tarih biçimi",
+  "Screen.Regional.TimeFormat": "Saat biçimi",
+  "Screen.Regional.TemperatureUnits": "Sıcaklık birimleri",
+  "Animation.ComingSoon": "Yakında — saat animasyonu için firmware yaması gerekiyor."
 }

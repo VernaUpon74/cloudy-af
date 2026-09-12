@@ -376,5 +376,13 @@
   "Monitor.ScreenshotSave": "PNG speichern",
   "Monitor.ScreenshotClose": "Schließen",
   "Monitor.ScreenshotFailed": "Screenshot fehlgeschlagen",
-  "Tooltips.MonitorScreenshot": "Erfasst den aktuellen Bildschirm des Geräts als Bild. Nur ArcticFox-Firmware — die Original-Firmware kennt keinen Bildschirmfoto-Befehl."
+  "Tooltips.MonitorScreenshot": "Erfasst den aktuellen Bildschirm des Geräts als Bild. Nur ArcticFox-Firmware — die Original-Firmware kennt keinen Bildschirmfoto-Befehl.",
+  "ClickActions.ProfileEdit": "Profil bearbeiten",
+  "InfoLines.CoilTemperature": "Spulentemperatur",
+  "Advanced.Settings.ChargingCurrent": "Ladestrom",
+  "Screen.RegionalTab": "Regional",
+  "Screen.Regional.DateFormat": "Datumsformat",
+  "Screen.Regional.TimeFormat": "Zeitformat",
+  "Screen.Regional.TemperatureUnits": "Temperatureinheiten",
+  "Animation.ComingSoon": "Demnächst — die Uhr-Animation erfordert einen Firmware-Patch."
 }
