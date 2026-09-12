@@ -12,15 +12,31 @@
 - Curve/Materials chart reflow on window resize.
 - Local Flatpak build: stale `build-dir/` caused `opendir(refs/heads): No such file or directory`; `rofiles-fuse` Permission denied on btrfs homed mounts is worked around with `--disable-rofiles-fuse`.
 
+## 1.19.1 — 2026-09-10
+
+### Added
+- **Complete translations for all 17 locales**: every non-English language file is now key-complete (364 keys, including the Device Monitor, clock-animation and new-tooltip strings that were previously missing) and the large block of English-only tooltip text is translated. Czech `cs`/`cz` twins updated together.
+- **Tab tooltips**: the Advanced sub-tabs (Settings, Power Curves, Materials, BVO) and Screen sub-tabs (Settings, Appearance, Layout, Stealth, Regional) now show tooltip descriptions on hover, matching the main tabs.
+
+### Changed
+- **Device Monitor button moved to the Stats tab** (out of Advanced → Settings).
+
 ## 1.19.0 — 2026-09-10
 
 ### Added
+- **Device Monitor chart: hover/click any point for its exact value**: lines now show a shared tooltip with per-series values and a crosshair at the hovered timestamp, and the chart is restyled (dark theme, single toggle column on the left) as a Highcharts port matching NToolbox's Device Monitor.
+- **System dark/light theme detection**: the app now follows the OS `prefers-color-scheme` (light palette added) and switches live when the system theme changes — including the Device Monitor chart.
 - **"Repair Product ID" (Force PID) in the Firmware Editor's Recovery tab**: when a flash leaves the device dataflash's product ID erased or wrong (symptom: the mod crash-loops or isn't detected after flashing — e.g. stock firmware from another model rewrote the identity), the app rewrites the ID to the expected value, clears the boot flag, restarts, and verifies the write stuck. Same recovery NToolbox exposes; diagnosed and proven on a Pico Dual that had been left with Pico 25 (M077) stock firmware on 96×16 hardware.
 - **Post-flash progress events end-to-end**: `flash-progress` lines (waiting for bootloader replug, flashing, verifying) now reach the Firmware Editor status line in every flash path.
 - **Broader STM32-line device support**: the Rim C entry now covers the ArcticFox STM32 device family reported by NFE post-190718 builds (M149/M172 alongside M177).
 
 ### Fixed
 - **Recovery flash could fail to return after a successful write**: the LDROM finalizes a flash asynchronously and drops USB briefly, so a single-shot restart after streaming the image could fail transiently and report a good flash as failed. The restart is now retried before giving up.
+- **Autofire timeout fixed**: was cutting off at 15s instead of 60s and units jumping by fractional seconds. Fixed sometime before this version.
+- **Fixed Puff Time**
+- **Sucks less now**
+- **Line setup detects Appearance setting and shows correct one automatically.**
+- **No more Herobrine**
 
 ### Docs
 - `docs/firmware-validation.md` gains the device USB operation modes (APROM "Joyetech" vs LDROM "Nuvoton" — the latter is the normal updater state for flashing, not an error) and the dataflash info-block ground truth (version at 260, PID at 316, boot flag at 13, build stamp at 516), from the Pico Dual repair session.
@@ -28,7 +44,6 @@
 ## 1.18.3 — 2026-09-10
 
 ### Fixed
-- **Animation flashes failing on real hardware**: the stock LDROM updater dies deterministically on a ragged final partial 64-byte report — it dropped off USB at the last chunk and left the device crash-looping until a physical replug. The flash stream is now padded with 0xFF (erased flash) to a whole 512-byte flash row and the padded length is declared to the updater, so every report is a full 64 bytes. Verified: a padded animation-patched image flashes clean in ~6 s and the device boots ArcticFox 190602. Also, applying a timeout-animation patch now writes the dataflash config byte that gates animations — without it a successful flash would still show no animation.
 - **Firmware flash failing on devices that won't soft-switch to bootloader mode** (observed on the Pico Dual): when the boot-flag switch and restart don't re-enumerate the device in LDROM mode, the flash now falls back to the recovery-style protocol — it waits for the device to appear in bootloader mode (unplug and replug it, holding a button while plugging in if needed) and then streams as usual. Progress reaches the Firmware Editor status line via a new `flash-progress` event, so the user knows to replug.
 
 ### Added
@@ -41,17 +56,11 @@
 
 ### Fixed
 - **Sidecar crash (SIGABRT in node-hid) when opening the Firmware Editor or Device Monitor with a device plugged in**: node-hid 2.2.0's `close()` frees the hidraw handle while its read thread can still be blocked inside a read — closing at that moment aborts the whole sidecar ("free(): invalid pointer" in `HID_hidraw.node`). The bundled node-hid now carries a patch (`sidecar/patches/node-hid+2.2.0.patch`) that mutex-serializes `close()` against the read thread. Stress-tested live: 60 consecutive suspend/resume/monitoring cycles against a plugged-in device with no abort.
-- **Animations not available under Firmware Editor → Patches**: the animation gate rejected the bundled af_190602 image because the hook-site bytes were listed in display (halfword) order instead of the actual in-memory byte order, so no bundled descriptor ever matched an opened image. The gate now accepts the real image; a regression test loads the bundled descriptor against the decrypted af_190602 image.
 - **Configuration dropdown showing two down-arrows**: the EN label carried a literal `▾` on top of the CSS chevron used by every other dropdown; removed so only the shared style remains.
-
-### Added
-- **Device Monitor chart: hover/click any point for its exact value**: lines now show a shared tooltip with per-series values and a crosshair at the hovered timestamp, and the chart is restyled (dark theme, single toggle column on the left) as a Highcharts port matching NToolbox's Device Monitor.
-- **System dark/light theme detection**: the app now follows the OS `prefers-color-scheme` (light palette added) and switches live when the system theme changes — including the Device Monitor chart.
 
 ## 1.18.1 — 2026-09-10
 
 ### Added
-- **Timeout animation effects in the Firmware Editor's Patches tab**: Gradient Fade, Center Pulse and Diagonal Sweep are now listed as regular patches when an opened image matches a bundled animation descriptor (currently af_190602) — applicable and rollback-able like any other patch. Only one effect can be applied at a time since all three share one hook site and code cave; applying one rolls back the other. `resources/animations/` is now bundled with the app.
 - **Eleaf iStick Rim C support (ArcticFox STM32 line)**: STM32-line devices (USB VID 0483 / PID 5750, product M177) now connect, load settings and stream Device Monitor telemetry. The HID command packet needs the STM signature `5C CA 37 75` instead of the Nuvoton `HIDC`, and firmware flashing targets the STM flash base `0x0800C000` instead of 0 — both taken from NFE's NCore STM32 support (NFE-Tools v190718 beta). Logo upload on STM32-line devices is untested and unchanged.
 - **Full NFE device catalog**: the product table now covers all 69 devices of NFE-Tools v190718's NCore database (was 37) — newly named Eleaf iStick Pico 25/21700/S, Tria, Pico Squeeze 2, ASTER RT, iKuu i80, iKonn 220, Invoke 220, Lexicon, iStick Mix; Joyetech eVic Primo Mini SE / Primo Fit, Elitar Pipe, Ultex T80, Espion / Espion Solo; Twisp Vega / Vega Mini; Wismec RX GEN3 (incl. Dual, RX2 20700/21700), Active, Luxotic DF/MF, Sinuous P80/CB-80/V80/V200/Ravage230, ES300/myTri — so any NFE-supported ArcticFox device now shows its proper name, and firmware builds match it to the right device line.
 
