@@ -46,11 +46,34 @@ cp -a "${SIDECAR_SRC}/package-lock.json" "${SIDECAR_DST}/" 2>/dev/null || true
 cp -a "${SIDECAR_SRC}/patches" "${SIDECAR_DST}/" 2>/dev/null || true
 cp -a "${SIDECAR_SRC}/put-replacement" "${SIDECAR_DST}/" 2>/dev/null || true
 
-# Copy the already-installed sidecar dependencies. They were built against the
-# local Node 22 runtime, which is ABI-compatible with the bundled Node binary.
+# Copy the already-installed sidecar dependencies. node-hid is an N-API addon,
+# so HID_hidraw.node is ABI-independent (builds against any host node — the
+# bundled runtime is v22); it does NOT need an ABI rebuild. What it MUST have
+# is the local mutex patch (sidecar/patches/node-hid+2.2.0.patch, applied by
+# patch-package on npm install) compiled in — without it, closing the hidraw
+# handle with a read in flight aborts (SIGABRT, "free(): invalid pointer"),
+# which presents as the device indicator flickering in the AppImage.
 SIDECAR_NODE_MODULES="${SIDECAR_SRC}/node_modules"
 if [[ -d "${SIDECAR_NODE_MODULES}" ]]; then
     cp -a "${SIDECAR_NODE_MODULES}" "${SIDECAR_DST}/"
+
+    # Verification gate: refuse to bundle an unpatched or stale node-hid build.
+    # Patch markers live in node-hid/src/HID.cc after patch-package runs.
+    NH_SRC="${SIDECAR_DST}/node_modules/node-hid/src/HID.cc"
+    NH_BIN="${SIDECAR_DST}/node_modules/node-hid/build/Release/HID_hidraw.node"
+    if ! grep -q '_handleMutex' "${NH_SRC}" 2>/dev/null; then
+        echo "Error: node-hid mutex patch NOT applied in sidecar/node_modules." >&2
+        echo "Run 'npm install' in sidecar/ (postinstall runs patch-package)," >&2
+        echo "then rebuild the addon per AGENTS.md (node-hid native addon)." >&2
+        exit 1
+    fi
+    if [[ ! -f "${NH_BIN}" || "${NH_SRC}" -nt "${NH_BIN}" ]]; then
+        echo "Error: HID_hidraw.node missing or older than patched src/HID.cc." >&2
+        echo "Rebuild the addon per AGENTS.md (node-hid native addon section):" >&2
+        echo "  node-gyp configure && make -C build HID_hidraw BUILDTYPE=Release" >&2
+        exit 1
+    fi
+    echo "node-hid patch verified (source patched, binary newer than source)."
     # Remove files that are unnecessary at runtime to reduce AppImage size.
     find "${SIDECAR_DST}/node_modules" -type f \( \
         -name '*.d.ts' -o \

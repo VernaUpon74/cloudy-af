@@ -24,12 +24,14 @@ and skew tok/s. Stop the other ollama instance before measuring.
 
 ## Task delegation
 
-**Convention: run local-model delegates ONE AT A TIME.** The box only has
-headroom for a single ollama inference (18 GB models); parallel cline runs
-thrash and stall. Queue tasks sequentially through a runner script
-(e.g. `/tmp/cline-queue.sh`: a `for` loop invoking `cline` per task, each
-appending to its own log, `setsid nohup` so it survives the agent session).
-Launch exactly one queue, never parallel cline instances.
+**Convention: run local-model delegates ONE AT A TIME** — never two local
+models (or two ollama inferences) concurrently; the box only has headroom for
+a single 18 GB model and parallel runs thrash and stall. Delegating to the
+local model is fine while an interactive (cloud) session is active — the
+limit is concurrent LOCAL models, not local-vs-cloud. Queue local tasks
+sequentially through a runner script (e.g. `/tmp/cline-queue.sh`: a `for`
+loop invoking `cline` per task, each appending to its own log, `setsid nohup`
+so it survives the agent session). Launch exactly one queue.
 
 Use local models for subagent/task delegation whenever possible —
 `cline` CLI (free models, `/var/home/j/.npm-global/bin/cline`, e.g.
@@ -65,6 +67,16 @@ toolbox run -c arcticfox-build sh -c \
 /tmp/fakelib holds a `libusb-1.0.so` symlink to the runtime `.so.0` — the
 toolbox lacks the -devel package. The shipped binary is `build/Release/
 HID_hidraw.node`; the `HID.node` libusb variant is unused on Linux.)
+
+Note: node-hid 2.x is an N-API addon, so HID_hidraw.node is ABI-independent
+(it does not need rebuilding per node ABI — only when the patch or node-hid
+version changes). `scripts/prepare-linux-sidecar.sh` (AppImage path) copies
+the host's `sidecar/node_modules` verbatim and now REFUSES to bundle unless
+the patch markers are present in the copied source AND the binary is newer
+than `src/HID.cc` — the verification gate added 2026-09-12 after the AppImage
+flicker analysis. The flicker was not present in builds ≥ 2026-09-10 09:27
+(those shipped the patched binary); an older AppImage exhibiting flicker was
+likely built from the Documents mirror with an unpatched addon.
 
 ## Version bumps
 
