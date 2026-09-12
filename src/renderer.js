@@ -646,6 +646,7 @@ function uiUpdate() {
     });
 
     // Keep the Puffs Time formatted readout in sync after config loads.
+    puffsTimeSeedFromConfig();
     updatePuffsTimeDisplay();
 
     uiScreenLayoutView(config.MainScreenSkin);
