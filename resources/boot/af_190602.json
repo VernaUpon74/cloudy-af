@@ -1,0 +1,79 @@
+{
+  "build": "af_190602",
+  "comment": "Boot-sequence descriptor for the M451/M471-class ArcticFox build af_190602. This extends the render descriptor in resources/animations/af_190602.json with the reset-to-main path.",
+  "processor": {
+    "core": "ARM Cortex-M4F",
+    "thumb": true,
+    "fpu": true,
+    "initial_sp": "0x200031c0",
+    "reset_vector": "0x00001659",
+    "nmi_vector": "0x000016b1",
+    "hardfault_vector": "0x00001ceb"
+  },
+  "reset_handler": {
+    "addr": "0x00001658",
+    "literal_pool": "0x0000168c",
+    "regwrprot": "0x40000100",
+    "unlock_bytes": [89, 22, 136],
+    "system_init": "0x000016a1",
+    "__main": "0x000016b3"
+  },
+  "system_init": {
+    "addr": "0x000016a0",
+    "cpacr": "0xe000ed88",
+    "cp10_cp11_mask": "0x00f00000"
+  },
+  "c_runtime": {
+    "__main_addr": "0x000016b2",
+    "init_table": "0x0001c774",
+    "init_table_end": "0x0001c78c",
+    "data": {
+      "flash_src": "0x0001c794",
+      "ram_dest": "0x20000000",
+      "size": "0x00000058"
+    },
+    "bss": {
+      "start": "0x20000058",
+      "size": "0x00003168"
+    }
+  },
+  "main": {
+    "addr": "0x0001834c",
+    "init_calls": [
+      { "target": "0x00017474", "role": "clock_pll_init" },
+      { "target": "0x000176d0", "role": "gpio_port_init" },
+      { "target": "0x000175a0", "role": "adc_analog_init" },
+      { "target": "0x00006678", "role": "hid_usb_init" },
+      { "target": "0x00006b94", "role": "display_ssd1306_init" },
+      { "target": "0x000133e0", "role": "timer_systick_init" },
+      { "target": "0x000133cc", "role": "interrupt_enable" },
+      { "target": "0x00016c64", "role": "dataflash_load_settings" }
+    ],
+    "dispatcher": "0x0000d684",
+    "status_base": "0x20002c30",
+    "status_word": "0x20002c34",
+    "cold_boot_flag": "0x20000058"
+  },
+  "memory": {
+    "aprom": { "start": "0x00000000", "end": "0x0001c7eb" },
+    "aprom_tail": { "start": "0x0001c7ec", "end": "0x0001efff", "usage": "code_cave_padding" },
+    "dataflash": { "start": "0x0001f000", "end": "0x0001f7ff" },
+    "sram": { "start": "0x20000000", "end": "0x200031bf" },
+    "stack": { "top": "0x200031c0", "size": "0x00002000" }
+  },
+  "mmio_stubs": [
+    { "addr": "0x40000100", "value": 0, "note": "REGWRPROT: reads as locked after reset" },
+    { "addr": "0x40000024", "value": 0, "note": "protected register stub" },
+    { "addr": "0x40000200", "value": 0, "note": "protected register stub" },
+    { "addr": "0xe000ed88", "value": 0, "note": "CPACR: no coprocessor access before SystemInit" }
+  ],
+  "render": {
+    "render_entry": "0x00008cd1",
+    "display_buffer": { "start": "0x20002758", "end": "0x20002b58", "width": 64, "height": 128 },
+    "ram_globals": [
+      { "start": "0x20000000", "end": "0x20000e00" },
+      { "start": "0x20002c00", "end": "0x20002d00" }
+    ],
+    "args": [0, 0, 0, 0]
+  }
+}
