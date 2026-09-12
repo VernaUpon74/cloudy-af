@@ -85,3 +85,24 @@ Loose ends carried over from the firmware read-back Phase 1 plan
       then failed on `rofiles-fuse` (Permission denied on btrfs homed mount), worked around
       with `flatpak-builder --disable-rofiles-fuse`. Build of `flatpak/org.cloudy.af-local.yml`
       completed and committed to the local OSTree `repo/` (commit 57b212b…).
+
+- [x] Version 1.2.0 release work (2026-09-12): merged remote 1.19.1 into the
+      1.2.0 line (translations, tooltips, README, kept both sides' changelog
+      jokes); bumped version; committed the never-committed
+      `src-tauri/src/firmware/resources.rs`; fixed the FW editor's tab-switching
+      TDZ abort (`currentTab` used before declaration via initTabs's
+      synchronous initial click — every tab showed Status, and post-771 module
+      bindings never ran); removed Save/Save As; moved Flash to Device into the
+      footer; added shared keybinds (docs/keyboard-shortcuts.md); Puff Time now
+      displays inside the field with device-default format (seconds fallback);
+      i18n: 8 missing keys added to all 17 locales + locale-switch BCP-47 fix
+      in renderer-firmware/tfr; Patches tab behind an untracked
+      `local-flags.json` build flag (off on GitHub builds, on in ~/cloudy-af
+      until feature testing passes).
+- [ ] Firmware Editor Strings/Resource Packs tabs: delegate port from
+      decompiled NFirmwareEditor (~/.cache/ntoolbox-src/NFirmwareEditor.decompiled)
+      onto the existing resources.rs backend — audit delegate output when the
+      queue (/tmp/cline-queue.log) finishes.
+- [ ] AppImage device-detection flicker: delegate root-cause analysis at
+      /tmp/cline-tasks/T3-report.md — audit and fix when queue finishes.
+
