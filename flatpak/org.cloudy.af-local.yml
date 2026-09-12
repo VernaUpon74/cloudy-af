@@ -45,7 +45,9 @@ modules:
         # Strip dev tooling, documentation, examples, tests, and platform-specific
         # native prebuilds from the sidecar to reduce the Flatpak size.
         cd /app/lib/cloudy-af/resources/sidecar
-        npm prune --production
+        # npm prune --production is skipped: npm 12 crashes on the local file:
+        # override for `put` ("Cannot read properties of undefined (reading
+        # 'extraneous')"). The only devDependency is patch-package, removed below.
         rm -rf node_modules/put
         cp -r put-replacement node_modules/put
         rm -rf patches node_modules/patch-package

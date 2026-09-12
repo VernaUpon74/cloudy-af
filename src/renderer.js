@@ -122,16 +122,18 @@ function uiInitTabs() {
         $('.view-container.view-advanced #view-' + view).show();
         // Reflow curve charts when their container becomes visible so they
         // render at the correct size (they may have been initialised while hidden).
-        window.setTimeout(() => {
-            const prefix = view === 'advanced-powercurves' ? 'pc' : (view === 'advanced-materials' ? 'tfr' : null);
-            if (prefix && window.curveCharts) {
-                Object.keys(window.curveCharts).forEach(key => {
-                    if (key.startsWith(prefix)) {
-                        window.curveCharts[key].reflow();
-                    }
-                });
-            }
-        }, 0);
+        requestAnimationFrame(() => {
+            window.setTimeout(() => {
+                const prefix = view === 'advanced-powercurves' ? 'pc' : (view === 'advanced-materials' ? 'tfr' : null);
+                if (prefix && window.curveCharts) {
+                    Object.keys(window.curveCharts).forEach(key => {
+                        if (key.startsWith(prefix)) {
+                            try { window.curveCharts[key].reflow(); } catch (e) { /* ignore */ }
+                        }
+                    });
+                }
+            }, 50);
+        });
     });
 
     $('.tab-group#controls .tab-item').click(function () {
@@ -1144,7 +1146,16 @@ function lockWindowAspectRatio() {
     });
 }
 
+function reflowAllCurveCharts() {
+    if (!window.curveCharts) return;
+    Object.values(window.curveCharts).forEach(chart => {
+        if (chart && typeof chart.reflow === 'function') {
+            try { chart.reflow(); } catch (e) { /* ignore */ }
+        }
+    });
+}
 window.addEventListener('resize', updateContentZoom);
+window.addEventListener('resize', () => window.setTimeout(reflowAllCurveCharts, 100));
 
 uiWrapContentForScaling();
 uiInit();

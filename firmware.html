@@ -28,14 +28,18 @@
         .fw-entry, .fw-info { color: var(--fg-color); }
         .fw-entry { cursor: pointer; padding: 2px 6px; }
         .fw-entry:hover, .fw-entry.selected { background-color: var(--hover-bg); }
-        .fw-actions { display: flex; gap: 6px; margin-top: 8px; }
-        canvas.fw-pixelated { image-rendering: pixelated; }
+        .fw-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+        canvas.fw-pixelated { image-rendering: pixelated; cursor: crosshair; }
+        #images-canvas { border: 1px solid var(--border-color); }
         .fw-cell { border: 1px solid var(--border-color); image-rendering: pixelated; cursor: pointer; }
         .fw-cell.selected { border: 2px solid var(--accent-color); }
         .fw-thumb { width: 20px; height: 20px; image-rendering: pixelated; border: 1px solid var(--border-color); cursor: pointer; margin: 1px; }
         .fw-pack-img { image-rendering: pixelated; border: 1px solid var(--border-color); }
         .fw-pack-bad td { color: #888; }
         .fw-pack-list { margin: 4px 0; }
+        .btn-mini { padding: 2px 8px; font-size: 11px; }
+        .btn-mini.active { background-color: var(--accent-color); color: #fff; }
+        #strings-search { padding: 2px 6px; }
     </style>
 </head>
 <body>
@@ -75,11 +79,43 @@
                     <tr><td>ArcticFox Line</td><td id="status-device-line">—</td></tr>
                 </tbody>
             </table>
+            <h3 style="margin-top: 20px;">Firmware Metadata</h3>
+            <table class="table">
+                <tbody>
+                    <tr><td>Loaded</td><td id="status-fw-loaded">No</td></tr>
+                    <tr><td>File</td><td id="status-fw-path">—</td></tr>
+                    <tr><td>Definition</td><td id="status-fw-definition">—</td></tr>
+                    <tr><td>Encryption</td><td id="status-fw-encryption">—</td></tr>
+                    <tr><td>Size</td><td id="status-fw-size">—</td></tr>
+                    <tr><td>Build ID</td><td id="status-fw-build">—</td></tr>
+                </tbody>
+            </table>
+            <div style="margin-top: 12px;">
+                <button id="status-screenshot" class="btn btn-default" title="Capture the currently connected device screen (requires a live device)">Capture Screenshot</button>
+                <a id="status-screenshot-link" style="display: none; margin-left: 8px;" download="screenshot.png">Download</a>
+            </div>
+            <div id="status-screenshot-preview" style="margin-top: 8px; display: none;">
+                <canvas id="status-screenshot-canvas" class="fw-pixelated"></canvas>
+            </div>
+            <div style="margin-top: 12px;">
+                <button id="status-screenshot" class="btn btn-default" title="Capture the currently connected device screen (requires a live device)">Capture Screenshot</button>
+                <a id="status-screenshot-link" style="display: none; margin-left: 8px;" download="screenshot.png">Download</a>
+            </div>
+            <div id="status-screenshot-preview" style="margin-top: 8px; display: none;">
+                <canvas id="status-screenshot-canvas" class="fw-pixelated"></canvas>
+            </div>
             <p style="margin-top: 12px; font-size: 11px; color: var(--fg-color);">
                 Open a firmware file or connect a device to populate this page.
             </p>
         </div>
         <div id="tab-patches" style="display: none;">
+            <div style="padding: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <input id="patch-search" type="text" placeholder="Search patches…" style="flex: 1; max-width: 300px;">
+                <button id="patches-apply-all" class="btn btn-mini btn-default" title="Apply all pending patches">Apply All Pending</button>
+                <button id="patches-rollback-all" class="btn btn-mini btn-default" title="Rollback all applied patches">Rollback All Applied</button>
+                <button id="patches-reload" class="btn btn-mini btn-default" title="Reload patch list from disk">Reload</button>
+                <span style="font-size: 11px; color: var(--fg-color);">Click a row to toggle</span>
+            </div>
             <table id="patch-list">
                 <thead>
                     <tr>
@@ -103,13 +139,32 @@
                     <div id="images-blocks"></div>
                 </div>
                 <div class="fw-edit">
+                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
+                        <button id="images-tool-draw" class="btn btn-mini active" title="Draw pixels (left click/drag)">Draw</button>
+                        <button id="images-tool-erase" class="btn btn-mini" title="Erase pixels (left click/drag)">Erase</button>
+                        <button id="images-tool-move" class="btn btn-mini" title="Pan/zoom the canvas">Pan</button>
+                        <span style="font-size: 11px; color: var(--fg-color);">Shift+click to erase</span>
+                    </div>
                     <canvas id="images-canvas" class="fw-pixelated" width="0" height="0"></canvas>
                     <div id="images-info" class="fw-info"></div>
                     <div class="fw-actions">
                         <button id="images-export" class="btn btn-default" disabled title="Export the current image as image_0x{index}.png">Export PNG</button>
+                        <button id="images-export-all" class="btn btn-default" disabled title="Export every image slot as individual PNGs">Export All</button>
                         <button id="images-import" class="btn btn-default" disabled title="Import a PNG/JPG/BMP/GIF, resized to this slot's exact dimensions">Import…</button>
                         <button id="images-invert" class="btn btn-default" disabled title="Invert all pixels">Invert</button>
                         <button id="images-clear" class="btn btn-default" disabled title="Clear all pixels to blank">Clear</button>
+                        <button id="images-flip-h" class="btn btn-default" disabled title="Flip horizontally">Flip H</button>
+                        <button id="images-flip-v" class="btn btn-default" disabled title="Flip vertically">Flip V</button>
+                        <button id="images-rotate-cw" class="btn btn-default" disabled title="Rotate 90° clockwise">Rotate ↻</button>
+                        <button id="images-rotate-ccw" class="btn btn-default" disabled title="Rotate 90° counter-clockwise">Rotate ↺</button>
+                        <button id="images-shift-l" class="btn btn-default" disabled title="Shift left">←</button>
+                        <button id="images-shift-r" class="btn btn-default" disabled title="Shift right">→</button>
+                        <button id="images-shift-u" class="btn btn-default" disabled title="Shift up">↑</button>
+                        <button id="images-shift-d" class="btn btn-default" disabled title="Shift down">↓</button>
+                        <button id="images-copy" class="btn btn-default" disabled title="Copy image bits">Copy</button>
+                        <button id="images-paste" class="btn btn-default" disabled title="Paste image bits into selected slot">Paste</button>
+                        <button id="images-undo" class="btn btn-default" disabled title="Undo last edit">Undo</button>
+                        <button id="images-redo" class="btn btn-default" disabled title="Redo last undone edit">Redo</button>
                     </div>
                 </div>
             </div>
@@ -118,6 +173,7 @@
             <p id="strings-min" style="display: none;">Open a firmware file first.</p>
             <div id="strings-main" class="fw-main" style="display: none;">
                 <div class="fw-side">
+                    <input id="strings-search" type="text" placeholder="Search string index or glyph…" style="width: 100%; box-sizing: border-box; margin-bottom: 4px;">
                     <div id="strings-list"></div>
                 </div>
                 <div class="fw-edit">

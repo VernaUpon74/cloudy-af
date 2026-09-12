@@ -18,3 +18,12 @@ DecryptProject/
 AF_fw/
 # Device-specific hardware-test binaries and dumps (not committed)
 test-fixtures/
+# Agent-specific local tooling
+.agents/
+# Reverse-engineering and build scratch directories
+scratch-stash/
+work/
+# Sensitive / ephemeral keys
+vp_aes_key.txt
+# Local Rust tool build artifacts
+tools/telemetry_dump/target/

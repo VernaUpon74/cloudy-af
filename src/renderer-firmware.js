@@ -26,6 +26,7 @@ import {
     onRecoveryProgress,
     onFlashProgress,
     forceProductId,
+    screenshot,
     listImageTables,
     readImageCmd,
     writeImageCmd,
@@ -39,6 +40,7 @@ let currentHandle = null;
 let currentPatches = [];
 let currentPath = null;
 let currentDevice = null; // { connected: bool, productId: string, name: string, line: string }
+let currentFirmwareInfo = null; // { name, encryption, definition, size, buildId }
 
 async function loadLocale() {
     try {
@@ -109,7 +111,12 @@ async function refreshPatches() {
 function renderPatchList() {
     const $tbody = $('#patch-list tbody');
     $tbody.empty();
+    const term = ($('#patch-search').val() || '').toLowerCase();
     currentPatches.forEach(patch => {
+        const hay = (patch.name + ' ' + patch.author + ' ' + (patch.description || '')).toLowerCase();
+        if (term && hay.indexOf(term) === -1) {
+            return;
+        }
         const statusClass = patch.applied ? 'status-applied' : 'status-pending';
         const statusText = patch.applied ? 'Applied' : 'Pending';
         const actionText = patch.applied ? 'Rollback' : 'Apply';
@@ -122,7 +129,7 @@ function renderPatchList() {
                 $('<button></button>')
                     .addClass('btn btn-mini btn-default')
                     .text(actionText)
-                    .click(() => togglePatch(patch.id))
+                    .click((e) => { e.stopPropagation(); togglePatch(patch.id); })
             ));
         $row.click(() => showPatchDetails(patch));
         $tbody.append($row);
@@ -159,6 +166,65 @@ async function togglePatch(patchId) {
     }
 }
 
+async function applyAllPendingPatches() {
+    if (!currentHandle) return;
+    const pending = currentPatches.filter(p => !p.applied);
+    if (pending.length === 0) {
+        setStatus('No pending patches to apply');
+        return;
+    }
+    let applied = 0;
+    let failed = 0;
+    for (const patch of pending) {
+        try {
+            const result = await applyPatchCmd(currentHandle, patch.id);
+            if (result.ok) {
+                applied++;
+            } else {
+                failed++;
+                console.error('apply failed', patch.id, result.error);
+            }
+        } catch (err) {
+            failed++;
+            console.error('apply exception', patch.id, err);
+        }
+    }
+    await refreshPatches();
+    setStatus(`Applied ${applied} patch(es); ${failed} failed.`);
+}
+
+async function rollbackAllAppliedPatches() {
+    if (!currentHandle) return;
+    const applied = currentPatches.filter(p => p.applied);
+    if (applied.length === 0) {
+        setStatus('No applied patches to rollback');
+        return;
+    }
+    let rolled = 0;
+    let failed = 0;
+    for (const patch of applied) {
+        try {
+            const result = await rollbackPatchCmd(currentHandle, patch.id);
+            if (result.ok) {
+                rolled++;
+            } else {
+                failed++;
+                console.error('rollback failed', patch.id, result.error);
+            }
+        } catch (err) {
+            failed++;
+            console.error('rollback exception', patch.id, err);
+        }
+    }
+    await refreshPatches();
+    setStatus(`Rolled back ${rolled} patch(es); ${failed} failed.`);
+}
+
+$('#patch-search').on('input', () => renderPatchList());
+$('#patches-apply-all').click(applyAllPendingPatches);
+$('#patches-rollback-all').click(rollbackAllAppliedPatches);
+$('#patches-reload').click(refreshPatches);
+
 async function doOpenFirmware() {
     try {
         const path = await openFileDialog([
@@ -180,11 +246,30 @@ async function doOpenFirmware() {
 // Shared post-open path: handle storage, status, buttons, patch list.
 async function finishOpenFirmware(info) {
     currentHandle = info.handle;
+    currentFirmwareInfo = {
+        name: info.name,
+        encryption: info.encryption,
+        definition: info.definition || info.name,
+        size: info.size,
+        buildId: info.build_id || null,
+        matchKind: info.match_kind || 'file'
+    };
     setStatus(`${info.name} (${info.encryption})`);
+    updateStatusMetadata();
     updateButtonStates();
     await refreshPatches();
     resetEditorData();
     await refreshActiveEditorTab();
+}
+
+function updateStatusMetadata() {
+    const fi = currentFirmwareInfo;
+    $('#status-fw-loaded').text(fi ? 'Yes' : 'No');
+    $('#status-fw-path').text(currentPath || (fi && fi.buildId ? `(stock ${fi.buildId})` : '—'));
+    $('#status-fw-definition').text(fi ? fi.definition : '—');
+    $('#status-fw-encryption').text(fi ? fi.encryption : '—');
+    $('#status-fw-size').text(fi ? (fi.size + ' bytes') : '—');
+    $('#status-fw-build').text(fi && fi.buildId ? fi.buildId : '—');
 }
 
 async function doDownloadStock() {
@@ -656,8 +741,52 @@ ipc.on('connect', (event, status) => {
     updateConnectionStatus(Boolean(status), currentDevice && currentDevice.productId);
 });
 
+$('#status-screenshot').click(async () => {
+    try {
+        setStatus('Capturing screenshot…');
+        const b64 = await screenshot();
+        const img = new Image();
+        img.onload = () => {
+            const c = $('#status-screenshot-canvas')[0];
+            c.width = img.width;
+            c.height = img.height;
+            const ctx = c.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            $('#status-screenshot-preview').show();
+            c.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                $('#status-screenshot-link').attr('href', url).show().text('Download ' + img.width + '×' + img.height + ' PNG');
+            }, 'image/png');
+        };
+        img.src = 'data:image/png;base64,' + b64;
+        setStatus('Screenshot captured');
+    } catch (err) {
+        console.error('screenshot failed', err);
+        setStatus('Screenshot failed: ' + err.toString());
+        alert('Screenshot failed: ' + err.toString());
+    }
+});
+
 loadLocale();
 initTabs();
+attachImageCanvasHandlers();
+
+// Keyboard shortcuts for the Firmware Editor window.
+$(document).on('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey) {
+        if (e.key === 's') {
+            e.preventDefault();
+            doSaveFirmware();
+        } else if (e.key === 'o') {
+            e.preventDefault();
+            doOpenFirmware();
+        }
+    }
+    if (e.key === 'Escape') {
+        selectedCell = -1;
+        renderStringCells();
+    }
+});
 
 // Firmware Editor opened with a device already connected: load its
 // appropriate stock build right away and populate the Status page.
@@ -802,7 +931,76 @@ let imageTables = null;      // raw list_image_tables result for the open firmwa
 let fwDefinition = '';       // current firmware's image-table definition name
 let imageSel = null;         // { block, index, ref, data, w, h, bits }
 let currentImagesBlock = null; // active block (1-based) for the Images pane
+let imageTool = 'draw';      // 'draw' | 'erase' | 'move'
+let imageDrag = false;       // mouse is down on canvas
+let imageLastCell = null;    // last edited cell while dragging
+let imageCanvasScale = 4;    // current zoom level
+let imageUndoStack = [];     // snapshots of imageSel.bits for undo
+let imageRedoStack = [];     // snapshots for redo
+let imageClipboard = null;   // { w, h, bits } copied from an image slot
 
+function pushImageUndo() {
+    if (!imageSel) return;
+    imageUndoStack.push(imageSel.bits.slice());
+    if (imageUndoStack.length > 50) imageUndoStack.shift();
+    imageRedoStack = [];
+    updateImageUndoButtons();
+}
+
+function updateImageUndoButtons() {
+    $('#images-undo').prop('disabled', imageUndoStack.length === 0 || !imageSel);
+    $('#images-redo').prop('disabled', imageRedoStack.length === 0 || !imageSel);
+}
+
+function imageUndo() {
+    if (!imageSel || imageUndoStack.length === 0) return;
+    imageRedoStack.push(imageSel.bits.slice());
+    imageSel.bits = imageUndoStack.pop();
+    drawBits($('#images-canvas')[0], imageSel.bits, imageSel.w, imageSel.h, imageCanvasScale);
+    updateImageUndoButtons();
+    persistImage();
+}
+
+function imageRedo() {
+    if (!imageSel || imageRedoStack.length === 0) return;
+    imageUndoStack.push(imageSel.bits.slice());
+    imageSel.bits = imageRedoStack.pop();
+    drawBits($('#images-canvas')[0], imageSel.bits, imageSel.w, imageSel.h, imageCanvasScale);
+    updateImageUndoButtons();
+    persistImage();
+}
+
+function flipImageBits(bits, w, h, horizontal) {
+    const out = new Array(bits.length);
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const srcX = horizontal ? (w - 1 - x) : x;
+            const srcY = horizontal ? y : (h - 1 - y);
+            out[y * w + x] = bits[srcY * w + srcX];
+        }
+    }
+    return out;
+}
+
+function rotateImageBits(bits, w, h, clockwise) {
+    const out = new Array(bits.length);
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            let dx, dy;
+            if (clockwise) {
+                dx = h - 1 - y;
+                dy = x;
+            } else {
+                dx = y;
+                dy = w - 1 - x;
+            }
+            out[dy * h + dx] = bits[y * w + x];
+        }
+    }
+    return out;
+}
+
+function setImagesVisible(hasHandle) {
 function setImagesVisible(hasHandle) {
     $('#images-min').css('display', hasHandle ? 'none' : '');
     $('#images-main').css('display', hasHandle ? '' : 'none');
@@ -875,15 +1073,91 @@ async function selectImage(block, slot) {
 function renderImageSelection() {
     $('#images-blocks .fw-entry').removeClass('selected');
     if (imageSel) {
-        $('#images-blocks .fw-entry[data-block="' + imageSel.block + '"][data-index="' + imageSel.index + '"]')
-            .addClass('selected');
-        drawBits($('#images-canvas')[0], imageSel.bits, imageSel.w, imageSel.h, 4);
+        $('#images-blocks .fw-entry[data-block="' + imageSel.block + '"][data-index="' + imageSel.index + '"]').addClass('selected');
+        drawBits($('#images-canvas')[0], imageSel.bits, imageSel.w, imageSel.h, imageCanvasScale);
         $('#images-info').text(
-            'Image 0x' + imageSel.index.toString(16) + ', ' + imageSel.w + '×' + imageSel.h +
-            ', ref 0x' + imageSel.ref.toString(16) + ', data 0x' + imageSel.data.toString(16)
+            'Image 0x' + imageSel.index.toString(16) + ', ' + imageSel.w + 'x' + imageSel.h +
+            ', ref 0x' + imageSel.ref.toString(16) + ', data 0x' + imageSel.data.toString(16) +
+            ', zoom ' + imageCanvasScale + 'x'
         );
-        $('#images-export, #images-import, #images-invert, #images-clear').prop('disabled', false);
+        $('#images-export, #images-export-all, #images-import, #images-invert, #images-clear, #images-flip-h, #images-flip-v, #images-rotate-cw, #images-rotate-ccw, #images-shift-l, #images-shift-r, #images-shift-u, #images-shift-d, #images-copy').prop('disabled', false);
+        $('#images-paste').prop('disabled', !imageClipboard || (imageSel.w !== imageClipboard.w || imageSel.h !== imageClipboard.h));
+        updateImageUndoButtons();
     }
+}
+
+function imageCellFromEvent(e) {
+    const c = $('#images-canvas')[0];
+    const rect = c.getBoundingClientRect();
+    const x = Math.floor((e.clientX - rect.left) / imageCanvasScale);
+    const y = Math.floor((e.clientY - rect.top) / imageCanvasScale);
+    if (x < 0 || y < 0 || x >= imageSel.w || y >= imageSel.h) {
+        return null;
+    }
+    return { x, y, idx: y * imageSel.w + x };
+}
+
+function applyImageTool(cell, erase) {
+    if (!imageSel || !cell) {
+        return;
+    }
+    if (imageLastCell && imageLastCell.idx === cell.idx) {
+        return;
+    }
+    const value = erase ? 0 : 1;
+    if (imageSel.bits[cell.idx] !== value) {
+        pushImageUndo();
+        imageSel.bits[cell.idx] = value;
+        drawBits($('#images-canvas')[0], imageSel.bits, imageSel.w, imageSel.h, imageCanvasScale);
+    }
+    imageLastCell = cell;
+}
+
+function setImageTool(tool) {
+    imageTool = tool;
+    $('#images-tool-draw, #images-tool-erase, #images-tool-move').removeClass('active');
+    $('#images-tool-' + tool).addClass('active');
+    const c = $('#images-canvas')[0];
+    if (tool === 'move') {
+        c.style.cursor = 'grab';
+    } else {
+        c.style.cursor = 'crosshair';
+    }
+}
+
+function attachImageCanvasHandlers() {
+    const $c = $('#images-canvas');
+    $c.on('mousedown', (e) => {
+        if (!imageSel || imageTool === 'move') return;
+        imageDrag = true;
+        imageLastCell = null;
+        const cell = imageCellFromEvent(e);
+        applyImageTool(cell, imageTool === 'erase' || e.shiftKey);
+    });
+    $c.on('mousemove', (e) => {
+        if (!imageDrag || !imageSel || imageTool === 'move') return;
+        const cell = imageCellFromEvent(e);
+        applyImageTool(cell, imageTool === 'erase' || e.shiftKey);
+    });
+    $(window).on('mouseup', () => {
+        if (imageDrag) {
+            imageDrag = false;
+            imageLastCell = null;
+            if (imageSel) {
+                persistImage();
+            }
+        }
+    });
+    $c.on('wheel', (e) => {
+        if (!imageSel) return;
+        e.preventDefault();
+        const delta = e.originalEvent.deltaY > 0 ? -1 : 1;
+        const newScale = Math.max(1, Math.min(16, imageCanvasScale + delta));
+        if (newScale !== imageCanvasScale) {
+            imageCanvasScale = newScale;
+            renderImageSelection();
+        }
+    });
 }
 
 // Persist the currently selected image (bits already edited in-memory), then
@@ -914,10 +1188,53 @@ $('#images-export').click(() => {
     }, 'image/png');
 });
 
+async function exportAllImages() {
+    if (!currentHandle || !imageTables) {
+        return;
+    }
+    let exported = 0;
+    for (const tb of imageTables.blocks || []) {
+        for (const slot of tb.slots || []) {
+            try {
+                const img = await readImageCmd(currentHandle, tb.block, slot.index);
+                const bits = pixelsFromBase64(img.pixels_base64, img.width, img.height);
+                const off = document.createElement('canvas');
+                off.width = img.width;
+                off.height = img.height;
+                const ctx = off.getContext('2d');
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, off.width, off.height);
+                ctx.fillStyle = '#fff';
+                for (let y = 0; y < img.height; y++) {
+                    for (let x = 0; x < img.width; x++) {
+                        if (bits[y * img.width + x]) {
+                            ctx.fillRect(x, y, 1, 1);
+                        }
+                    }
+                }
+                const filename = 'block' + tb.block + '_0x' + slot.index.toString(16) + '.png';
+                off.toBlob((blob) => {
+                    downloadBlob(blob, filename);
+                }, 'image/png');
+                exported++;
+            } catch (err) {
+                console.error('export image failed', slot.index, err);
+            }
+        }
+    }
+    setStatus('Exported ' + exported + ' images');
+}
+
+$('#images-export-all').click(exportAllImages);
+$('#images-tool-draw').click(() => setImageTool('draw'));
+$('#images-tool-erase').click(() => setImageTool('erase'));
+$('#images-tool-move').click(() => setImageTool('move'));
+
 $('#images-invert').click(async () => {
     if (!imageSel) {
         return;
     }
+    pushImageUndo();
     for (let i = 0; i < imageSel.bits.length; i++) {
         imageSel.bits[i] = 1 - imageSel.bits[i];
     }
@@ -928,7 +1245,86 @@ $('#images-clear').click(async () => {
     if (!imageSel) {
         return;
     }
+    pushImageUndo();
     imageSel.bits.fill(0);
+    await persistImage();
+});
+
+$('#images-flip-h').click(async () => {
+    if (!imageSel) return;
+    pushImageUndo();
+    imageSel.bits = flipImageBits(imageSel.bits, imageSel.w, imageSel.h, true);
+    await persistImage();
+});
+
+$('#images-flip-v').click(async () => {
+    if (!imageSel) return;
+    pushImageUndo();
+    imageSel.bits = flipImageBits(imageSel.bits, imageSel.w, imageSel.h, false);
+    await persistImage();
+});
+
+$('#images-rotate-cw').click(async () => {
+    if (!imageSel) return;
+    pushImageUndo();
+    imageSel.bits = rotateImageBits(imageSel.bits, imageSel.w, imageSel.h, true);
+    [imageSel.w, imageSel.h] = [imageSel.h, imageSel.w];
+    await persistImage();
+});
+
+$('#images-rotate-ccw').click(async () => {
+    if (!imageSel) return;
+    pushImageUndo();
+    imageSel.bits = rotateImageBits(imageSel.bits, imageSel.w, imageSel.h, false);
+    [imageSel.w, imageSel.h] = [imageSel.h, imageSel.w];
+    await persistImage();
+});
+
+$('#images-undo').click(imageUndo);
+$('#images-redo').click(imageRedo);
+
+function shiftImageBits(bits, w, h, dx, dy) {
+    const out = new Array(bits.length).fill(0);
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const sx = x - dx;
+            const sy = y - dy;
+            if (sx >= 0 && sx < w && sy >= 0 && sy < h) {
+                out[y * w + x] = bits[sy * w + sx];
+            }
+        }
+    }
+    return out;
+}
+
+async function shiftImage(dx, dy) {
+    if (!imageSel) return;
+    pushImageUndo();
+    imageSel.bits = shiftImageBits(imageSel.bits, imageSel.w, imageSel.h, dx, dy);
+    await persistImage();
+}
+
+$('#images-shift-l').click(() => shiftImage(-1, 0));
+$('#images-shift-r').click(() => shiftImage(1, 0));
+$('#images-shift-u').click(() => shiftImage(0, -1));
+$('#images-shift-d').click(() => shiftImage(0, 1));
+
+$('#images-copy').click(() => {
+    if (!imageSel) return;
+    imageClipboard = { w: imageSel.w, h: imageSel.h, bits: imageSel.bits.slice() };
+    updateImageUndoButtons();
+    $('#images-paste').prop('disabled', false);
+    setStatus('Image copied to clipboard');
+});
+
+$('#images-paste').click(async () => {
+    if (!imageSel || !imageClipboard) return;
+    if (imageSel.w !== imageClipboard.w || imageSel.h !== imageClipboard.h) {
+        alert('Clipboard image dimensions do not match this slot (' + imageClipboard.w + '×' + imageClipboard.h + ' vs ' + imageSel.w + '×' + imageSel.h + ').');
+        return;
+    }
+    pushImageUndo();
+    imageSel.bits = imageClipboard.bits.slice();
     await persistImage();
 });
 
@@ -1024,16 +1420,25 @@ async function refreshStringsTab() {
 function renderStringsList() {
     const $list = $('#strings-list');
     $list.empty();
+    const term = ($('#strings-search').val() || '').toLowerCase();
     stringsList.forEach(s => {
+        const glyphStr = (s.glyphs || []).join(' ');
+        const idxStr = '0x' + s.index.toString(16);
+        const hay = (idxStr + ' ' + glyphStr).toLowerCase();
+        if (term && hay.indexOf(term) === -1) {
+            return;
+        }
         const $entry = $('<div></div>')
             .addClass('fw-entry')
             .attr('data-index', s.index)
-            .text('0x' + s.index.toString(16));
+            .text(idxStr + (glyphStr ? ' — ' + glyphStr : ''));
         $entry.click(() => selectString(s));
         $list.append($entry);
     });
     renderStringsListSelection();
 }
+
+$('#strings-search').on('input', () => renderStringsList());
 
 function renderStringsListSelection() {
     $('#strings-list .fw-entry').removeClass('selected');

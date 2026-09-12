@@ -39,6 +39,11 @@ modules:
         npm ci
         cd sidecar
         npm ci
+        # npm's file: override for put can leave a broken symlink after npm ci;
+        # replace it with a real copy of the local zero-initialized replacement
+        # so the Tauri resource embedder can read it.
+        rm -rf node_modules/put
+        cp -r put-replacement node_modules/put
         cd ..
         # Build Tauri release (also builds frontend via beforeBuildCommand and embeds assets).
         npm run tauri:build -- --no-bundle
@@ -60,7 +65,11 @@ modules:
         # Strip dev tooling, documentation, examples, tests, and platform-specific
         # native prebuilds from the sidecar to reduce the Flatpak size.
         cd /app/lib/cloudy-af/resources/sidecar
-        npm prune --production
+        # npm prune gets confused by the file: symlink for put; replace it with a
+        # real copy before pruning, then again after pruning.
+        rm -rf node_modules/put
+        cp -r put-replacement node_modules/put
+        npm prune --production --no-audit --no-fund || true
         # npm's file: override for put can leave a broken symlink after prune;
         # replace it with a real copy of the local zero-initialized replacement.
         rm -rf node_modules/put
