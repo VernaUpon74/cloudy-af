@@ -99,10 +99,13 @@ Loose ends carried over from the firmware read-back Phase 1 plan
       in renderer-firmware/tfr; Patches tab behind an untracked
       `local-flags.json` build flag (off on GitHub builds, on in ~/cloudy-af
       until feature testing passes).
-- [ ] Firmware Editor Strings/Resource Packs tabs: delegate port from
-      decompiled NFirmwareEditor (~/.cache/ntoolbox-src/NFirmwareEditor.decompiled)
-      onto the existing resources.rs backend — audit delegate output when the
-      queue (/tmp/cline-queue.log) finishes.
+- [x] Firmware Editor Strings/Resource Packs tabs (2026-09-12): T2 delegate
+      (queue2) found no port was needed — refreshStringsTab (renderer-firmware.js
+      :1369) and refreshResourcePacksTab (:1638) already exist from the preserved
+      87435d8 feature set, with tab markup in firmware.html (:169,:188) calling
+      the resources.rs backend (listStringsCmd/listResourcePacks). Remaining:
+      functional test with a firmware fixture (glyph editor, pack preview,
+      extract/inject round-trip vs NFirmwareEditor parity).
 - [ ] AppImage device-detection flicker: delegate root-cause analysis at
       /tmp/cline-tasks/T3-report.md — audit and fix when queue finishes.
 
