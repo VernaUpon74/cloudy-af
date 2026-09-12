@@ -143,9 +143,20 @@ find "${APPDIR}/usr/lib/cloudy-af/resources/sidecar/node_modules" -type d \( \
 echo "==> Creating FUSE3-compatible AppImage"
 cd "${BUNDLE_DIR}"
 rm -f *.AppImage
-# Package the existing AppDir with the static type2 runtime. This produces an
-# AppImage that works on FUSE3-only systems and uses zstd compression.
-ARCH=x86_64 "${APPIMAGETOOL_DIR}/AppRun" --runtime-file="${STATIC_RUNTIME}" --comp xz \
+# The sidecar's `put` dependency is installed as a relative symlink
+# (node_modules/put -> ../put-replacement, from npm's file: protocol), and the
+# AppDir assembly drops symlinks — the packaged sidecar then dies with
+# "Cannot find module 'put'". Replace the symlink with a real directory copy.
+SIDE_CAR_APPDIR="Cloudy AF.AppDir/usr/lib/Cloudy AF/sidecar"
+if [[ -L "${SIDE_CAR_APPDIR}/node_modules/put" || ! -e "${SIDE_CAR_APPDIR}/node_modules/put" ]]; then
+    rm -f "${SIDE_CAR_APPDIR}/node_modules/put"
+    cp -a "${SIDE_CAR_APPDIR}/put-replacement" "${SIDE_CAR_APPDIR}/node_modules/put"
+fi
+# Package the existing AppDir with the static type2 runtime. The cached
+# runtime supports zlib and zstd only — xz (appimagetool's old default here)
+# makes the runtime fail with "Failed to open squashfs image". gzip is the
+# compatible choice for this appimagetool build (its mksquashfs has no zstd).
+ARCH=x86_64 "${APPIMAGETOOL_DIR}/AppRun" --runtime-file="${STATIC_RUNTIME}" --comp gzip \
     "Cloudy AF.AppDir" "Cloudy_AF-${VERSION}-x86_64.AppImage"
 
 # Keep copies in builds/ so completed releases are easy to find.
