@@ -2,6 +2,13 @@
 
 ## Task delegation
 
+**Convention: run local-model delegates ONE AT A TIME.** The box only has
+headroom for a single ollama inference (18 GB models); parallel cline runs
+thrash and stall. Queue tasks sequentially through a runner script
+(e.g. `/tmp/cline-queue.sh`: a `for` loop invoking `cline` per task, each
+appending to its own log, `setsid nohup` so it survives the agent session).
+Launch exactly one queue, never parallel cline instances.
+
 Use local models for subagent/task delegation whenever possible —
 `cline` CLI (free models, `/var/home/j/.npm-global/bin/cline`, e.g.
 `cline -c <repo> "task"` with auto-approve) for simple, well-specified
