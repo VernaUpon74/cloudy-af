@@ -85,6 +85,8 @@ npm run build            # rebuild dist/
 
 # Usage
 
+Keyboard shortcuts (mouse-free navigation, shared across windows): see [docs/keyboard-shortcuts.md](docs/keyboard-shortcuts.md).
+
 Start the app and connect your ArcticFox device — it is detected automatically and its configuration downloaded. Edit profiles, power curves, TFR tables, and settings in the tabs, then **Upload** to write back.
 
 All ArcticFox-compatible devices are supported (Joyetech eVic/Cuboid/eGrip, Eleaf iStick, Wismec Presa/Reuleaux, Vaporflask, and friends): they share the Nuvoton HID bootloader interface (VID `0x0416` / PID `0x5020`) and are told apart by the Product ID string in the device dataflash.
