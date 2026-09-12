@@ -72,3 +72,16 @@ Loose ends carried over from the firmware read-back Phase 1 plan
 - [x] M0 RE freeze: write `resources/re/af_190602-boot.md` + `resources/boot/af_190602.json` documenting the reset handler, SystemInit, C runtime startup, and main() dispatch loop for build af_190602.
 
 - [ ] Continue pursuing earlier todoss
+
+- [x] Fix Firmware Editor syntax blocker (2026-09-12): commit `ebde818` shipped
+      `src/renderer-firmware.js` with a duplicated `function setImagesVisible(hasHandle) {`
+      signature (lines 1003–1004, second had no body) — one unmatched brace, node --check
+      failed with "Unexpected end of input" at line 1757. Fixed minimally by deleting the
+      duplicated line; the 87435d8 firmware-editor features (Status tab, image tools, patch
+      batch actions, resource-pack preview) are preserved. A previously staged mass-revert
+      (~518 lines) in the Documents mirror was discarded (backup: /tmp/staged-revert-backup.patch).
+- [x] Flatpak local build fixed (2026-09-12): stale `build-dir/` (missing refs/) caused
+      "opendir(refs/heads): No such file or directory"; after clearing build state the build
+      then failed on `rofiles-fuse` (Permission denied on btrfs homed mount), worked around
+      with `flatpak-builder --disable-rofiles-fuse`. Build of `flatpak/org.cloudy.af-local.yml`
+      completed and committed to the local OSTree `repo/` (commit 57b212b…).

@@ -1001,7 +1001,6 @@ function rotateImageBits(bits, w, h, clockwise) {
 }
 
 function setImagesVisible(hasHandle) {
-function setImagesVisible(hasHandle) {
     $('#images-min').css('display', hasHandle ? 'none' : '');
     $('#images-main').css('display', hasHandle ? '' : 'none');
 }

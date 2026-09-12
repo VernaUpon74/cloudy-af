@@ -34,6 +34,11 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
+    <release version="1.2.0" date="2026-09-12">
+      <description>
+        <p>Firmware Editor gains a Status tab with verbose device info and the shared connected/disconnected footer, image table tools with resource-pack preview, and batch apply/rollback for patches. Fixes a JavaScript syntax error that broke the editor bundle, curve chart reflow on resize, and local Flatpak build issues.</p>
+      </description>
+    </release>
     <release version="1.19.0" date="2026-09-10">
       <description>
         <p>Recovery tooling: "Repair Product ID" fixes a device whose dataflash product ID was erased or rewritten by the wrong stock firmware (crash-loop / not detected after flashing), flash progress reaches the status line in all paths, and STM32-line device coverage is broadened (M149/M172/M177). Also: flasher restart-retry after a successful write, and documentation of the device's two USB modes and dataflash layout.</p>

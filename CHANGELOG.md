@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0 — 2026-09-12
+
+### Added
+- **Firmware Editor Status tab**: verbose device hardware/model info on the default page, the same 'Device is connected/disconnected' footer bar as the rest of the app, and screenshot support status.
+- **Image tools** for firmware image tables (list/read/write preview) and resource-pack preview in the Firmware Editor.
+- **Patch batch actions**: apply all pending / rollback all applied at once, plus patch list search.
+
+### Fixed
+- JavaScript syntax error in `src/renderer-firmware.js` (duplicated `setImagesVisible` signature) that broke any frontend or Flatpak build of commits `87435d8`/`ebde818`.
+- Curve/Materials chart reflow on window resize.
+- Local Flatpak build: stale `build-dir/` caused `opendir(refs/heads): No such file or directory`; `rofiles-fuse` Permission denied on btrfs homed mounts is worked around with `--disable-rofiles-fuse`.
+
 ## 1.19.0 — 2026-09-10
 
 ### Added
