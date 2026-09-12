@@ -265,19 +265,53 @@ function formatPuffsTime(seconds) {
            String(s).padStart(2, '0');
 }
 
-// Update the Puffs Time input's unit label and formatted display based on the
-// current PuffsTimeFormat value. Reads from the DOM so it works regardless of
-// whether the generic .fox-val handler has run yet.
-function updatePuffsTimeDisplay() {
-    const format = Number($('#PuffsTimeFormat').val());
-    const seconds = Number($('#PuffsTime').val()) || 0;
-    if (format === 1) {
-        $('#PuffsTimeUnit').text('');
-        $('#PuffsTimeFormatted').text(formatPuffsTime(seconds));
-    } else {
-        $('#PuffsTimeUnit').text('s');
-        $('#PuffsTimeFormatted').text('');
+// Parse a Puff Time field entry back to seconds: accepts both "HH:MM:SS"
+// (when the HH:MM:SS display format is active) and plain seconds.
+function parsePuffsTime(text) {
+    const t = String(text || '').trim();
+    if (t.includes(':')) {
+        const parts = t.split(':').map(p => parseInt(p, 10) || 0);
+        while (parts.length < 3) parts.unshift(0);
+        const [h, m, s] = parts.slice(-3);
+        return h * 3600 + m * 60 + s;
     }
+    return Math.max(0, Math.floor(Number(t) || 0));
+}
+
+// Active display format. Seeded from the device's own PuffsTimeFormat setting
+// when a config is present (device-default); seconds when the device has none.
+let puffsTimeFormat = 0;
+
+function updatePuffsTimeDisplay() {
+    const seconds = Number($('#PuffsTime').data('seconds') ?? config.PuffsTime ?? 0);
+    if (Number(puffsTimeFormat) === 1) {
+        $('#PuffsTime').val(formatPuffsTime(seconds));
+    } else {
+        $('#PuffsTime').val(seconds);
+    }
+}
+
+// Re-read the field, keep config.PuffsTime in real seconds (the generic
+// .fox-val change handler would otherwise store the formatted "HH:MM:SS"
+// string — the data-corruption bug from the old dropdown), and optionally
+// re-render the field in the active display format.
+function puffsTimeSync(display) {
+    const secs = parsePuffsTime($('#PuffsTime').val());
+    $('#PuffsTime').data('seconds', secs);
+    if (typeof config === 'object' && config) {
+        config.PuffsTime = secs;
+    }
+    if (display) {
+        updatePuffsTimeDisplay();
+    }
+}
+
+// Seed the display format from the device config after it is loaded. The
+// device-default format wins; seconds (0) when the device has none.
+function puffsTimeSeedFromConfig() {
+    puffsTimeFormat = Number(config.PuffsTimeFormat ?? 0) || 0;
+    $('#PuffsTimeFormat').val(String(puffsTimeFormat));
+    updatePuffsTimeDisplay();
 }
 
 function uiInitChangeHandlers() {
@@ -313,9 +347,17 @@ function uiInitChangeHandlers() {
         uiProfile(activeProfile);
     });
 
-    // Keep the Puffs Time formatted display in sync with the input and format.
-    $(document).on('change input', '#PuffsTime', updatePuffsTimeDisplay);
-    $(document).on('change', '#PuffsTimeFormat', updatePuffsTimeDisplay);
+    // Puff Time: keep config in real seconds while the field displays the
+    // active format; re-render on blur/change and when the format is switched.
+    $(document).on('input', '#PuffsTime', () => puffsTimeSync(false));
+    $(document).on('change', '#PuffsTime', () => puffsTimeSync(true));
+    $(document).on('change', '#PuffsTimeFormat', function () {
+        puffsTimeFormat = Number($(this).val()) || 0;
+        if (typeof config === 'object' && config) {
+            config.PuffsTimeFormat = puffsTimeFormat;
+        }
+        puffsTimeSync(true);
+    });
 }
 
 function uiProfile(p) {
@@ -899,6 +941,17 @@ window.resetSettings = async function () {
 
 $(document).on('keydown', function (e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+        return;
+    }
+    // Alt+Left/Right cycle the main tabs without the mouse (shared scheme with
+    // the Firmware Editor; d/u below are shared with it too — see
+    // docs/keyboard-shortcuts.md).
+    if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+        e.preventDefault();
+        const tabs = $('.tab-group#main .tab-item').toArray();
+        const idx = tabs.findIndex(t => t.classList.contains('active'));
+        const next = e.key === 'ArrowRight' ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
+        $(tabs[next]).click();
         return;
     }
     if (e.key === 'd' || e.key === 'D') {

@@ -52,9 +52,6 @@
         <span id="fw-device-name" style="font-weight: bold; min-width: 180px;">No device</span>
         <button id="open-firmware" class="btn btn-default">Open Firmware</button>
         <button id="download-stock" class="btn btn-default">Download FW</button>
-        <button id="save-firmware" class="btn btn-default">Save</button>
-        <button id="save-as-firmware" class="btn btn-default">Save As</button>
-        <button id="flash-firmware" class="btn btn-default" disabled>Flash to Device</button>
         <button id="undo-changes" class="btn btn-default" disabled>Undo Changes</button>
         <span id="fw-status" style="margin-left: 12px; line-height: 26px;">No firmware loaded</span>
     </div>
@@ -254,7 +251,10 @@
         </div>
     </div>
     <footer class="toolbar toolbar-footer">
-        <div id="fw-connection-status" style="padding: 8px 12px; font-size: 12px;">
+        <div class="toolbar-actions" style="display: inline-block; margin-right: 12px;">
+            <button id="flash-firmware" class="btn btn-default" disabled>Flash to Device</button>
+        </div>
+        <div id="fw-connection-status" style="display: inline-block; padding: 8px 12px; font-size: 12px;">
             <span>Device</span> <span id="fw-connection-text">is disconnected</span>
         </div>
     </footer>

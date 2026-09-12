@@ -9,7 +9,6 @@ import {
     readBinaryFile,
     resolveResourcePath,
     openFileDialog,
-    saveFileDialog,
     openFirmware,
     downloadStock,
     openStockBuild,
@@ -40,6 +39,7 @@ let currentHandle = null;
 let currentPatches = [];
 let currentPath = null;
 let currentDevice = null; // { connected: bool, productId: string, name: string, line: string }
+let currentTab = 'patches'; // The currently active editor tab (set by initTabs).
 let currentFirmwareInfo = null; // { name, encryption, definition, size, buildId }
 
 async function loadLocale() {
@@ -347,42 +347,6 @@ async function promptStockBuild(err) {
     }
 }
 
-async function doSaveFirmware() {
-    if (!currentHandle) {
-        return;
-    }
-    if (!currentPath) {
-        return doSaveAsFirmware();
-    }
-    try {
-        await saveFirmware(currentHandle, currentPath);
-        setStatus($('#fw-status').text() + ' — saved');
-    } catch (err) {
-        console.error('saveFirmware failed', err);
-        alert(err.toString());
-    }
-}
-
-async function doSaveAsFirmware() {
-    if (!currentHandle) {
-        return;
-    }
-    try {
-        const path = await saveFileDialog('firmware.bin', [
-            { name: 'Firmware binary', extensions: ['bin'] }
-        ]);
-        if (!path) {
-            return;
-        }
-        currentPath = path;
-        await saveFirmware(currentHandle, path);
-        setStatus($('#fw-status').text() + ' — saved');
-    } catch (err) {
-        console.error('saveFirmware failed', err);
-        alert(err.toString());
-    }
-}
-
 async function doFlashFirmware() {
     if (!currentHandle) {
         return;
@@ -436,8 +400,6 @@ async function doUndoChanges() {
 
 function updateButtonStates() {
     const hasHandle = !!currentHandle;
-    $('#save-firmware').prop('disabled', !hasHandle);
-    $('#save-as-firmware').prop('disabled', !hasHandle);
     $('#flash-firmware').prop('disabled', !hasHandle);
     // Undo stays disabled until a flash has happened.
 }
@@ -458,8 +420,12 @@ function initTabs() {
             refreshResourcePacksTab();
         }
     });
-    // Default to the Status tab on first open.
-    $('.tab-item[data-tab="status"]').click();
+    // Default to the Status tab on first open. Deferred so the initial click
+    // runs after module evaluation — the handler writes `currentTab`, and a
+    // synchronous click here used to throw a TDZ ReferenceError that aborted
+    // the rest of the module (dead tab switching, no loadDeviceLib, no IPC
+    // bindings — every tab appeared to show the Status page).
+    setTimeout(() => $('.tab-item[data-tab="status"]').click(), 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -718,8 +684,6 @@ $('#force-pid-btn').click(async () => {
 
 $('#open-firmware').click(doOpenFirmware);
 $('#download-stock').click(doDownloadStock);
-$('#save-firmware').click(doSaveFirmware);
-$('#save-as-firmware').click(doSaveAsFirmware);
 $('#flash-firmware').click(doFlashFirmware);
 $('#undo-changes').click(doUndoChanges);
 
@@ -772,17 +736,35 @@ initTabs();
 attachImageCanvasHandlers();
 
 // Keyboard shortcuts for the Firmware Editor window.
+// d / u are shared with the main window: 'd' = Download (stock firmware here,
+// settings there), 'u' = Upload/Flash (flash to device here, upload settings
+// there). Alt+Left/Right cycles the editor tabs without the mouse.
 $(document).on('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+        if (!(e.altKey)) {
+            return;
+        }
+    }
+    if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+        e.preventDefault();
+        const tabs = $('.tab-item').toArray();
+        const idx = tabs.findIndex(t => t.classList.contains('active'));
+        const next = e.key === 'ArrowRight' ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
+        $(tabs[next]).click();
+        return;
+    }
     if (e.ctrlKey || e.metaKey) {
-        if (e.key === 's') {
-            e.preventDefault();
-            doSaveFirmware();
-        } else if (e.key === 'o') {
+        if (e.key === 'o') {
             e.preventDefault();
             doOpenFirmware();
         }
+        return;
     }
-    if (e.key === 'Escape') {
+    if (e.key === 'd' || e.key === 'D') {
+        $('#download-stock').click();
+    } else if (e.key === 'u' || e.key === 'U') {
+        $('#flash-firmware').click();
+    } else if (e.key === 'Escape') {
         selectedCell = -1;
         renderStringCells();
     }
@@ -805,9 +787,8 @@ $(document).on('keydown', (e) => {
 // ---------------------------------------------------------------------------
 // Images / Strings / Resource Packs editor tabs
 // ---------------------------------------------------------------------------
-// The currently active editor tab (set by initTabs) so the open-firmware
-// transition can refresh whichever pane is visible.
-let currentTab = 'patches';
+// `currentTab` is declared with the other editor state at the top of the
+// module — it must exist before initTabs() runs (see the TDZ fix there).
 
 // Invalidate all per-firmware caches whenever the open firmware changes.
 function resetEditorData() {
@@ -918,10 +899,9 @@ function downloadBlob(blob, filename) {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// Mark the firmware as modified (enable Save + Undo) after any successful
+// Mark the firmware as modified (enable Undo) after any successful
 // mutation, mirroring how the patch toggle switches these buttons.
 function markMutated() {
-    $('#save-firmware').prop('disabled', false);
     $('#undo-changes').prop('disabled', false);
 }
 // ---------------------------------------------------------------------------
