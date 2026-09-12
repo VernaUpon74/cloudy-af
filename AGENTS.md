@@ -141,4 +141,66 @@ Verification on this host (no FUSE): run with
 `ps` as plain `cloudy-af` (the runtime re-execs it); the sidecar appears as
 `node /tmp/appimage_extracted_*/usr/lib/Cloudy AF/sidecar/hid-bridge.js`.
 Both alive + empty stderr = good. On FUSE-equipped systems the AppImage runs
+
+
+## i18n: tooltips and translations are mandatory for new UI
+
+Whenever you add text, a button, a field, a tab, or any user-visible feature:
+
+1. Give every new element a `data-lang` key; give interactive elements
+   (buttons, selects, tabs, rows) a `data-lang-title` accessibility tooltip
+   too. Keep tooltips user-meaningful sentences, not key names.
+2. Add the new keys to **all 17** files in `public/i18n/` (`en`, `cn`, `cs`,
+   `cz`, `de`, `es`, `fr`, `hu`, `it`, `ja`, `nl`, `pl`, `ru`, `sk`, `sr`,
+   `tr`, `ua`) — never `en` alone, never leave keys missing: a missing key
+   renders as **empty text** at runtime (`if (phrase)` skips the element).
+3. Locale files are two-letter codes; `getLocale()` returns full BCP-47 tags
+   (`de-DE`) — always normalize with `.substr(0, 2)` before building the
+   `i18n/<locale>.json` path (monitor page comment documents this; the
+   firmware/tfr pages were fixed after shipping an entire release that could
+   not switch languages).
+4. Before committing, verify: no `data-lang*` key missing from `en.json`, and
+   all 17 locale files have identical key counts. A one-liner check lives in
+   `scripts/check-i18n.py`.
+
+## Rebuild after translations
+
+`scripts/translations-watch-rebuild.sh` polls `public/i18n/`; as soon as
+translation changes go 60 s quiet it rebuilds the Rust binary (toolbox),
+the Flatpak (`--disable-rofiles-fuse` — see above), and exports the bundle +
+binary byproducts into `builds/`. Run it in a terminal while translating:
+
+```
+scripts/translations-watch-rebuild.sh [--flatpak]
+```
+
+Without `--flatpak` it rebuilds only the host binary. With it, the full
+Flatpak + bundle pipeline runs. Stop with Ctrl-C; every stage logs a clear
+FAIL line if it breaks.
+
+## Flatpak local builds
+
+Always pass `--disable-rofiles-fuse` to `flatpak-builder` on this host —
+`rofiles-fuse` fails with `fusermount3: failed to access mountpoint ...
+Permission denied` on the btrfs/homed mount, killing the final commit stage
+(exit_status: 1024) after minutes of otherwise-good work:
+
+```
+flatpak-builder --force-clean --disable-rofiles-fuse --repo=repo build-dir flatpak/org.cloudy.af-local.yml
+```
+
+Also: if a build dies with `Error: opendir(refs/heads): No such file or
+directory`, the previous `build-dir/` is stale/partial (flatpak-builder is
+treating it as an OSTree repo) — delete `build-dir/` (and `.flatpak-builder/`
+if suspicious) and rebuild. Export a single-file bundle with:
+
+```
+flatpak build-bundle --runtime-repo=repo repo builds/cloudy-af-<version>.flatpak org.cloudy.af
+cp src-tauri/target/release/cloudy-af builds/cloudy-af-<version>
+```
+
+Build the Rust binary inside the `arcticfox-build` toolbox (host cargo cannot
+find the gtk pkg-config files):
+`toolbox run -c arcticfox-build sh -c 'cd src-tauri && PKG_CONFIG_PATH=/usr/lib64/pkgconfig:/usr/share/pkgconfig cargo build --release --features tauri/custom-protocol'`
+
 directly without the env var.
