@@ -48,8 +48,8 @@ const SENSORS = [
     { id: 'temperatureSet', color: '#8b0000', unitOf: s => s.is_celsius ? '°C' : '°F', langKey: 'Monitor.TemperatureSet', value: s => s.temperature_set }, // dark red
     { id: 'outputCurrent', color: '#ffa500', unit: 'A', langKey: 'Monitor.OutputCurrent', value: s => s.output_current }, // orange
     { id: 'outputVoltage', color: '#87cefa', unit: 'V', langKey: 'Monitor.OutputVoltage', value: s => s.output_voltage }, // light sky blue
-    { id: 'resistance', color: '#ee82ee', unit: 'Ω', langKey: 'Monitor.Resistance', value: s => s.resistance, yAxis: 1 }, // violet
-    { id: 'realResistance', color: '#8a2be2', unit: 'Ω', langKey: 'Monitor.RealResistance', value: s => s.real_resistance, yAxis: 1 }, // blue violet
+    { id: 'resistance', color: '#ee82ee', unit: 'Ω', langKey: 'Monitor.Resistance', value: s => s.resistance }, // violet
+    { id: 'realResistance', color: '#8a2be2', unit: 'Ω', langKey: 'Monitor.RealResistance', value: s => s.real_resistance }, // blue violet
     { id: 'boardTemperature', color: '#8b4513', unitOf: s => s.is_celsius ? '°C' : '°F', langKey: 'Monitor.BoardTemperature', value: s => s.board_temperature }, // saddle brown
 ];
 
@@ -161,13 +161,18 @@ function chartOptions(theme) {
             ...axis,
             dateTimeLabelFormats: { second: '%H:%M:%S' },
         },
-        // Dual y-axes: left for power/voltage/current/temperature, right
-        // for resistance. Resistance (typically ~0.3–1 Ω) is unreadable when
-        // overlaid on the high-magnitude left axis, so it gets its own scale.
-        yAxis: [
-            { min: 0, ...axis, title: { text: null } },
-            { min: 0, opposite: true, ...axis, title: { text: null } },
-        ],
+        // Single y-axis from 0-640 to accommodate all sensor values including resistance.
+        yAxis: {
+            min: 0,
+            max: 640,
+            ...axis,
+            title: { text: null },
+            tickInterval: 100,
+            labels: {
+                style: { fontSize: '10px' },
+                step: 1
+            }
+        },
         tooltip: {
             shared: true,
             crosshairs: true,
