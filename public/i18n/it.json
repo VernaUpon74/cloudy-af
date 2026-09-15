@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "Numero totale di tiri dall'ultimo azzeramento dei contatori.",
   "Tooltips.TotalPuffsTime": "Tempo totale di attivazione, sommato su tutti i tiri dall'ultimo azzeramento dei contatori.",
   "Tooltips.PuffsTimeFormat": "Come viene mostrata la durata del tiro: secondi totali, oppure ore, minuti e secondi.",
+  "Stats.PuffTimeLabel": "Durata del tiro:",
   "Monitor.ScreenshotButton": "Screenshot",
   "Monitor.ScreenshotSave": "Salva PNG",
   "Monitor.ScreenshotClose": "Chiudi",

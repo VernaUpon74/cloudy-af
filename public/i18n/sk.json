@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "Celkový počet potiahnutí od posledného vynulovania počítadiel.",
   "Tooltips.TotalPuffsTime": "Celkový čas žhavenia, spočítaný cez všetky potiahnutia od posledného vynulovania počítadiel.",
   "Tooltips.PuffsTimeFormat": "Ako sa zobrazuje čas potiahnutia: celkové sekundy, alebo hodiny, minúty a sekundy.",
+  "Stats.PuffTimeLabel": "Čas potiahnutia:",
   "Monitor.ScreenshotButton": "Snímka obrazovky",
   "Monitor.ScreenshotSave": "Uložiť PNG",
   "Monitor.ScreenshotClose": "Zavrieť",

@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "Nombre total de bouffées depuis la dernière réinitialisation des compteurs.",
   "Tooltips.TotalPuffsTime": "Temps total de chauffe, cumulé sur toutes les bouffées depuis la dernière réinitialisation des compteurs.",
   "Tooltips.PuffsTimeFormat": "Affichage de la durée de bouffée : secondes totales, ou heures, minutes et secondes.",
+  "Stats.PuffTimeLabel": "Durée de bouffée :",
   "Monitor.ScreenshotButton": "Capture d'écran",
   "Monitor.ScreenshotSave": "Enregistrer en PNG",
   "Monitor.ScreenshotClose": "Fermer",

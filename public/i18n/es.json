@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "Número total de caladas desde el último restablecimiento de los contadores.",
   "Tooltips.TotalPuffsTime": "Tiempo total de activación, sumado sobre todas las caladas desde el último restablecimiento de los contadores.",
   "Tooltips.PuffsTimeFormat": "Cómo se muestra la duración de calada: segundos totales, o horas, minutos y segundos.",
+  "Stats.PuffTimeLabel": "Duración de calada:",
   "Monitor.ScreenshotButton": "Captura de pantalla",
   "Monitor.ScreenshotSave": "Guardar PNG",
   "Monitor.ScreenshotClose": "Cerrar",

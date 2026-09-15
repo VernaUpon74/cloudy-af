@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "カウンターが最後にリセットされてからの総パフ回数。",
   "Tooltips.TotalPuffsTime": "カウンターが最後にリセットされてからの加熱時間の合計。",
   "Tooltips.PuffsTimeFormat": "パフ時間の表示方法：合計秒数、または時・分・秒。",
+  "Stats.PuffTimeLabel": "パフ時間：",
   "Monitor.ScreenshotButton": "スクリーンショット",
   "Monitor.ScreenshotSave": "PNG保存",
   "Monitor.ScreenshotClose": "閉じる",

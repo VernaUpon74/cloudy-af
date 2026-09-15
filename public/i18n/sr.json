@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "Ukupan broj pušenja od poslednjeg resetovanja brojača.",
   "Tooltips.TotalPuffsTime": "Ukupno vreme paljenja, sabrano kroz sva pušenja od poslednjeg resetovanja brojača.",
   "Tooltips.PuffsTimeFormat": "Kako se prikazuje vreme pušenja: ukupne sekunde, ili sati, minuti i sekunde.",
+  "Stats.PuffTimeLabel": "Vreme pušenja:",
   "Monitor.ScreenshotButton": "Snimak ekrana",
   "Monitor.ScreenshotSave": "Sačuvaj PNG",
   "Monitor.ScreenshotClose": "Zatvori",

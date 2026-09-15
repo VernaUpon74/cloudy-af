@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "自上次重置计数器以来累计的吸气总次数。",
   "Tooltips.TotalPuffsTime": "自上次重置计数器以来所有吸气的加热时间总和。",
   "Tooltips.PuffsTimeFormat": "吸气时间的显示方式：总秒数，或时、分、秒。",
+  "Stats.PuffTimeLabel": "吸气时间：",
   "Monitor.ScreenshotButton": "截图",
   "Monitor.ScreenshotSave": "保存 PNG",
   "Monitor.ScreenshotClose": "关闭",

@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "Az utolsó számláló-nullázás óta slukkok száma.",
   "Tooltips.TotalPuffsTime": "Az utolsó számláló-nullázás óta tüzeléssel töltött összes idő, minden slukkra összegezve.",
   "Tooltips.PuffsTimeFormat": "A slukkidej megjelenítése: összes másodperc, vagy óra, perc és másodperc.",
+  "Stats.PuffTimeLabel": "Slukkidej:",
   "Monitor.ScreenshotButton": "Képernyőkép",
   "Monitor.ScreenshotSave": "Mentés PNG-ként",
   "Monitor.ScreenshotClose": "Bezárás",

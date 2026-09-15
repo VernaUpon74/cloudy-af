@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "Общее количество затяжек с последнего сброса счётчиков.",
   "Tooltips.TotalPuffsTime": "Общее время нагрева, суммированное по всем затяжкам с последнего сброса счётчиков.",
   "Tooltips.PuffsTimeFormat": "Как отображается время затяжки: суммарные секунды или часы, минуты и секунды.",
+  "Stats.PuffTimeLabel": "Время затяжки:",
   "Monitor.ScreenshotButton": "Скриншот",
   "Monitor.ScreenshotSave": "Сохранить PNG",
   "Monitor.ScreenshotClose": "Закрыть",

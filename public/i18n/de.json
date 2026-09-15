@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "Gesamtzahl der Züge seit dem letzten Zurücksetzen der Zähler.",
   "Tooltips.TotalPuffsTime": "Gesamte Feuerzeit, summiert über alle Züge seit dem letzten Zurücksetzen der Zähler.",
   "Tooltips.PuffsTimeFormat": "Anzeige der Zugzeit: Gesamtsekunden oder Stunden, Minuten und Sekunden.",
+  "Stats.PuffTimeLabel": "Zugzeit:",
   "Monitor.ScreenshotButton": "Screenshot",
   "Monitor.ScreenshotSave": "PNG speichern",
   "Monitor.ScreenshotClose": "Schließen",

@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "Totaal aantal trekjes sinds de tellers voor het laatst zijn gereset.",
   "Tooltips.TotalPuffsTime": "Totale vuurtijd, opgeteld over alle trekjes sinds de tellers voor het laatst zijn gereset.",
   "Tooltips.PuffsTimeFormat": "Hoe trektijd wordt weergegeven: totale seconden, of uren, minuten en seconden.",
+  "Stats.PuffTimeLabel": "Trektijd:",
   "Monitor.ScreenshotButton": "Screenshot",
   "Monitor.ScreenshotSave": "PNG opslaan",
   "Monitor.ScreenshotClose": "Sluiten",

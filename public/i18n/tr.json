@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "Sayaçlar son sıfırlandığından beri yapılan toplam çekiş sayısı.",
   "Tooltips.TotalPuffsTime": "Sayaçlar son sıfırlandığından beri tüm çekişlerde toplam ateşleme süresi.",
   "Tooltips.PuffsTimeFormat": "Çekiş süresinin nasıl gösterildiği: toplam saniye veya saat, dakika ve saniye.",
+  "Stats.PuffTimeLabel": "Çekiş süresi:",
   "Monitor.ScreenshotButton": "Ekran Görüntüsü",
   "Monitor.ScreenshotSave": "PNG Kaydet",
   "Monitor.ScreenshotClose": "Kapat",

@@ -372,6 +372,7 @@
   "Tooltips.PuffsCount": "Łączna liczba wapowań od ostatniego zresetowania liczników.",
   "Tooltips.TotalPuffsTime": "Łączny czas grzania, sumowany ze wszystkich wapowań od ostatniego zresetowania liczników.",
   "Tooltips.PuffsTimeFormat": "Sposób wyświetlania czasu wapowania: suma sekund lub godziny, minuty i sekundy.",
+  "Stats.PuffTimeLabel": "Czas wapowania:",
   "Monitor.ScreenshotButton": "Zrzut ekranu",
   "Monitor.ScreenshotSave": "Zapisz PNG",
   "Monitor.ScreenshotClose": "Zamknij",
