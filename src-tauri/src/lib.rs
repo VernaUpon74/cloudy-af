@@ -569,6 +569,21 @@ async fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
                                 data: min,
                             },
                         );
+
+                        // Event-driven autoconnect: the bridge announces
+                        // readiness with the "ready" event. Issuing the
+                        // connect command here (instead of after a fixed
+                        // 1500 ms startup sleep) avoids racing a slow
+                        // sidecar start — e.g. first run of the extracted
+                        // AppImage, where node + node-hid load from cold
+                        // page cache — which delayed the first connect by
+                        // up to a full reconnect interval and made the
+                        // status bar flicker between connected states.
+                        if event.event == "ready" {
+                            let state: State<'_, SidecarState> = app_handle.state();
+                            let cmd = serde_json::json!({ "type": "connect", "autoconnect": true });
+                            let _ = sidecar_send(&state, cmd, None).await;
+                        }
                     }
                     _ => {
                         // Check if this is a response to a pending request.
@@ -650,10 +665,9 @@ pub fn run() {
                         serde_json::json!({ "message": "Failed to spawn HID sidecar", "detail": e }),
                     );
                 } else {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
-                    let state: State<'_, SidecarState> = app_handle.state();
-                    let cmd = serde_json::json!({ "type": "connect", "autoconnect": true });
-                    let _ = sidecar_send(&state, cmd, None).await;
+                    // Autoconnect is issued when the sidecar announces
+                    // "ready" (see the sidecar reader loop) — no fixed
+                    // startup sleep here.
                 }
             });
 
