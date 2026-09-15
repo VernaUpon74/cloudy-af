@@ -38,6 +38,10 @@ Loose ends carried over from the firmware read-back Phase 1 plan
       Backend read (`read_monitoring_data`, cmd 0x66) implemented in
       `flasher.rs`; the UI window is implemented. Added a secondary y-axis
       for resistance so it is readable alongside temperature.
+      (Update 2026-09-15: the chart was reverted to a single fixed y-axis
+      0–640 in the working tree — resistance is plotted on the shared axis
+      again; the `yAxis` field stays in `SENSORS` so the dual-axis can be
+      restored cheaply if wanted.)
 - [x] Emulation harness gate: layers 1–3 done (plan
       `docs/superpowers/plans/2026-08-28-firmware-emulation-harness.md`).
       Layer 4 (`test_af_190602_render_gate`) and Layer 5
@@ -106,6 +110,11 @@ Loose ends carried over from the firmware read-back Phase 1 plan
       the resources.rs backend (listStringsCmd/listResourcePacks). Remaining:
       functional test with a firmware fixture (glyph editor, pack preview,
       extract/inject round-trip vs NFirmwareEditor parity).
-- [ ] AppImage device-detection flicker: delegate root-cause analysis at
-      /tmp/cline-tasks/T3-report.md — audit and fix when queue finishes.
+- [ ] AppImage device-detection flicker: root-cause analysis redone
+      in-repo (the original /tmp delegate report was lost) —
+      **`docs/t3-appimage-flicker.md`**: startup race (blind 1500 ms
+      pre-ready connect sleep) identified as primary cause and FIXED
+      (event-driven autoconnect on sidecar `ready`, 2026-09-15);
+      timer-duplication and redundant status emission documented as
+      follow-ups; on-device verification still pending.
 
