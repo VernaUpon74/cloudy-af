@@ -29,7 +29,7 @@ flatpak install --user cloudy-af-repo org.cloudy.af
 
 ### AppImage / .deb / .rpm (experimental, less testing)
 
-Also produced by `scripts/build-appimage.sh` into `builds/` and attached to releases:
+Also produced by `./build.sh` (AppImage target) into `builds/` and attached to releases:
 
 - `Cloudy_AF-<version>-x86_64.AppImage` — portable, FUSE3-only systems OK
 - `Cloudy AF_<version>_amd64.deb` — Debian/Ubuntu
