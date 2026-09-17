@@ -56,6 +56,13 @@ cp -a "${SIDECAR_SRC}/put-replacement" "${SIDECAR_DST}/" 2>/dev/null || true
 SIDECAR_NODE_MODULES="${SIDECAR_SRC}/node_modules"
 if [[ -d "${SIDECAR_NODE_MODULES}" ]]; then
     cp -a "${SIDECAR_NODE_MODULES}" "${SIDECAR_DST}/"
+    # node-hid's build tree keeps .o objects and other intermediates the
+    # runtime never needs. linuxdeploy tries to patchelf them, fails
+    # ("wrong ELF type" — not dynamically linked) and prints scary ERROR
+    # lines into every build log. Prune them from the COPY only — never from
+    # the source tree, whose HID_hidraw.node is the gated build artifact.
+    rm -rf "${SIDECAR_DST}/node_modules/node-hid/build/Release/obj.target" \
+           "${SIDECAR_DST}/node_modules/node-hid/build/Release/obj" 2>/dev/null || true
 
     # Verification gate: refuse to bundle an unpatched or stale node-hid build.
     # Patch markers live in node-hid/src/HID.cc after patch-package runs.
