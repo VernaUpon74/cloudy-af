@@ -203,6 +203,7 @@ impl Cpu {
             let instr = decode(hw).ok_or(EmuError::Undefined { pc, instr: hw })?;
             (instr, 2)
         };
+        bus.advance_core_tick();
         // IT-block conditional execution: pop this instruction's condition
         // and skip (no side effects, pc still advances) when it fails.
         if self.it_left > 0 {
@@ -641,6 +642,25 @@ impl Cpu {
                     }
                 }
                 self.sp = addr;
+                self.pc = new_pc.unwrap_or_else(|| self.pc.wrapping_add(4));
+            }
+            Instr::Thumb2(Thumb2::LdmIA { rn, list, wb }) => {
+                let mut addr = self.reg(rn);
+                let mut new_pc = None;
+                for i in 0..16u8 {
+                    if list >> i & 1 == 1 {
+                        let value = bus.read_u32(addr)?;
+                        if i == 15 {
+                            new_pc = Some(value & !1);
+                        } else {
+                            self.set_reg(i, value);
+                        }
+                        addr = addr.wrapping_add(4);
+                    }
+                }
+                if wb {
+                    self.set_reg(rn, addr);
+                }
                 self.pc = new_pc.unwrap_or_else(|| self.pc.wrapping_add(4));
             }
             Instr::Thumb2(Thumb2::StmIA { rn, list }) => {
@@ -1499,6 +1519,60 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert!(cpu.z);
         assert_eq!(cpu.r[0], 0xF0);
+    }
+
+    #[test]
+    fn test_systick_ticks_once_per_decoded_step_including_it_skip() {
+        let flash = vec![0x00, 0xBF, 0x08, 0xBF, 0x01, 0x20, 0xFF, 0xDE];
+        let mut bus = Bus::new(flash, 0x1000);
+        bus.write_u32(0xE000_E014, 2).unwrap();
+        bus.write_u32(0xE000_E010, 5).unwrap();
+        let mut cpu = Cpu::new();
+        for expected in [2, 1, 0] {
+            cpu.step(&mut bus).unwrap();
+            assert_eq!(bus.read_u32(0xE000_E018).unwrap(), expected);
+        }
+        assert_eq!(cpu.r[0], 0);
+        assert_eq!(cpu.pc, 6);
+        assert_eq!(bus.read_u32(0xE000_E010).unwrap(), 0x0001_0005);
+        assert!(cpu.step(&mut bus).is_err());
+        assert_eq!(bus.read_u32(0xE000_E018).unwrap(), 0);
+        assert_eq!(bus.read_u32(0xE000_E010).unwrap(), 5);
+    }
+
+    #[test]
+    fn test_ldmia_w_general_base_and_writeback() {
+        // Capstone/ARM T2 vectors: E895 000F = ldm.w r5, {r0-r3};
+        // E8B5 000F = ldm.w r5!, {r0-r3}. Neither is a POP from SP.
+        for (hw1, writeback) in [(0xE895u16, false), (0xE8B5, true)] {
+            let mut flash = vec![0u8; 0x100];
+            flash[..2].copy_from_slice(&hw1.to_le_bytes());
+            flash[2..4].copy_from_slice(&0x000Fu16.to_le_bytes());
+            let mut bus = Bus::new(flash, 0x1000);
+            bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
+            let base = RAM_BASE + 0x100;
+            let stack = RAM_BASE + 0x800;
+            let values = [11u32, 22, 33, 44];
+            for (i, value) in values.iter().enumerate() {
+                bus.write_u32(base + i as u32 * 4, *value).unwrap();
+                bus.write_u32(stack + i as u32 * 4, 0xBAD0_0000 + i as u32).unwrap();
+            }
+            bus.write_log.clear();
+            let mut cpu = Cpu::new();
+            cpu.r[5] = base;
+            cpu.sp = stack;
+            cpu.n = true;
+            cpu.z = false;
+            cpu.c = true;
+            cpu.v = true;
+            cpu.step(&mut bus).unwrap();
+            assert_eq!(&cpu.r[..4], &values, "load from r5, not SP ({hw1:04x})");
+            assert_eq!(cpu.r[5], base + if writeback { 16 } else { 0 });
+            assert_eq!(cpu.sp, stack, "general-base LDM must not change SP");
+            assert_eq!((cpu.n, cpu.z, cpu.c, cpu.v), (true, false, true, true));
+            assert_eq!(cpu.pc, 4);
+            assert!(bus.write_log.is_empty());
+        }
     }
 
     #[test]

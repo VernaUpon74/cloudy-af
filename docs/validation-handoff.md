@@ -4,6 +4,111 @@ Running log for the non-hardware validation plan
 (`docs/superpowers/plans/2026-09-13-nonhw-validation-routes.md`, routes from
 `docs/firmware-validation.md`). Newest entries first within each section.
 
+## Latest verification — SysTick model + EADC model (2026-09-17, later session)
+
+Supersedes the LDMIA/IRQ42 entry below (that LDMIA fix is still uncommitted
+in the working tree and still required).
+
+- **SysTick register model landed** (`bus.rs`, private `SysTick` struct):
+  CTRL (bits 0-2 latched; reads return CTRL | COUNTFLAG<<16 and CLEAR
+  COUNTFLAG on read per ARMv7-M B3.3.3), RVR (24-bit), CVR (24-bit; write
+  clears counter and COUNTFLAG). Ticking: `Bus::advance_core_tick` is called
+  once per DECODED `Cpu::step` — failed fetch/decode costs no tick; IT-block
+  members tick even when suppressed (matches the real core's fixed-cycle
+  behavior). Counter semantics: 0 → RELOAD on tick; decrement otherwise;
+  hitting 0 raises COUNTFLAG; RELOAD=0 never completes. One tick per step
+  is a deliberate simplification (no cycle accuracy).
+- **Result:** the boot gate's first blocker is gone — M041 boots past the
+  0xE06 SysTick delay loop (200M budget) and now reaches the SECOND blocker:
+  the `0x10B14..0x10B18` wait polling RAM 0x20000E6C (the EADC completion
+  flag). Boot still fails at budget there. Full boot NOT verified.
+- **EADC model landed** (new `emu/eadc.rs`, wired into `Bus`): M451 base
+  0x40043000 — CTL +0x50 (ADCEN bit0 gates SWTRG), SWTRG +0x54 (19 module
+  bits, pending), INTSRC0 +0xD0 (module→ADINT0 routing), STATUS2 +0xF8
+  (ADIF0 bit0, write-1-to-clear), DAT0..18 +0x00..+0x48 (results).
+  Deterministic completion after `EADC_COMPLETION_TICKS` (8) core ticks,
+  lowest module first; ADIF0 set only when the completing module is routed
+  via INTSRC0. Results come ONLY from test-configured samples
+  (`Bus::set_eadc_sample`) — no invented sensor values. Latched writes are
+  still recorded in `dropped_writes` (the record doubles as the peripheral-
+  write log the IRQ42 handler-gate assertion relies on). NOT modeled: OV/
+  VALID bits, compare flags, PDMA, scan sequencing, real analog inputs,
+  conversion-latency accuracy (fixed 8 ticks; refine at the Nu-Link bench).
+- **5 eadc.rs unit tests + 1 bus integration test** (SWTRG completion/
+  DAT/ADIF0, ADCEN gating, unrouted module, W1C semantics, unmodeled-
+  register reporting, SysTick coexistence). Full lib suite: **194 passed,
+  47 ignored**. `cargo check --release --tests` clean; `git diff --check`
+  clean. Clippy has a PRE-EXISTING deny-level error in bus.rs resolve()
+  (`absurd_extreme_comparisons` on `addr >= FLASH_BASE` since FLASH_BASE=0)
+  — NOT introduced by this session, NOT fixed here, runs `cargo check` not
+  clippy for gates until that is addressed.
+- **NVIC/exception delivery NOT implemented** — attempted, reverted. Honest
+  post-mortem: the CPU has no exception entry/EXC_RETURN support; building
+  it test-first round-trip-style is a real slice (vector fetch from
+  4*(16+irq), 8-word frame stack, EXC_RETURN detection in BX/POP/ldr-pc
+  epilogues, single-level delivery) that should be done in a FRESH session
+  with the round-trip test written FIRST and no edits before it runs RED.
+  The bus-side NVIC latch (ISER/ICER W1S/W1C) was built and removed with
+  it; reuse the design sketch above when the slice is reattempted.
+- Boot-path evidence note (from af190602_dis.txt 0x10AC8-0x10B28): the
+  read-adc routine enables ADCIEN0 (CTL|=4), routes the module via
+  INTSRC0|=1<<m, enables IRQ42 (ISER[1]|=0x400), SWTRG=1<<m, polls the
+  flag at 0x20000E6C set by the IRQ42 handler 0x108B4 (writes flag=1,
+  writes 1 to 0x400430F8 = EADC_STATUS2 ADIF0 W1C per SVD), then clears
+  ADCIEN0 and reads DATm. So IRQ42 == ADINT0 on this silicon is plausible
+  but UNVERIFIED (no SVD interrupt-number listing found in the tree);
+  verify at the bench or from the device's startup file before trusting
+  exception wiring.
+- Next software work (in order): (1) exception entry/return slice in cpu.rs
+  (round-trip test first, then delivery, then EXC_RETURN-aware BX/POP/
+  ldr-pc epilogues), (2) rerun boot gate — expect either dispatcher reach
+  or the next blocker, (3) wire EADC completion → NVIC request in the bus
+  (one line: on ADIF0 set, request_irq(42) — the EADC model already knows
+  when it fires), (4) static-audit/watchdog plan items remain open.
+- Graph coverage: `check_index_coverage` reports bus.rs/cpu.rs/thumb.rs/
+  emu_test.rs as `metadata_changed` (graph generation 2026-09-13 predates
+  all recent commits) — all graph conclusions this session were qualified
+  with direct source reads; re-index recommended before the next graph-
+  driven session.
+
+## Latest verification — LDMIA fix and IRQ42 dependency (2026-09-17)
+
+This entry supersedes older stack-runaway/current-blocker claims below.
+
+- The pending general-base LDMIA decoder/executor fix remains in the working
+  tree. With it, the baseline boot test no longer returns into GPIO space.
+- Removed the provisional constant SysTick COUNTFLAG stub. An always-complete
+  delay is not a timer model and must not be mistaken for full-boot validation.
+  The baseline M041 gate exhausts 200,000,000 instructions at PC `0xE06`,
+  polling SysTick CTRL at `0xE000E010`. Disassembly shows CTRL is written with
+  5 (ENABLE + CLKSOURCE, without TICKINT), then bit 16 is polled. This first
+  blocker needs a COUNTFLAG/counter model, not SysTick interrupt delivery.
+- The later wait observed with the provisional stub is `0x10B14..0x10B18`,
+  polling RAM `0x20000E6C`. Direct binary inspection found vector-table entry
+  `0xE8` = `0x108B5` (external IRQ42). Handler `0x108B4..0x108C0` writes 1
+  to that RAM flag, writes 1 to peripheral address `0x400430F8`, then BX LR.
+  This is a confirmed writer, not an exhaustive proof of all flag writers.
+- Added an explicitly ignored, firmware-artifact-gated handler regression in
+  `/var/home/j/cloudy-af/src-tauri/src/firmware/tests/emu_test.rs`. It starts
+  at the real vector, checks both cleared and pre-set flag states, verifies
+  the single RAM write and MMIO acknowledgment record, unchanged SP, return
+  within 32 instructions, and clean RAM ACL. Missing firmware fails this
+  explicitly invoked gate instead of silently passing.
+- No interrupt injection/completion service was implemented. The isolated
+  handler uses a return sentinel; it does not validate exception entry/return,
+  NVIC enable/pending/masking, peripheral conversion results, or timing.
+- Fresh validation: handler gate **1 passed**; library **183 passed, 47 ignored**;
+  baseline boot **failed as above**, first PID M041 (other PIDs not reached).
+  `git diff --check` passed. Logs: `/tmp/cloudy-af-irq42-regression.log` and
+  `/tmp/cloudy-af-irq42-boot-confirm.log`.
+- Graph service unavailable; evidence came from direct source reads and host
+  Capstone disassembly, not a current graph or exhaustive call-graph review.
+- Next software work: implement/test bounded SysTick register semantics, then
+  identify the peripheral register contract and model IRQ42 delivery without
+  forcing the RAM flag. Static-audit/watchdog plan items remain open. Hardware
+  probing stays deferred; no device access or flashing occurred.
+
+
 ## Ground truth settled earlier (do not reopen)
 
 - Framebuffer packing is **horizontal MSB-first** (proven via live 0xC1

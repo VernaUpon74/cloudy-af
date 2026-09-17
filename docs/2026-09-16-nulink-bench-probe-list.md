@@ -115,10 +115,22 @@ With the device showing the charge screen (plugged in, battery, screen on):
 
 - Halt via SWD, dump 1 KiB at **0x2000_2758** (af_190602) or
   **0x2000_2740** (af_190624 — shifted −0x18).
-- Expected: the packed 64×128 charge screen; on-pixel popcount **409**
-  (the emulator's golden for both builds). Record the raw dump as a golden
-  artifact under `AF_fw/` if it matches; if the popcount differs, that is a
-  REAL finding — capture a screen photo alongside for the handoff.
+- **CROSS-BOARD CORRECTION (2026-09-17, from flasher.rs panel table):** the
+  popcount-409 golden is the **64×128 default/fallback geometry** the
+  emulator descriptor uses. Physical boards dispatch their own panel from
+  the PID and the charge screen is drawn in THAT geometry — the Pico 75W
+  (M041) uses **96×16 (192 B, stride 12)** and the Pico 25 (M077)
+  **128×32 (512 B, stride 16)**. Do NOT expect 409 on either board unless
+  the render turns out to be geometry-independent (untraced). Procedure:
+  dump the used panel region (192 B / 512 B from the framebuffer base),
+  photograph the screen alongside, and record the per-board popcount as
+  the new silicon golden. If a matching-geometry emulator run is wanted,
+  a 96×16 / 128×32 descriptor variant against the same render entry is
+  the way to precompute it (not yet built).
+- Expected otherwise: nonzero packed pixels while the screen is on
+  (press a device button to wake it first — per `docs/goals.md`,
+  framebuffer reads all-zero when the display sleeps). Status word low
+  bits plausible.
 
 ### D6. Phase-global spares (the one free emulator assumption left)
 

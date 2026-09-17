@@ -733,3 +733,46 @@ fn test_af_190602_boot_dispatch_by_pid() {
     }
 }
 
+/// Execute the af_190602 IRQ 42 handler in isolation. Binary evidence:
+/// vector 0xE8 points to 0x108B5; the handler writes the completion flag
+/// polled at 0x10B14 and acknowledges the peripheral at 0x400430F8.
+/// This does not test interrupt delivery, exception entry/return, or timing.
+#[test]
+#[ignore] // requires AF_fw/decrypted/af_190602.dec.bin
+fn test_af_190602_irq42_handler_sets_completion_flag() {
+    use crate::firmware::emu::bus::Bus;
+    use crate::firmware::emu::cpu::Cpu;
+    use crate::firmware::emu::harness::RETURN_SENTINEL;
+    use std::path::Path;
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let fw = std::fs::read(root.join("AF_fw/decrypted/af_190602.dec.bin"))
+        .expect("explicit artifact gate requires the decrypted af_190602 image");
+    const FLAG: u32 = 0x2000_0E6C;
+    const ACK: u32 = 0x4004_30F8;
+    for initial_flag in [0u32, 1] {
+        let mut bus = Bus::new(fw.clone(), 0x8000);
+        bus.allow_region(FLAG..FLAG + 4);
+        bus.write_u32(FLAG, initial_flag).unwrap();
+        bus.write_log.clear();
+        let vector = bus.read_u32(0xE8).unwrap();
+        assert_eq!(vector, 0x0001_08B5, "unexpected IRQ42 vector");
+        let mut cpu = Cpu::new();
+        cpu.pc = vector & !1;
+        cpu.sp = 0x2000_3100;
+        cpu.lr = RETURN_SENTINEL | 1;
+        cpu.run_until(&mut bus, RETURN_SENTINEL, 32)
+            .expect("IRQ42 handler must return within 32 instructions");
+
+        assert_eq!(bus.read_u32(FLAG).unwrap(), 1);
+        assert_eq!(cpu.sp, 0x2000_3100, "handler must not alter SP");
+        assert!(bus.acl_violations.is_empty(), "{:?}", bus.acl_violations);
+        assert_eq!(bus.write_log.len(), 1, "only the completion flag is written");
+        let flag_write = &bus.write_log[0];
+        assert_eq!((flag_write.addr, flag_write.value, flag_write.size), (FLAG, 1, 4));
+        // MMIO writes are recorded, not latched; assert the write, not readback.
+        assert_eq!(bus.dropped_writes.len(), 1);
+        let ack = &bus.dropped_writes[0];
+        assert_eq!((ack.addr, ack.value, ack.size), (ACK, 1, 4));
+    }
+}

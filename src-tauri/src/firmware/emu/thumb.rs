@@ -117,6 +117,9 @@ pub enum Thumb2 {
     Stmdb { list: u16 },
     /// LDMIA sp!, {register list}: 32-bit POP. `list` bits 0..14 = r0..r14.
     Ldmia { list: u16 },
+    /// General LDMIA Rn{!}, {register list}; writeback is controlled by W.
+    /// Unlike the POP alias, this need not read or update SP.
+    LdmIA { rn: u8, list: u16, wb: bool },
     /// STMIA Rn, {register list}: 32-bit store-multiple WITHOUT writeback
     /// (hw1 = 1110_100P USW0 Rn with W=0, e.g. `stm.w sp, {r7, sl}` =
     /// E88D 0480, Capstone-verified, af_190602 0x8e02). `list` bits 0..14 =
@@ -516,6 +519,21 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         let w = (hw1 >> 5) & 1 == 1; // bit 5
         let l = (hw1 >> 4) & 1 == 1; // bit 4 = L
         let list = hw2;
+        // LDMIA T2: preserve the base register and W bit instead of treating
+        // every load-multiple as POP (E895 000F at af_190602 0xa1a).
+        if hw1 & 0xFFD0 == 0xE890 {
+            let rn = (hw1 & 0xF) as u8;
+            if rn == 15 || list.count_ones() < 2 || list & (1 << 13) != 0
+                || list & 0xC000 == 0xC000 || (w && list & (1 << rn) != 0)
+            {
+                return None;
+            }
+            return Some(Instr::Thumb2(if rn == 13 && w {
+                Thumb2::Ldmia { list } // POP alias
+            } else {
+                Thumb2::LdmIA { rn, list, wb: w }
+            }));
+        }
         if !w && !l {
             // STMIA Rn, {list}: no writeback. Capstone-verified:
             //   stm.w sp, {r7, sl}  e88d 0480 (af_190602 0x8e02).
