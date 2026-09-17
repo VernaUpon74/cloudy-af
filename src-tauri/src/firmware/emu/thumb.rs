@@ -236,6 +236,12 @@ pub enum Thumb2 {
     /// hw1 bits 7:4 = 0001 (0xF810|Rn). Byte load, zero-extended. No flags.
     /// (Capstone-verified: ldrb r1, [r3], #-1 = F813 1901, af_190602 0x13d18.)
     LdrbT4 { rt: u8, rn: u8, imm: u8, pre: bool, sub: bool },
+    /// Extend (UXTB/UXTH/SXTB/SXTH): hw1 = 0xFA0F..0xFAFF with the op nibble
+    /// at bits 7:4 (0=UXTB, 1=UXTH, 4=SXTB, 5=SXTH), Rn=1111; hw2 = 1111
+    /// Rd imm2 00 Rm. Operand is Rm ROR (imm2*8), then masked (byte/half)
+    /// and sign- or zero-extended. No flags.
+    /// (Capstone-verified: uxth.w ip, ip = FA1F FC8C, af_190602 0x2a42.)
+    Extend { signed: bool, half: bool, rd: u8, rm: u8, rot: u8 },
     /// LDR/STR (word, immediate) T4 with index/writeback control:
     /// `ldr/str Rt, [Rn, ±imm8]!` (P=1), `ldr/str Rt, [Rn], ±imm8` (P=0,
     /// W=1 mandatory). hw1 = 0xF840|Rn (STR) / 0xF850|Rn (LDR) — i.e. bits
@@ -678,6 +684,23 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         let pre = (hw2 >> 10) & 1 == 1;
         let sub = (hw2 >> 9) & 1 == 0;
         return Some(Instr::Thumb2(Thumb2::LdrbT4 { rt, rn, imm, pre, sub }));
+    }
+
+    // 32-bit extend: hw1 = 1111 1010 op 1111, hw2 = 1111 Rd imm2 00 Rm.
+    if op1 == 0b11111 && (hw1 & 0xFF0F) == 0xFA0F && (hw2 & 0xF000) == 0xF000 {
+        let op = (hw1 >> 4) & 0xF;
+        if let Some(&(signed, half)) = match op {
+            0 => Some(&(false, false)), // UXTB
+            1 => Some(&(false, true)),  // UXTH
+            4 => Some(&(true, false)), // SXTB
+            5 => Some(&(true, true)),  // SXTH
+            _ => None,
+        } {
+            let rd = ((hw2 >> 8) & 0xF) as u8;
+            let rot = ((hw2 >> 6) & 3) as u8;
+            let rm = (hw2 & 0xF) as u8;
+            return Some(Instr::Thumb2(Thumb2::Extend { signed, half, rd, rm, rot }));
+        }
     }
 
     // 32-bit LDR/STR (word, immediate) T4 with index/writeback. hw1 bits

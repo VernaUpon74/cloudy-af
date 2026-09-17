@@ -416,12 +416,31 @@ fn boot_until_settle(
     h.cpu.min_sp = h.cpu.sp;
 
     let mut n: u64 = 0;
+    // TEMP probe: one-shot log of the transition into non-image space, with
+    // the preceding PCs — the boot runaway diagnosis (Task 7).
+    let mut stray_logged = false;
     loop {
         if stop_pcs.contains(&h.cpu.pc) {
             return Ok(true);
         }
         if h.cpu.pc == hang_pc {
             return Ok(false);
+        }
+        let stray = h.cpu.pc >= 0x1F800 && h.cpu.pc < 0x2000_0000
+            || (0x4000_0000..0xE000_0000).contains(&h.cpu.pc);
+        if stray && !stray_logged {
+            stray_logged = true;
+            if std::env::var("CLOUDY_STRAY_TRACE").is_ok() {
+                let sp = h.cpu.sp;
+                let stack = (-4..6i32)
+                    .map(|i| h.bus.read_u32((sp as i64 + i as i64 * 4) as u32).unwrap_or(0xFFFF_FFFF))
+                    .collect::<Vec<_>>();
+                eprintln!(
+                    "[stray-pc] pc={:#010x} sp={:#010x} lr={:#010x} after {} insns; stack: {:x?}; recent: {:?}",
+                    h.cpu.pc, sp, h.cpu.lr, n, stack,
+                    h.cpu.trace.iter().rev().take(24).collect::<Vec<_>>()
+                );
+            }
         }
         h.cpu.step(&mut h.bus)?;
         if h.cpu.sp < h.cpu.min_sp {
@@ -545,17 +564,12 @@ fn test_af_190602_boot_dispatch_by_pid() {
         (0x4000_0104, 0), // protected reg 1 (boot descriptor)
         (0x5000_0000, 0), // protected reg 2 (boot descriptor)
         (0xE000_ED88, 0), // CPACR (FPU enable)
-        // Block-copy engine at 0x4000_C000 (discovered 2026-09-16, first
-        // full-boot run): the early-copy routine at 0x5DC (reset→main path)
-        // programs it once per word — status/start=[+8], trigger=[+0xc]=0,
-        // GO=[+0x10]=1 — then polls GO==0 at 0x5FE and copies [+8] to *r0,
-        // looping at 0x5EC for r0..r1 words. Without stubs, writes are
-        // dropped and reads return 0... yet the first pass exits its poll
-        // (evidence: trace reached 0x5EC) while the later invocation spun —
-        // so stub both polled reads explicitly: GO (+0x10) reads 0 = "not
-        // busy" (poll passes), status (+8) reads 0 (the copied word).
-        (0x4000_C010, 0), // engine GO: reads 0 = not busy → poll passes
-        (0x4000_C008, 0), // engine status/start: value copied to *r0
+        // 0x4000C000 is the Nuvoton FMC (ISPCON/ISPADR/ISPDAT/ISPCMD/ISPTRG),
+        // modeled in bus.rs (Fmc) — no stubs: ISPDAT reads serve the last ISP
+        // command's result, ISPTRG reads 0 (not busy). The boot's early copy
+        // loop (0x5EC), CID/DID/UID reads (0x38xx) and the 4 KiB LDROM SKU
+        // scan (0x302C: JWEI-gated, FMC READ 0x00100000..0x00100FFF, ~60
+        // 4-char ID literals incl. M041 at 0x3324) all go through it.
         (0x4000_0250, 0xFFFF_FFFF), // CLK status: wait_for_clock (0x338, literal
             // 0x40000200 @0x354) polls [base+0x50] until the requested bits read
             // SET (bics.w r2,r0,r2 == 0 → return 1); all-ones = every clock/PLL
@@ -587,6 +601,24 @@ fn test_af_190602_boot_dispatch_by_pid() {
         );
     }
 
+    // LDROM ground truth: the boot SKU-scan (0x302C) reads the first 4 KiB of
+    // the LDROM at 0x00100000 via FMC ISP READ and compares every word
+    // against ~60 4-char device-ID literals (E052/E115/E043 in registers +
+    // pools at 0x32F4-0x3388 and 0x34B8-0x3528; M041 at 0x3324). The real
+    // LDROM carries "M041" at offset 0x878 (HIDC at 0x5C7); without it the
+    // scan reads zeros and exhausts → `bl 0x2FF8` hang even with a valid
+    // dataflash PID. Artifact-gated like the dataflash dump.
+    let ldrom_path = root.join("test-fixtures/ldrom/ldrom_m041_16k.bin");
+    let ldrom: Option<Vec<u8>> = std::fs::read(&ldrom_path).ok().filter(|d| d.len() >= 0x1000);
+    if ldrom.is_none() {
+        eprintln!(
+            "no LDROM dump at {} — the SKU scan reads zeros and hangs at 0x2FF8 \
+             even for known PIDs (the scan source is the LDROM via FMC, not the \
+             dataflash — Task 7 discovery)",
+            ldrom_path.display()
+        );
+    }
+
     // Known PIDs → expected to reach the dispatcher. M177 is not asserted at
     // all: it is the STM32 line in a Nuvoton image (per the plan).
     let known_pids: &[&[u8; 4]] = &[
@@ -612,6 +644,11 @@ fn test_af_190602_boot_dispatch_by_pid() {
         let mut h = Harness::new(&img, load_descriptor(&desc_json).unwrap());
         for &(mmio, val) in BOOT_MMIO_STUBS {
             h.bus.set_stub(mmio, val);
+        }
+        // Attach the real LDROM dump for the FMC SKU scan (present on every
+        // physical device, so negatives get it too).
+        if let Some(ld) = &ldrom {
+            h.bus.fmc.ldrom = ld.clone();
         }
         // boot_until_settle owns the CPU setup (PC/SP/LR/min-sp) from the
         // boot descriptor constants; nothing else to prime here.

@@ -24,6 +24,70 @@ pub struct Bus {
     pub write_log: Vec<WriteRecord>,      // all stores that landed in RAM
     pub acl_violations: Vec<WriteRecord>, // stores outside allow-list or into flash
     pub dropped_writes: Vec<WriteRecord>, // stores to peripheral space
+    /// Nuvoton FMC ISP model (0x4000_C000); `pub` so gates can attach an
+    /// LDROM dump for the boot-time SKU scan.
+    pub fmc: Fmc,
+}
+
+/// Nuvoton FMC ISP model (M451, base 0x4000C000): ISPCON/ISPADR/ISPDAT/
+/// ISPCMD/ISPTRG at +0x00/+0x04/+0x08/+0x0C/+0x10. On an ISPTRG write of 1
+/// the command executes instantly (ISPTRG reads always 0 = not busy) and its
+/// result is served by later ISPDAT reads. ISP READ (cmd 0) serves the LDROM
+/// (mapped at 0x00100000 from an attached dump) and the flash image
+/// (APROM+dataflash). UID/CID/DID (cmds 4/0xB/0xC) return deterministic
+/// values — the af boot only stores them to globals (0x20000DA4+0x10C..),
+/// nothing compares them (verified 2026-09-16 disassembly, 0x3830..0x3892).
+#[derive(Default)]
+pub struct Fmc {
+    /// LDROM dump mapped at 0x0010_0000; empty = no LDROM (reads yield 0).
+    pub ldrom: Vec<u8>,
+    ispadr: u32,
+    ispcmd: u32,
+    ispdat: u32,
+}
+
+impl Fmc {
+    /// LDROM base on the M451.
+    pub const LDROM_BASE: u32 = 0x0010_0000;
+
+    fn read_word(&self, flash: &[u8], addr: u32) -> u32 {
+        let ld_lo = Self::LDROM_BASE as usize;
+        let ld_hi = ld_lo + self.ldrom.len();
+        let a = addr as usize;
+        if a >= ld_lo && a + 4 <= ld_hi {
+            let o = a - ld_lo;
+            u32::from_le_bytes(self.ldrom[o..o + 4].try_into().unwrap())
+        } else if a + 4 <= flash.len() {
+            u32::from_le_bytes(flash[a..a + 4].try_into().unwrap())
+        } else {
+            0
+        }
+    }
+
+    /// Execute the latched ISP command (ISPTRG := 1 written).
+    fn trigger(&mut self, flash: &[u8]) {
+        self.ispdat = match self.ispcmd {
+            0x00 => self.read_word(flash, self.ispadr), // READ double word
+            0x04 => match self.ispadr {
+                // READ_UID: 6 words at 0..0x18 — deterministic dummy.
+                0x00 => 0x1357_2468,
+                0x04 => 0x2468_ACE0,
+                0x08 => 0xBEEF_0042,
+                0x10 => 0x0BAD_C0DE,
+                0x14 => 0x1234_5678,
+                0x18 => 0x9ABC_DEF0,
+                _ => 0,
+            },
+            0x0B => 0x0000_00DA, // READ_CID (Nuvoton company id)
+            0x0C => match self.ispadr {
+                // READ_DID: two words at 0/4 — M451-series dummy values.
+                0x00 => 0x0D42_1000,
+                0x04 => 0x0000_0001,
+                _ => 0,
+            },
+            _ => 0, // program/erase forms: not modeled (boot never emits them)
+        };
+    }
 }
 
 impl Bus {
@@ -36,6 +100,7 @@ impl Bus {
             write_log: Vec::new(),
             acl_violations: Vec::new(),
             dropped_writes: Vec::new(),
+            fmc: Fmc::default(),
         }
     }
 
@@ -69,6 +134,12 @@ impl Bus {
         }
     }
 
+    /// ARMv7-M allows unaligned LDR/STR/ LDRH/STRH (only LDM/STM and some
+    /// exclusives require alignment) — and the af boot genuinely reads a
+    /// word at 0x20000161 — so normal loads/stores are accepted at any
+    /// address; the byte-wise read_le/write loops handle the split.
+    /// `check_align` stays for callers that must enforce it (none today).
+    #[allow(dead_code)]
     fn check_align(&self, addr: u32, size: u8) -> Result<(), EmuError> {
         if addr % size as u32 != 0 {
             Err(EmuError::Unaligned { addr, size })
@@ -78,24 +149,26 @@ impl Bus {
     }
 
     fn read(&self, addr: u32, size: u8) -> Result<u32, EmuError> {
-        self.check_align(addr, size)?;
         let size_us = size as usize;
         match self.resolve(addr, size)? {
             Region::Flash(off) => Ok(self.read_le(&self.flash, off, size_us)),
-            Region::Ram(off) => Ok({ self.trace_scan_read(addr); self.read_le(&self.ram, off, size_us) }),
-            Region::Peripheral => Ok(self.stubs.get(&addr).copied().unwrap_or(0)),
+            Region::Ram(off) => Ok(self.read_le(&self.ram, off, size_us)),
+            Region::Peripheral => {
+                // FMC ISP: ISPDAT reads return the last command result,
+                // ISPTRG reads 0 (commands complete instantly).
+                if addr == 0x4000_C008 {
+                    Ok(self.fmc.ispdat)
+                } else {
+                    Ok(self.stubs.get(&addr).copied().unwrap_or(0))
+                }
+            }
         }
     }
 
-    // TEMP discovery (Task 6, SKU-scan): when CLOUDY_SCAN_TRACE is set, print
-    // reads of the scan-buffer window 0x20000CA4..0x20000DA4 so we can see
-    // whether the boot fill routine ever populates it. REMOVE with the
-    // engine-write block.
-    fn trace_scan_read(&self, addr: u32) {
-        if (0x2000_0CA4..0x2000_0DA4).contains(&addr) && std::env::var("CLOUDY_SCAN_TRACE").is_ok() {
-            eprintln!("[scan-read] 0x{:08X} (pc=0x{:08X})", addr, crate::firmware::emu::cpu::Cpu::last_pc_global());
-        }
-    }
+    // TEMP discovery (Task 6, SKU-scan): kept for the next decode-gap hunt.
+    // The 0x20000CA4 "scan buffer" hypothesis was DISPROVEN (2026-09-16: the
+    // SKU scan reads the LDROM via FMC, not a RAM buffer) — the hook was
+    // removed with the scan-buffer theory; this comment records the dead end.
 
     fn read_le(&self, mem: &[u8], off: usize, size: usize) -> u32 {
         let mut v: u32 = 0;
@@ -127,7 +200,6 @@ impl Bus {
     }
 
     fn write(&mut self, addr: u32, value: u32, size: u8) -> Result<(), EmuError> {
-        self.check_align(addr, size)?;
         let record = WriteRecord { addr, value, size };
         match self.resolve(addr, size)? {
             Region::Flash(_) => {
@@ -145,12 +217,24 @@ impl Bus {
             }
             Region::Peripheral => {
                 // TEMP discovery (Task 6): when CLOUDY_ENGINE_TRACE is set,
-                // print block-copy engine writes to model its semantics;
-                // REMOVE after the engine model lands.
+                // print FMC writes to model its semantics; REMOVE once the
+                // FMC model is silicon-verified at the Nu-Link bench.
                 if (0x4000_C000..0x4000_C018).contains(&addr)
                     && std::env::var("CLOUDY_ENGINE_TRACE").is_ok()
                 {
                     eprintln!("[engine-write] 0x{:08X} <= 0x{:08X} (pc=0x{:08X})", addr, value, crate::firmware::emu::cpu::Cpu::last_pc_global());
+                }
+                // FMC ISP register latch/trigger (word writes only).
+                if size == 4 {
+                    match addr {
+                        0x4000_C004 => self.fmc.ispadr = value,
+                        0x4000_C008 => self.fmc.ispdat = value, // ISPDIN (write data)
+                        0x4000_C00C => self.fmc.ispcmd = value,
+                        0x4000_C010 if value & 1 != 0 => {
+                            self.fmc.trigger(&self.flash);
+                        }
+                        _ => {}
+                    }
                 }
                 self.dropped_writes.push(record);
             }
@@ -220,10 +304,14 @@ mod tests {
 
     #[test]
     fn test_unmapped_and_unaligned() {
+        // ARMv7-M permits unaligned LDR/STR (the af boot loads a word at
+        // 0x20000161), so unaligned accesses succeed; only unmapped space
+        // faults.
         let mut b = bus();
         assert!(matches!(b.read_u32(0x8000_0000), Err(EmuError::Unmapped { .. })));
-        assert!(matches!(b.read_u32(RAM_BASE + 0x101), Err(EmuError::Unaligned { size: 4, .. })));
-        assert!(matches!(b.write_u16(RAM_BASE + 0x101, 0), Err(EmuError::Unaligned { size: 2, .. })));
+        b.write_u32(RAM_BASE + 0x100, 0x1122_3344).unwrap();
+        assert_eq!(b.read_u32(RAM_BASE + 0x101).unwrap(), 0x0011_2233);
+        assert_eq!(b.read_u16(RAM_BASE + 0x101).unwrap(), 0x2233);
     }
 
     #[test]

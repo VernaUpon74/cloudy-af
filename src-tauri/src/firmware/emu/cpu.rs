@@ -827,6 +827,20 @@ impl Cpu {
                 self.set_reg(rt, v as u32);
                 self.pc = self.pc.wrapping_add(4);
             }
+            Instr::Thumb2(Thumb2::Extend { signed, half, rd, rm, rot }) => {
+                // UXTB/UXTH/SXTB/SXTH: operand = Rm ROR (imm2*8), masked to
+                // the byte/half lane, then zero- (UX) or sign- (SX) extended.
+                // No flags.
+                let v = self.reg(rm).rotate_right(rot as u32 * 8);
+                let v = if half { v & 0xFFFF } else { v & 0xFF };
+                let v = if signed {
+                    if half { (v as i16) as i32 as u32 } else { (v as i8) as i32 as u32 }
+                } else {
+                    v
+                };
+                self.set_reg(rd, v);
+                self.pc = self.pc.wrapping_add(4);
+            }
             Instr::Thumb2(Thumb2::LdrStrT4 { load, rt, rn, imm, pre, sub, wb }) => {
                 // 32-bit LDR/STR word with index/writeback (T4). Per ARM ARM
                 // A7.7.42: offset_addr = Rn ± imm8; address = offset_addr
@@ -1633,15 +1647,19 @@ mod tests {
     }
 
     #[test]
-    fn test_unaligned_ldr_faults() {
-        // 0x6808 = ldr r0, [r1, #0] at an odd address
+    fn test_unaligned_ldr_succeeds() {
+        // 0x6808 = ldr r0, [r1, #0]. ARMv7-M allows unaligned LDR (the af
+        // boot genuinely loads a word at 0x20000161) — the load must
+        // succeed and return the little-endian byte sequence.
         let mut flash = vec![0u8; 0x100];
         flash[0..2].copy_from_slice(&0x6808u16.to_le_bytes());
         let mut bus = Bus::new(flash, 0x1000);
+        bus.write_u32(RAM_BASE + 0x100, 0x1122_3344).unwrap();
         let mut cpu = Cpu::new();
         cpu.r[1] = RAM_BASE + 0x101;
-        let err = cpu.step(&mut bus).unwrap_err();
-        assert!(matches!(err, EmuError::Unaligned { size: 4, .. }));
+        cpu.step(&mut bus).unwrap();
+        // bytes at 0x101..0x105 = 33 22 11 00 → 0x00112233
+        assert_eq!(cpu.r[0], 0x0011_2233, "little-endian split across the word");
     }
 
     #[test]
@@ -1837,14 +1855,17 @@ mod tests {
     fn test_wild_address_faults_not_panics() {
         // carried ruling: address arithmetic must wrap, not panic in debug.
         // 0x6848 = ldr r0, [r1, #4] with r1 = 0xFFFF_FFFE wraps the base+offset
-        // add to 2; the step must produce a clean EmuError (unaligned here).
+        // add to 2. With ARMv7-M-legal unaligned loads, address 2 resolves to
+        // flash (offset 2 < image len) — the step must succeed with the value
+        // read from there (zeros in this fixture), not panic in debug.
         let mut flash = vec![0u8; 0x100];
         flash[0..2].copy_from_slice(&0x6848u16.to_le_bytes());
         let mut bus = Bus::new(flash, 0x1000);
         let mut cpu = Cpu::new();
         cpu.r[1] = 0xFFFF_FFFE;
-        let err = cpu.step(&mut bus).unwrap_err();
-        assert!(matches!(err, EmuError::Unaligned { addr: 2, size: 4 }));
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[0], 0);
+        assert_eq!(cpu.pc, 2); // 16-bit ldr
     }
 
     #[test]

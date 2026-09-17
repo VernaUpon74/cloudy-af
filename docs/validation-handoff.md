@@ -116,6 +116,65 @@ Doc drift to reconcile: goals.md's uhid entry still says NOT YET RUN LIVE
 while Task 3 above records 5 consecutive live PASS runs — verify which is
 current before trusting either. Nothing from this session git-committed yet.
 
+## Task 7 — SKU scan root-caused: FMC LDROM scan, not dataflash; FMC model lands (2026-09-16)
+
+Session goal: advance §2 as far as the emulator allows before the Nu-Link clip
+session. Wins, in order of discovery:
+
+1. **"Block-copy engine" re-identified: it is the Nuvoton FMC** (flash
+   controller, M451 base 0x4000C000: ISPCON/ISPADR/ISPDAT/ISPCMD/ISPTRG at
+   +0x00/+0x04/+0x08/+0x0C/+0x10). The Task-6 write pattern was ISP command
+   sequences: [0x0C]=cmd, [0x04]=addr, [0x08]=data, [0x10]=trigger-then-poll.
+2. **SKU scan re-identified: it reads the LDROM, not the dataflash** — both
+   Task-6 hypotheses (dataflash walk; 0x20000CA4 RAM scan buffer) DISPROVEN
+   (0 reads of that buffer ever happen). Scan function 0x302C: gates on the
+   "JWEI" marker at APROM 0x1BF13, then FMC READs (ISPCMD=0) 0x00100000..
+   0x00100FFF (1024 words = the r5→0x1000 count), comparing each word
+   against ~60 4-char device-ID literals (E052/E115/E043 in r6-r8 + pools at
+   0x32F4-0x3388 and 0x34B8-0x3528; **M041 at 0x3324**). The real LDROM
+   carries "M041" at offset 0x878 (HIDC at 0x5C7) — no pool ID ever appears
+   in the 2 KiB dataflash dump, so no dataflash content could have matched.
+   This fully explains the "scan-exhaust" hang on real and synthetic images.
+3. **FMC ISP model implemented** (`emu/bus.rs::Fmc`): word writes latch
+   ISPADR/ISPDIN/ISPCMD, ISPTRG:=1 executes; ISPDAT reads serve the result;
+   ISPTRG reads 0 (instant). Cmd 0 READ serves the LDROM (dump attached at
+   0x00100000) or the flash image; cmds 4/0xB/0xC (UID/CID/DID) return
+   deterministic dummies — the boot only STORES them (globals at
+   0x20000DA4+0x10C.., disasm 0x3830-0x3892, nothing compares). Nu-Link
+   bench: read real CID/DID/UID and refine.
+4. **LDROM fixture**: `test-fixtures/ldrom/ldrom_m041_16k.bin` (16 KiB,
+   de-shifted dump, vectors SP=0x200014a8 reset=0x165) — gitignored like
+   the rescue kit (test-fixtures/), copied from
+   `scratch-stash/DecryptProject/ldrom/ldrom_m041.bin`; artifact-gated in
+   the boot test like the dataflash dump; the two old FMC stubs removed.
+5. **Unaligned LDR/STR legalized** (ARMv7-M permits them; the boot genuinely
+   loads a word at 0x20000161 — the old strict-alignment check was wrong).
+   `check_align` retained but unused; 2 unit tests rewritten to the correct
+   semantics (112/112 emu tests pass).
+6. **Extend family added** (UXTB/UXTH/SXTB/SXTH, 0xFA0F-family op nibble
+   0/1/4/5): the third honest signature was undefined `FA1F FC8C`
+   (uxth.w ip, ip) at 0x2A42.
+7. **Current honest signature (next session's input)**: M041 now boots
+   through ALL init (clock, FMC identity reads, SKU scan match, init-table
+   copy) and runs the main event loop to ~212K instructions, then a
+   `pop {r4,r5,r6,pc}` at 0xA46 returns to **0x40050021** — the popped frame
+   {r4=0xa, r5=0x40051020, r6=0x40051000, pc=0x40050021} (values match the
+   accessor literals at 0xA68-0xA7C) is a pushed-LR divergence, likely
+   another decode gap (IT-block skip sizes are prime suspect — the code
+   around the caller uses `itete ne` over mixed 16/32-bit slots). Stray-pc
+   probe is in `boot_until_settle` behind `CLOUDY_STRAY_TRACE` (logs pc,
+   sp, lr, stack window, last 24 PCs).
+
+### Emulator → Nu-Link bench list (updated)
+
+- FMC ISP CID/DID/UID real values (currently dummies 0xDA / 0x0D421000 /
+  0x13572468…) and confirm the boot never branches on them.
+- 0x40050000 block semantics (accessor fns 0xA0C-0xA56: struct at +0x20,
+  +0x1000, +0x1020) — read live registers before the clip session.
+- The 0x1BF13 "JWEI" marker and the LDROM SKU-block provenance (factory-
+  written per-unit? one M041 table for all PIDs?).
+- Full LDROM length (16 KiB assumed from the dump; verify with ICP).
+
 ## Task 6 — emulator advance: uhid gate green + STR-writeback decode defect FIXED (2026-09-16)
 
 Session goal: advance the hardware plans as far as the emulator allows
