@@ -175,6 +175,20 @@ session. Wins, in order of discovery:
   written per-unit? one M041 table for all PIDs?).
 - Full LDROM length (16 KiB assumed from the dump; verify with ICP).
 
+### Visual-check tooling (same session)
+
+- `src-tauri/src/bin/anim_shots.rs`: dumps 16 emulator phases per effect
+  (gradient/center/diagonal) as PGMs into a folder — same drive as
+  `test_af_190602_animation_frames` (prime → timeout bits → config byte →
+  run_at CLOCK_RENDERER per phase); on-pixel counts match the gate
+  (gradient → 0 immediately, center 409 @phase 4, diagonal 196 @phase 4).
+- `scripts/anim_shots_to_gif.py`: PGMs → PNG (+4x scaled) and one animated
+  GIF per effect (Pillow; identical consecutive frames merged).
+- Run: `toolbox run -c arcticfox-build sh -c 'cd src-tauri && cargo run
+  --offline --release --bin anim_shots'` then `python3
+  scripts/anim_shots_to_gif.py tmp/anim-shots` (output gitignored under
+  tmp/).
+
 ## Task 6 — emulator advance: uhid gate green + STR-writeback decode defect FIXED (2026-09-16)
 
 Session goal: advance the hardware plans as far as the emulator allows
