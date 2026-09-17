@@ -82,8 +82,18 @@ impl Bus {
         let size_us = size as usize;
         match self.resolve(addr, size)? {
             Region::Flash(off) => Ok(self.read_le(&self.flash, off, size_us)),
-            Region::Ram(off) => Ok(self.read_le(&self.ram, off, size_us)),
+            Region::Ram(off) => Ok({ self.trace_scan_read(addr); self.read_le(&self.ram, off, size_us) }),
             Region::Peripheral => Ok(self.stubs.get(&addr).copied().unwrap_or(0)),
+        }
+    }
+
+    // TEMP discovery (Task 6, SKU-scan): when CLOUDY_SCAN_TRACE is set, print
+    // reads of the scan-buffer window 0x20000CA4..0x20000DA4 so we can see
+    // whether the boot fill routine ever populates it. REMOVE with the
+    // engine-write block.
+    fn trace_scan_read(&self, addr: u32) {
+        if (0x2000_0CA4..0x2000_0DA4).contains(&addr) && std::env::var("CLOUDY_SCAN_TRACE").is_ok() {
+            eprintln!("[scan-read] 0x{:08X} (pc=0x{:08X})", addr, crate::firmware::emu::cpu::Cpu::last_pc_global());
         }
     }
 
@@ -134,6 +144,14 @@ impl Bus {
                 self.write_log.push(record);
             }
             Region::Peripheral => {
+                // TEMP discovery (Task 6): when CLOUDY_ENGINE_TRACE is set,
+                // print block-copy engine writes to model its semantics;
+                // REMOVE after the engine model lands.
+                if (0x4000_C000..0x4000_C018).contains(&addr)
+                    && std::env::var("CLOUDY_ENGINE_TRACE").is_ok()
+                {
+                    eprintln!("[engine-write] 0x{:08X} <= 0x{:08X} (pc=0x{:08X})", addr, value, crate::firmware::emu::cpu::Cpu::last_pc_global());
+                }
                 self.dropped_writes.push(record);
             }
         }

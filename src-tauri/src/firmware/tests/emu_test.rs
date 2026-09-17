@@ -374,3 +374,285 @@ fn test_af_190602_animation_frames() {
         eprintln!("{name}: ok, final on-pixels = {final_on}");
     }
 }
+// == Full-boot per-PID dispatch emulation (validation §2, plan 2026-09-14) ==
+
+/// Build a combined firmware+dataflash image suitable for booting from reset.
+///
+/// The stock firmware (0x1C7EC bytes) is laid out at 0x00000..0x1C7EB,
+/// the APROM tail / gap (0x1C7EC..0x1F000) is padded with 0xFF, and the
+/// dataflash (2048 B) is placed at 0x1F000..0x1F7FF. The existing Bus::read
+/// flash path serves dataflash reads from this combined image, so no new
+/// callback plumbing is needed — dataflash byte 0 is at img[0x1F000] and
+/// the PID lives at dataflash offset 316 = img[0x1F13C..0x1F140].
+const COMBINED_IMAGE_SIZE: usize = 0x1F800;
+/// Boot-gate helper: run the emulator from the reset vector until either the
+/// dispatcher is reached (success) or the unknown-PID hang at 0x2FF8 is hit
+/// (failure), or the budget is exhausted.
+///
+/// `stop_pcs` is the set of PCs that count as "dispatcher reached" — the
+/// dispatcher is at 0xD684; the render entry (charge-screen composer inner
+/// body) is at 0x8CD1. The first run should reveal which of these (if either)
+/// the boot path actually reaches, and the set can be refined then.
+///
+/// Returns `Ok(true)` if a stop_pc was reached, `Ok(false)` if the hang target
+/// (0x2FF8) was reached, `Err(...)` on budget/exhaustion/unmapped.
+fn boot_until_settle(
+    h: &mut Harness,
+    budget: u64,
+    stop_pcs: &[u32],
+    hang_pc: u32,
+) -> Result<bool, EmuError> {
+    // Set up the CPU for boot: PC = reset handler (the vector-table value
+    // carries the Thumb bit — mask it off; Cpu.pc must be the even address
+    // the CPU fetches from), SP = initial_sp, LR = RETURN_SENTINEL | 1
+    // (safe default; the boot path returns to main which loops forever, but
+    // we stop on the signal instead).
+    use crate::firmware::emu::harness::RETURN_SENTINEL;
+    let reset_vector = 0x00001659u32;
+    let initial_sp = 0x200031C0u32;
+    h.cpu.pc = reset_vector & !1;
+    h.cpu.sp = initial_sp;
+    h.cpu.lr = RETURN_SENTINEL | 1;
+    h.cpu.min_sp = h.cpu.sp;
+
+    let mut n: u64 = 0;
+    loop {
+        if stop_pcs.contains(&h.cpu.pc) {
+            return Ok(true);
+        }
+        if h.cpu.pc == hang_pc {
+            return Ok(false);
+        }
+        h.cpu.step(&mut h.bus)?;
+        if h.cpu.sp < h.cpu.min_sp {
+            h.cpu.min_sp = h.cpu.sp;
+        }
+        n += 1;
+        if n >= budget {
+            return Err(EmuError::BudgetExceeded { executed: n });
+        }
+    }
+}
+
+const DATACFLASH_OFFSET: usize = 0x1F000;
+const DATACFLASH_SIZE: usize = 2048;
+const FIRMWARE_SIZE: usize = 0x1C7EC; // af_190602.dec.bin length
+
+fn make_combined_image(firmware: &[u8], dataflash: &[u8; DATACFLASH_SIZE]) -> Vec<u8> {
+    assert!(
+        firmware.len() <= FIRMWARE_SIZE,
+        "firmware too large for combined image: {} > {}",
+        firmware.len(),
+        FIRMWARE_SIZE
+    );
+    let mut img = vec![0xFFu8; COMBINED_IMAGE_SIZE];
+    img[..firmware.len()].copy_from_slice(firmware);
+    img[DATACFLASH_OFFSET..DATACFLASH_OFFSET + DATACFLASH_SIZE].copy_from_slice(dataflash);
+    img
+}
+
+/// Build a 2048-byte dataflash with the given 4-byte product ID at offset 316
+/// (DF offset 316 = MCU address 0x1F13C) and a sane default for the rest:
+/// boot flag 0 (boot into APROM / normal runtime), fw version 110 at offset 256
+/// (matching the AF_190602 observation in goals.md: fw_versions=[110]).
+/// All other offsets are zero. Offsets are dataflash-local (0..2048); the caller
+/// maps them into the combined image at 0x1F000 + offset.
+fn make_dataflash(pid: &[u8; 4]) -> [u8; DATACFLASH_SIZE] {
+    let mut df = [0u8; DATACFLASH_SIZE];
+    // fw version 110 at dataflash offset 256 (LE32)
+    df[256..260].copy_from_slice(&110u32.to_le_bytes());
+    // boot flag 0
+    df[9] = 0;
+    // PID at offset 316
+    df[316..320].copy_from_slice(pid);
+    df
+}
+
+#[test]
+fn test_combined_image_pins_pid_at_expected_offset() {
+    let fw = vec![0u8; FIRMWARE_SIZE];
+    let pid = b"M041";
+    let df = make_dataflash(pid);
+    let img = make_combined_image(&fw, &df);
+    assert_eq!(&img[0x1F13C..0x1F140], pid, "PID not at dataflash offset 316 in combined image");
+    // dataflash byte 0 lives at img[0x1F000] (df[0] is 0 in this layout —
+    // the PID is at offset 316, checked above); verify the mapping with the
+    // fw-version word at dataflash offset 256 = img[0x1F100].
+    assert_eq!(
+        &img[0x1F000 + 256..0x1F000 + 260],
+        &110u32.to_le_bytes(),
+        "fw version not at dataflash offset 256 in combined image"
+    );
+    // APROM tail padding is 0xFF
+    assert_eq!(
+        img[FIRMWARE_SIZE..DATACFLASH_OFFSET],
+        vec![0xFFu8; DATACFLASH_OFFSET - FIRMWARE_SIZE],
+        "APROM tail / gap not padded with 0xFF"
+    );
+}
+
+/// LAYER-6 FULL-BOOT GATE (validation §2): boot the *whole* stock image from
+/// the reset vector with a synthetic dataflash carrying each product ID, and
+/// assert the real boot dispatch reaches the dispatcher/render path without
+/// ever hitting the unknown-PID infinite loop at 0x2FF8 — the exact failure
+/// mode that hung the Pico Dual, which no render-only gate covers.
+///
+/// Stop PCs are discovery-driven: 0xD684 is the documented dispatcher, and
+/// 0x8CD1 the charge-screen render entry the descriptor names. Whichever the
+/// boot path reaches first ends the run; the eprintln hit-report lets the
+/// stop set be refined to the exact reachable PC later.
+#[test]
+#[ignore]
+fn test_af_190602_boot_dispatch_by_pid() {
+    use std::path::Path;
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    // NOTE: the Descriptor schema is the render descriptor's (render_entry /
+    // display_buffer / ram_size); the boot json has a different schema and
+    // cannot be loaded as one. We take the render descriptor for the harness
+    // and hardcode the reset/SP/hang constants from the boot json instead.
+    let desc_path = root.join("resources/animations/af_190602.json");
+    let img_path = root.join("AF_fw/decrypted/af_190602.dec.bin");
+    if !desc_path.exists() || !img_path.exists() {
+        eprintln!("descriptor or decrypted image missing; skipping boot gate");
+        return;
+    }
+    let desc_json = std::fs::read_to_string(&desc_path).unwrap();
+    let fw = std::fs::read(&img_path).unwrap();
+
+    // Boot constants from resources/boot/af_190602.json (reset vector
+    // 0x1659 and initial SP 0x200031C0 are applied by boot_until_settle).
+    const HANG_PC: u32 = 0x0000_2FF8; // unknown-PID infinite loop
+    const DISPATCHER: u32 = 0x0000_D684;
+    const RENDER_ENTRY: u32 = 0x0000_8CD1;
+    // BUDGET raised 10M→200M (2026-09-16): the 0x4000_C000 block-copy engine
+    // handshake costs ~13 emulated insns per copied word (program [0xC]=0,
+    // [0x10]=1, poll [0x10]==0, copy [8], loop at 0x5EC) where the real
+    // engine does it in a few cycles — boot copies enough words that 10M
+    // ran out mid-copy (discovery run: ~30M insn/s, 200M ≈ 7 s wall clock).
+    const BUDGET: u64 = 200_000_000;
+
+    // MMIO the boot path touches, with the values the boot code requires.
+    // Discovery (first run): clock_pll_init spins at 0x1890 writing the
+    // REGWRPROT unlock bytes (0x59, 0x16, 0x88 — the boot descriptor's
+    // unlock_bytes) to 0x40000100 and looping until the register reads back
+    // NONZERO (real REGWRPROT bit0 sets when unlocked) — so that stub must
+    // return 1, not 0. Reads return the stub value, writes are dropped.
+    // Anything else the path turns out to touch surfaces as Unmapped or a
+    // budget-exceeded trace — add it here and record it in the handoff doc.
+    const BOOT_MMIO_STUBS: &[(u32, u32)] = &[
+        (0x4000_0100, 1), // REGWRPROT: unlock sequence leaves it read-1
+        (0x4000_0104, 0), // protected reg 1 (boot descriptor)
+        (0x5000_0000, 0), // protected reg 2 (boot descriptor)
+        (0xE000_ED88, 0), // CPACR (FPU enable)
+        // Block-copy engine at 0x4000_C000 (discovered 2026-09-16, first
+        // full-boot run): the early-copy routine at 0x5DC (reset→main path)
+        // programs it once per word — status/start=[+8], trigger=[+0xc]=0,
+        // GO=[+0x10]=1 — then polls GO==0 at 0x5FE and copies [+8] to *r0,
+        // looping at 0x5EC for r0..r1 words. Without stubs, writes are
+        // dropped and reads return 0... yet the first pass exits its poll
+        // (evidence: trace reached 0x5EC) while the later invocation spun —
+        // so stub both polled reads explicitly: GO (+0x10) reads 0 = "not
+        // busy" (poll passes), status (+8) reads 0 (the copied word).
+        (0x4000_C010, 0), // engine GO: reads 0 = not busy → poll passes
+        (0x4000_C008, 0), // engine status/start: value copied to *r0
+        (0x4000_0250, 0xFFFF_FFFF), // CLK status: wait_for_clock (0x338, literal
+            // 0x40000200 @0x354) polls [base+0x50] until the requested bits read
+            // SET (bics.w r2,r0,r2 == 0 → return 1); all-ones = every clock/PLL
+            // wait succeeds immediately instead of burning its 0x20F581 countdown
+            // (~10M insns per call, clock_pll_init calls it 3×).
+    ];
+
+    // Real dataflash ground truth: the LDROM boot path SKU-scans the whole
+    // 2 KiB dataflash image (0x30AE loop: r1 walks 4 KiB, r5 counts to
+    // 0x1000, Eleaf-SKU ASCII prefix literals in the pool at 0x34B8) and
+    // hangs on `bl 0x2FF8` when nothing matches — a sparse synthetic
+    // image (PID+version+bootflag only) therefore exhausts the scan even
+    // with a valid PID (Task 6 discovery: real dumps carry e.g. "U25TE" at
+    // df[0x124] plus a full config block). Boot the REAL rescue dump
+    // (PID-patched to the matrix value) when present; fall back to the
+    // synthetic image, which then honestly fails the scan for ALL pids —
+    // acceptable only for the negative cases, where the hang IS the
+    // expectation.
+    let real_df_path = root.join("test-fixtures/rescue/dataflash_stock_v1.00.bin");
+    let real_df: Option<Vec<u8>> = std::fs::read(&real_df_path)
+        .ok()
+        .filter(|d| d.len() >= DATACFLASH_SIZE && &d[316..320] == b"M041");
+    if real_df.is_none() {
+        eprintln!(
+            "no real M041 dataflash dump at {} — known-PID boot matrix will \
+             exhaust the LDROM SKU scan on the synthetic image (scan-exhaust \
+             hang is a known limitation, see handoff Task 6)",
+            real_df_path.display()
+        );
+    }
+
+    // Known PIDs → expected to reach the dispatcher. M177 is not asserted at
+    // all: it is the STM32 line in a Nuvoton image (per the plan).
+    let known_pids: &[&[u8; 4]] = &[
+        b"M041", b"M065", b"M077", b"M045", b"M038", b"M037", b"M095", b"M105", b"M064",
+    ];
+    let unknown_pids: &[&[u8; 4]] = &[b"XXXX"];
+
+    for pid in known_pids.iter().chain(unknown_pids.iter()) {
+        // Known PIDs boot on the real dump (PID-patched); negatives use the
+        // sparse synthetic image, where the SKU scan exhausts → 0x2FF8 hang.
+        let mut df: [u8; DATACFLASH_SIZE] = match &real_df {
+            Some(d) => {
+                let mut a = [0u8; DATACFLASH_SIZE];
+                a.copy_from_slice(&d[..DATACFLASH_SIZE]);
+                a
+            }
+            None => make_dataflash(pid),
+        };
+        df[316..320].copy_from_slice(*pid);
+        let img = make_combined_image(&fw, &df);
+        // Fresh descriptor-derived ACL/stub state per harness; the JSON is
+        // re-parsed each iteration because Descriptor is not Clone.
+        let mut h = Harness::new(&img, load_descriptor(&desc_json).unwrap());
+        for &(mmio, val) in BOOT_MMIO_STUBS {
+            h.bus.set_stub(mmio, val);
+        }
+        // boot_until_settle owns the CPU setup (PC/SP/LR/min-sp) from the
+        // boot descriptor constants; nothing else to prime here.
+
+        let stop_pcs = [DISPATCHER, RENDER_ENTRY];
+        let pid_str = String::from_utf8_lossy(*pid).into_owned();
+        match boot_until_settle(&mut h, BUDGET, &stop_pcs, HANG_PC) {
+
+            Ok(true) => {
+                assert!(
+                    known_pids.contains(&pid),
+                    "PID {pid_str} is an unknown-PID negative case but reached the dispatcher \
+                     (PC {:#010x}) — it must hit the 0x2FF8 hang",
+                    h.cpu.pc
+                );
+                eprintln!(
+                    "PID {pid_str}: settled at {:#010x} ({}), min_sp {:#010x}, \
+                     {} acl violations (boot bss/stack writes outside the render ACL), \
+                     {} dropped MMIO writes",
+                    h.cpu.pc,
+                    if h.cpu.pc == DISPATCHER { "dispatcher" } else { "render entry" },
+                    h.cpu.min_sp,
+                    h.bus.acl_violations.len(),
+                    h.bus.dropped_writes.len()
+                );
+            }
+            Ok(false) => {
+                assert!(
+                    !known_pids.contains(&pid),
+                    "PID {pid_str} is a known PID but hit the 0x2FF8 unknown-PID hang\n{}",
+                    h.cpu.debug_dump()
+                );
+                eprintln!("PID {pid_str}: hit the unknown-PID hang at 0x2FF8 as expected");
+            }
+            Err(EmuError::Unmapped { addr }) => panic!(
+                "PID {pid_str}: boot hit unmapped address {addr:#010x} — add it to \
+                 BOOT_MMIO_STUBS (or extend the bus) and record it in the handoff doc\n{}",
+                h.cpu.debug_dump()
+            ),
+            Err(e) => panic!("PID {pid_str}: boot failed: {e}\n{}", h.cpu.debug_dump()),
+        }
+    }
+}
+
