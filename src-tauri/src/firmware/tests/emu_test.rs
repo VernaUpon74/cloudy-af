@@ -229,6 +229,9 @@ fn apply_center(buf: &mut [u8], phase: u32) {
 fn apply_diagonal(buf: &mut [u8], phase: u32) {
     crate::firmware::anim::effects::diagonal_sweep_apply(buf, 64, phase);
 }
+fn apply_wave(buf: &mut [u8], phase: u32) {
+    crate::firmware::anim::effects::wave_apply(buf, phase);
+}
 
 /// Run the emulator from `entry` until the return sentinel, like
 /// `Harness::run_frame` but with an explicit entry point (the stock render
@@ -288,7 +291,8 @@ fn gate_animation_frames(build: &str) {
     use crate::firmware::anim::asm::AnimError;
     use crate::firmware::anim::effects::{
         build_center_pulse_patch, build_diagonal_sweep_patch, build_gradient_fade_patch,
-        CONFIG_CENTER_PULSE, CONFIG_DIAGONAL_SWEEP, CONFIG_GRADIENT_FADE,
+        build_wave_patch, CONFIG_CENTER_PULSE, CONFIG_DIAGONAL_SWEEP, CONFIG_GRADIENT_FADE,
+        CONFIG_WAVE,
     };
     use crate::firmware::anim::effects::load_animation_desc;
     use crate::firmware::emu::harness::dump_pgm;
@@ -312,10 +316,11 @@ fn gate_animation_frames(build: &str) {
         fn(&str) -> Result<Patch, AnimError>,
         u8,
         fn(&mut [u8], u32),
-    ); 3] = [
+    ); 4] = [
         ("gradient", build_gradient_fade_patch, CONFIG_GRADIENT_FADE, apply_gradient),
         ("center", build_center_pulse_patch, CONFIG_CENTER_PULSE, apply_center),
         ("diagonal", build_diagonal_sweep_patch, CONFIG_DIAGONAL_SWEEP, apply_diagonal),
+        ("wave", build_wave_patch, CONFIG_WAVE, apply_wave),
     ];
 
     for (name, build_patch, config, apply) in table {
@@ -354,7 +359,8 @@ fn gate_animation_frames(build: &str) {
         let (w, hh) = (h.desc.display_buffer.width, h.desc.display_buffer.height);
         let unpack = |raw: &[u8]| crate::firmware::emu::harness::unpack_block1(raw, w, hh);
         let mut prev = prime.clone();
-        for k in 1..=4u32 {
+        // Cover complete cycles, including the center/diagonal clipping edges.
+        for k in 1..=64u32 {
             run_at(&mut h, clock_renderer, 5_000_000);
             let phase = h.bus.read_u32(phase_global).unwrap();
             assert_eq!(phase, k, "{build} {name}: phase global must count cave runs");

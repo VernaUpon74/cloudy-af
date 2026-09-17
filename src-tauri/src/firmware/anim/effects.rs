@@ -1,8 +1,9 @@
 //! Animation effects: pure Rust references + Thumb-1 cave emission.
 //!
-//! A family of "fade" effects for the timed-out screen: a 16-entry sine LUT
-//! maps each framebuffer byte's band index to a brightness; bytes below the
-//! half-amplitude threshold are cleared in place. Integer math only.
+//! Every effect is a **self-contained animation**: the cave clears the whole
+//! framebuffer and then *draws its own content*, so what appears on the charge
+//! screen is a genuine enumerated animation and never the stock charge text
+//! dimmed, banded, or otherwise manipulated.
 //!
 //! Buffer geometry (see `resources/re/af_190602-render.md`): 64x128 1bpp,
 //! vertically packed (`pixel x+(y/8)*width, bit y%8`), so byte `i` lives in
@@ -13,10 +14,10 @@
 //! into the APROM-tail code cave. The cave replays the overwritten
 //! `tst.w r2, #0x20000`; when the timeout bit is clear (or the config byte
 //! selects no effect) it resumes the stock path; when timed out it bumps the
-//! phase global, fades the display buffer in place, and resumes.
+//! phase global, redraws the display buffer, and resumes.
 //!
 //! The config byte (a spare dataflash byte) selects the effect:
-//! 2 = Gradient Fade, 3 = Center Pulse, 4 = Diagonal Sweep.
+//! 2 = Gradient Bar, 3 = Center Pulse, 4 = Diagonal Sweep, 5 = Wave.
 
 use serde::Deserialize;
 
@@ -69,13 +70,46 @@ pub fn image_supports_animation(image: &[u8], anim: &AnimationDesc) -> bool {
 /// 16-entry quarter-wave sine LUT, values 0..=255.
 pub const SINE_LUT: [u8; 16] = [0, 25, 50, 74, 98, 120, 142, 162, 180, 197, 212, 225, 236, 245, 251, 255];
 
-/// Half-amplitude threshold: bytes in bands darker than this are cleared.
-const THRESHOLD: u8 = 128;
+/// Framebuffer geometry the effect maths is expressed against: 64 columns of
+/// 1bpp pixels, 128 rows tall, vertically packed (`byte = ((y>>3)<<6) + x`,
+/// `bit = 1 << (y & 7)`) — 1024 bytes total.
+pub const FB_WIDTH: usize = 64;
+pub const FB_HEIGHT: usize = 128;
+
+/// Set one pixel in a Block1-packed framebuffer. Out-of-range pixels are
+/// dropped, so the drawing references are total functions on any buffer.
+#[inline]
+pub fn set_px(buf: &mut [u8], x: usize, y: usize) {
+    if x >= FB_WIDTH || y >= FB_HEIGHT {
+        return;
+    }
+    let idx = ((y >> 3) << 6) + x;
+    if let Some(b) = buf.get_mut(idx) {
+        *b |= 1 << (y & 7);
+    }
+}
+
+/// Draw a vertical run of pixels in one column (`y0..=y1`, inclusive).
+#[inline]
+pub fn set_col(buf: &mut [u8], x: usize, y0: usize, y1: usize) {
+    for y in y0..=y1.min(FB_HEIGHT.saturating_sub(1)) {
+        set_px(buf, x, y);
+    }
+}
+
+/// Draw a horizontal run of pixels in one row (`x0..=x1`, inclusive).
+#[inline]
+pub fn set_row(buf: &mut [u8], x0: usize, x1: usize, y: usize) {
+    for x in x0..=x1.min(FB_WIDTH.saturating_sub(1)) {
+        set_px(buf, x, y);
+    }
+}
 
 /// Config-byte values selecting each effect.
 pub const CONFIG_GRADIENT_FADE: u8 = 2;
 pub const CONFIG_CENTER_PULSE: u8 = 3;
 pub const CONFIG_DIAGONAL_SWEEP: u8 = 4;
+pub const CONFIG_WAVE: u8 = 5;
 
 /// The descriptor's `"animation"` object.
 #[derive(Debug, Deserialize)]
@@ -112,69 +146,141 @@ pub struct CodeCave {
     pub size: usize,
 }
 
-/// Pure reference for the whole fade family: `index` maps byte offset `i`
-/// and `phase` to a LUT entry; bytes whose band brightness is below
-/// `THRESHOLD` are cleared in place.
-pub fn fade_apply(buf: &mut [u8], width: usize, phase: u32, index: impl Fn(usize, u32) -> usize) {
-    for i in 0..buf.len() {
-        if SINE_LUT[index(i, phase) & 15] < THRESHOLD {
-            buf[i] = 0;
+/// Clear the whole framebuffer so no stock charge-screen content survives.
+#[inline]
+pub fn clear_frame(buf: &mut [u8]) {
+    buf.fill(0);
+}
+
+/// Gradient Bar (config 2): a solid horizontal bar of `BAR_THICKNESS` rows
+/// sweeps vertically down the panel, wrapping at the bottom. The bar's top
+/// edge follows the same phase→row mapping the Thumb cave computes with
+/// shifts and adds: `y = ((phase >> 2) << 3) & 127` — 128 phases per full
+/// sweep. Drawn from a cleared frame, so only the bar is on-screen.
+pub const BAR_THICKNESS: usize = 12;
+
+pub fn gradient_fade_apply(buf: &mut [u8], width: usize, _height: usize, phase: u32) {
+    let _ = width; // geometry is fixed (see FB_WIDTH/FB_HEIGHT)
+    clear_frame(buf);
+    let top = (((phase >> 2) << 3) & 127) as usize;
+    for d in 0..BAR_THICKNESS {
+        let y = (top + d) & (FB_HEIGHT - 1);
+        set_row(buf, 0, FB_WIDTH - 1, y);
+    }
+}
+
+/// Center Pulse (config 3): expanding rings drawn as panel-scaled ellipses.
+///
+/// The ring is the ellipse `(dx/a)² + (dy/b)² = 1` with `b = 2a` (the panel is
+/// twice as tall as it is wide), scaled by `s = 1 + (phase % 8)` of 8 steps, so
+/// the half-width sweeps `4, 8, … 32` and the ring is always fully on-panel
+/// (it reaches the screen edges at the last step, then restarts). Drawn from a
+/// cleared frame, so only the ring is on-screen.
+pub const RING_STEPS: u32 = 8;
+
+/// Half-width of the ring at step `s` (1..=RING_STEPS): 4 * s, max 32.
+#[inline]
+pub fn ring_half_width(step: u32) -> usize {
+    4 * (step as usize)
+}
+
+pub fn center_pulse_apply(buf: &mut [u8], width: usize, phase: u32) {
+    let _ = width;
+    clear_frame(buf);
+    let step = 1 + (phase % RING_STEPS); // 1..=8
+    let a = ring_half_width(step) as i64; // horizontal half-width, 4..=32
+    let cx = FB_WIDTH as i64 / 2; // 32
+    let cy = FB_HEIGHT as i64 / 2; // 64
+    for x in 0..FB_WIDTH {
+        let dx = (x as i64) - cx;
+        if dx.abs() > a {
+            continue;
+        }
+        // dy = 2 * isqrt(a² - dx²)  — the ellipse's vertical half-axis
+        let dy = 2 * isqrt(a * a - dx * dx);
+        for y in [cy + dy, cy - dy] {
+            if (0..FB_HEIGHT as i64).contains(&y) {
+                set_px(buf, x, y as usize);
+            }
         }
     }
 }
 
-/// Gradient Fade (config 2): horizontal brightness bands sweep vertically.
-///
-/// Each 64-byte strip shares one brightness value:
-/// `SINE_LUT[((strip*8 + phase) >> 2) & 15]`; the `>> 2` keeps the
-/// phase→strip mapping expressible in Thumb shifts (period 64 phases).
-pub fn gradient_fade_apply(buf: &mut [u8], width: usize, _height: usize, phase: u32) {
-    fade_apply(buf, width, phase, |i, ph| {
-        (((i / width) as u32 * 8 + ph) >> 2) as usize
-    })
+/// Integer square root (floor), used by the ring reference so the Rust model
+/// stays all-integer like the Thumb cave.
+#[inline]
+fn isqrt(v: i64) -> i64 {
+    if v <= 0 {
+        return 0;
+    }
+    let mut r = (v as f64).sqrt() as i64;
+    while r * r > v {
+        r -= 1;
+    }
+    while (r + 1) * (r + 1) <= v {
+        r += 1;
+    }
+    r
 }
 
-/// Center Pulse (config 3): brightness rings pulse outward from the vertical
-/// centre of the screen. Strip distance from the centre is `strip ^ 7`
-/// (strips 7/8 → 0, edges → 15); period 16 phases.
-pub fn center_pulse_apply(buf: &mut [u8], width: usize, phase: u32) {
-    fade_apply(buf, width, phase, |i, ph| {
-        let d = (i / width) as u32 ^ 7;
-        d.wrapping_add(ph) as usize
-    })
-}
+/// Diagonal Sweep (config 4): a thick diagonal bar marches from the top-left
+/// to the bottom-right corner and wraps. `x + y == c` selects the bar's
+/// diagonal; `c` advances with phase. Drawn from a cleared frame.
+pub const DIAG_THICKNESS: usize = 10;
 
-/// Diagonal Sweep (config 4): diagonal bands march corner to corner. The LUT
-/// index combines the strip, the byte's column group `((i & 63) >> 2)`, and
-/// the phase; period 16 phases.
 pub fn diagonal_sweep_apply(buf: &mut [u8], _width: usize, phase: u32) {
-    fade_apply(buf, 64, phase, |i, ph| {
-        let xg = ((i & 63) >> 2) as u32;
-        let s = (i >> 6) as u32;
-        s.wrapping_add(xg).wrapping_add(ph) as usize
-    })
+    clear_frame(buf);
+    let span = FB_WIDTH + FB_HEIGHT; // 192 diagonals for this panel
+    let c = ((phase % (span as u32 / 6)) * 6) as usize;
+    for x in 0..FB_WIDTH {
+        // y = c - x, plus the bar's thickness along y.
+        for d in 0..DIAG_THICKNESS {
+            let y = (c + d) as isize - x as isize;
+            if y >= 0 && (y as usize) < FB_HEIGHT {
+                set_px(buf, x, y as usize);
+            }
+        }
+    }
+}
+
+/// Wave (config 5) — the first effect that RENDERS NEW CONTENT instead of
+/// fading the existing screen: clears the whole 64x128 buffer, then draws a
+/// flowing sine wave — a pixel at `y = 64 + sin((x + 4*phase)/64 * 2pi) * 24`
+/// and its vertical mirror `127 - y` — so two waves cross in the middle.
+/// Non-cumulative by construction (each pass wipes first), which the shared
+/// reference-replay `for p in 1..=phase { apply }` folds to apply(phase).
+/// Period 16 phases (angle advances 4/64 per phase).
+pub fn wave_apply(buf: &mut [u8], phase: u32) {
+    buf.fill(0);
+    for x in 0..64u32 {
+        let a = (x + phase * 4) & 63;
+        let q = a & 15;
+        let mut v = SINE_LUT[q as usize] as u32;
+        if a & 16 != 0 {
+            v = 255 - v; // falling quarter: mirror of the LUT
+        }
+        let off = (v * 24) >> 8; // 0..=23
+        let y = if a & 32 != 0 { 64 + off } else { 64 - off };
+        // set_px: byte ((y >> 3) << 6) + x, bit 1 << (y & 7)
+        let idx = ((y >> 3) << 6) + x;
+        buf[idx as usize] |= 1 << (y & 7);
+        let y2 = 127 - y;
+        let idx2 = ((y2 >> 3) << 6) + x;
+        buf[idx2 as usize] |= 1 << (y2 & 7);
+    }
 }
 
 /// Emitter signature shared by all effects: append the cave body to `a`
 /// (based at `anim.code_cave.start`) for `buf_addr..buf_addr+buf_len`.
 pub type EmitFn = fn(&mut Asm, &AnimationDesc, u32, u32) -> Result<(), AsmError>;
 
-/// Emits the shared cave body into `a`: replay the overwritten timeout test,
-/// gate on the config byte, bump the phase global, run the fade loop whose
-/// LUT index computation is supplied by `emit_index`, then branch back to
-/// `hook_resume`.
+/// Emits the cave prologue shared by every effect: replay the overwritten
+/// hook-site `tst.w`, bail out to `resume` unless the timeout bit is set and
+/// the config byte matches, then bump the phase global into r4.
 ///
-/// Register contract inside the loop: r0 = i, r1 = buf, r4 = phase,
-/// r5 = LUT pointer, r6 = 15 (index mask), r7 = bytes remaining; `emit_index`
-/// may clobber r2/r3 and must leave the LUT index (0..=15) in r3.
-fn emit_effect_cave(
-    a: &mut Asm,
-    anim: &AnimationDesc,
-    buf_addr: u32,
-    buf_len: u32,
-    config_value: u8,
-    emit_index: impl Fn(&mut Asm),
-) -> Result<(), AsmError> {
+/// On return r4 = the new phase, r0/r2 are free; the caller emits its drawing
+/// code followed by [`emit_cave_epilogue`].
+fn emit_cave_prologue(a: &mut Asm, _anim: &AnimationDesc, config_value: u8) {
     // tst.w r2, #0x20000 — the overwritten hook-site instruction, replayed
     // (Capstone-verified bytes from af_190602 0x9a16).
     a.raw32(0xF412, 0x3F00);
@@ -185,37 +291,29 @@ fn emit_effect_cave(
     a.bcond(0x1, "resume"); // NE: not our effect -> stock path
     a.ldr_lit(0, "phg");
     a.ldr_imm(4, 0, 0);
-    a.adds(4, 1);
+    a.adds(4, 1); // phase += 1
     a.str_imm(4, 0, 0);
-    a.movs(0, 0); // i = 0
-    a.ldr_lit(1, "buf");
-    a.ldr_lit(5, "lutp");
-    a.ldr_lit(7, "len");
-    a.movs(6, 15);
-    a.label("loop");
-    emit_index(a);
-    a.ls_reg(6, 2, 5, 3); // ldrb r2, [r5, r3]  (LUT)
-    a.cmp(2, THRESHOLD);
-    a.bcond(0xA, "keep"); // GE: bright enough -> keep byte
-    a.movs(2, 0);
-    a.ls_reg(2, 2, 1, 0); // strb r2, [r1, r0]
-    a.label("keep");
-    a.adds(0, 1);
-    a.subs(7, 1);
-    a.bcond(0x1, "loop"); // NE
-    // Restore the hook-site register/flag state the stock path relies on:
-    // the fade loop clobbered r2/r3 and left Z=1 (r7 hit 0), which would
-    // wrongly divert the stock `beq` after hook_resume. Re-read the status
-    // word, restore r3 to the status BASE the hook literal holds (stock
-    // re-reads [base + 4] in its timeout branch), and replay the overwritten
-    // tst.w so the resume behaves exactly like unpatched code.
+}
+
+/// Emits the cave epilogue shared by every effect: restore the hook-site
+/// register/flag state the stock path relies on, then branch back.
+///
+/// The drawing loops clobber r2/r3 and leave Z=1, which would wrongly divert
+/// the stock `beq` after `hook_resume`. Re-read the status word into r2,
+/// restore r3 to the status BASE the hook literal holds (stock re-reads
+/// `[base + 4]` in its timeout branch), and replay the overwritten `tst.w`.
+fn emit_cave_epilogue(a: &mut Asm, anim: &AnimationDesc) {
     a.ldr_lit(3, "stw");
     a.ldr_imm(2, 3, 0); // r2 = [status_word]
     a.ldr_lit(3, "stb"); // r3 = status_base (stock register at hook_resume)
     a.raw32(0xF412, 0x3F00); // tst.w r2, #0x20000
     a.label("resume");
     a.b_abs(anim.hook_resume);
+}
 
+/// Pools the words every cave needs: config byte, phase global, framebuffer
+/// base and length, status word/base, and the sine LUT block.
+fn emit_cave_pool(a: &mut Asm, anim: &AnimationDesc, buf_addr: u32, buf_len: u32) {
     a.pool_word("cfg", anim.config_byte_addr);
     a.pool_word("phg", anim.phase_global);
     a.pool_word("buf", buf_addr);
@@ -228,53 +326,349 @@ fn emit_effect_cave(
     for w in SINE_LUT.chunks(4) {
         a.pool_word("lut", u32::from_le_bytes([w[0], w[1], w[2], w[3]]));
     }
-    Ok(())
 }
 
+/// Emits the shared "wipe the framebuffer" loop: `buf[0..len] = 0`, where the
+/// pooled `len` word carries the framebuffer length.
+///
+/// Every effect starts from a cleared frame, so no stock charge-screen content
+/// can bleed into the animation. Clobbers r0 (index), r2 (zero), r7 (count);
+/// leaves r1 = buf.
+fn emit_clear_frame(a: &mut Asm) {
+    a.movs(0, 0);
+    a.movs(2, 0);
+    a.ldr_lit(1, "buf");
+    a.ldr_lit(7, "len");
+    a.label("clr");
+    a.ls_reg(2, 2, 1, 0); // strb r2, [r1, r0]
+    a.adds(0, 1);
+    a.subs(7, 1);
+    a.bcond(0x1, "clr"); // NE
+}
+
+/// Emits a pixel set: OR the bit for row `y_reg` into the framebuffer at
+/// column `x_reg`.
+///
+/// Contract: needs r1 = framebuffer base. Scratches r5 (shift count/byte),
+/// r6 (byte index), r7 (bit mask), and flags; preserves r0-r4.
+/// Coordinates must be valid panel positions in r0, r2, r3, or r4.
+fn emit_set_px(a: &mut Asm, y_reg: u8, x_reg: u8) {
+    debug_assert!(
+        [0, 2, 3, 4].contains(&y_reg) && [0, 2, 3, 4].contains(&x_reg),
+        "emit_set_px coordinates must use preserved registers r0/r2/r3/r4"
+    );
+    // r6 = ((y >> 3) << 6) + x  — index of the byte holding the pixel
+    a.lsrs(6, y_reg, 3);
+    a.lsls(6, 6, 6);
+    a.adds_reg(6, 6, x_reg);
+    // r7 = 1 << (y & 7)  — the bit within that byte
+    a.movs(5, 7);
+    a.ands(5, y_reg);
+    a.movs(7, 1);
+    a.raw16(0x4080 | (5u16 << 3) | 7); // lsls r7, r5: 1 << (y & 7)
+    // buf[r6] |= r7  — ls_reg(op, rt, rn, rm) with op 6 = LDRB, 2 = STRB
+    a.ls_reg(6, 5, 1, 6); // ldrb r5, [r1, r6]
+    a.raw16(0x4300 | ((7 as u16) << 3) | 5); // orrs r5, r7
+    a.ls_reg(2, 5, 1, 6); // strb r5, [r1, r6]
+    let _ = x_reg;
+}
+
+/// Gradient Bar (config 2): a solid horizontal bar sweeps vertically.
+///
+/// The bar's top row is `((phase >> 2) << 3) & 127` (64 phases per full
+/// sweep, matching `gradient_fade_apply`); `BAR_THICKNESS` full-width rows are
+/// filled, wrapping at the bottom edge. Drawn from a cleared frame.
+///
+/// Registers: r4 = bar top (phase is consumed into it), r2 = bar row offset,
+/// r0 = x, r3 = y passed to `emit_set_px` (which preserves r0/r2/r3/r4 and
+/// scratches r5/r6/r7).
 pub fn emit_gradient_fade(
     a: &mut Asm,
     anim: &AnimationDesc,
     buf_addr: u32,
     buf_len: u32,
 ) -> Result<(), AsmError> {
-    emit_effect_cave(a, anim, buf_addr, buf_len, CONFIG_GRADIENT_FADE, |a| {
-        a.lsrs(3, 0, 6); // i >> 6        (byte strip = 64 bytes)
-        a.lsls(3, 3, 3); // * 8           (y of the strip's pixel group)
-        a.adds_reg(3, 3, 4); // + phase
-        a.lsrs(3, 3, 2); // >> 2          (period 64 phases)
-        a.ands(3, 6); // & 15
-    })
+    emit_cave_prologue(a, anim, CONFIG_GRADIENT_FADE);
+    emit_clear_frame(a);
+    // r4 = top row = ((phase >> 2) << 3) & 127
+    a.lsrs(4, 4, 2);
+    a.lsls(4, 4, 3);
+    a.movs(3, 127);
+    a.ands(4, 3);
+    a.movs(2, 0); // d = row offset within the bar
+    a.label("barrow");
+    a.movs(0, 0); // x = 0
+    a.label("barcol");
+    // r3 = y = (top + d) & 127
+    a.movs_reg(3, 4);
+    a.adds_reg(3, 3, 2);
+    a.movs(5, 127);
+    a.ands(3, 5);
+    emit_set_px(a, 3, 0);
+    a.adds(0, 1);
+    a.cmp(0, FB_WIDTH as u8);
+    a.bcond(0x3, "barcol"); // LO: next column
+    a.adds(2, 1);
+    a.cmp(2, BAR_THICKNESS as u8);
+    a.bcond(0x3, "barrow"); // LO: next bar row
+    emit_cave_epilogue(a, anim);
+    emit_cave_pool(a, anim, buf_addr, buf_len);
+    Ok(())
 }
 
+/// Center Pulse (config 3): expanding rings drawn as panel-scaled ellipses.
+///
+/// Half-width `a = 4 + (phase & 7) * 4` (4..=32), matching
+/// `center_pulse_apply`. For each column the cave computes
+/// `y = 64 ± isqrt(a² - dx²) * 2`; the integer square root is a restoring
+/// bit-by-bit loop, all-integer like the rest of the cave (the emulator's
+/// `muls` is exact for these magnitudes). Drawn from a cleared frame.
+///
+/// Registers: r4 = a, r2 = x, r3 = y (the `emit_set_px` contract), r0/r5/r6/r7
+/// = scratch, r1 = framebuffer base (never written).
 pub fn emit_center_pulse(
     a: &mut Asm,
     anim: &AnimationDesc,
     buf_addr: u32,
     buf_len: u32,
 ) -> Result<(), AsmError> {
-    emit_effect_cave(a, anim, buf_addr, buf_len, CONFIG_CENTER_PULSE, |a| {
-        a.lsrs(3, 0, 6); // strip s
-        a.movs(2, 7); // centre constant (r2 is the byte temp, free here)
-        a.eors(3, 2); // d = s ^ 7   (distance from vertical centre)
-        a.adds_reg(3, 3, 4); // + phase   (period 16)
-        a.ands(3, 6); // & 15
-    })
+    emit_cave_prologue(a, anim, CONFIG_CENTER_PULSE);
+    emit_clear_frame(a);
+    // r4 = a = 4 + (phase & 7) * 4
+    a.movs(5, 7);
+    a.ands(5, 4); // r5 = phase & 7
+    a.lsls(4, 5, 2); // r4 = (phase & 7) * 4
+    a.adds(4, 4); // r4 = 4 + (phase & 7) * 4
+    a.movs(2, 0); // x = 0
+    a.label("rcol");
+    // r6 = |dx| = |x - 32|
+    a.movs_reg(6, 2);
+    a.movs(5, 32);
+    a.subs_reg(6, 6, 5); // r6 = x - 32
+    a.cmp(6, 64); // unsigned: a borrowed (negative) dx exceeds 64
+    a.bcond(0x9, "absdone"); // LS: 0..=63 -> already non-negative
+    a.movs(5, 0);
+    a.subs_reg(6, 5, 6); // r6 = -dx
+    a.label("absdone");
+    a.muls(6, 6); // r6 = dx²
+    // r5 = a²; if dx² > a² this column is outside the ring
+    a.movs_reg(5, 4);
+    a.muls(5, 5);
+    a.raw16(0x4280 | (5u16 << 3) | 6); // cmp r6, r5 (dx² vs a²)
+    a.bcond(0x8, "rnext"); // HI
+    a.subs_reg(6, 5, 6); // r6 = radicand = a² - dx²
+    // Build floor(sqrt(radicand)) one bit at a time, high bit first.
+    // Keep the radicand unchanged when accepting each candidate root.
+    a.movs(3, 0); // result
+    a.movs(5, 32); // a <= 32 -> root <= 32
+    a.label("isq");
+    a.movs_reg(7, 3);
+    a.adds_reg(7, 7, 5); // r7 = t = result + bit
+    a.movs_reg(0, 7);
+    a.muls(0, 0); // r0 = t²
+    a.raw16(0x4280 | (6u16 << 3)); // cmp r0, r6 (t² vs radicand)
+    a.bcond(0x8, "isqskip"); // HI: candidate too large
+    a.movs_reg(3, 7); // result = t
+    a.label("isqskip");
+    a.lsrs(5, 5, 1); // bit >>= 1
+    a.cmp(5, 0);
+    a.bcond(0x1, "isq"); // NE: more bits
+    // dy = result * 2 ; ring rows at 64 ± dy (128 = off-panel, clipped)
+    a.lsls(3, 3, 1);
+    a.movs(5, 64);
+    a.adds_reg(3, 5, 3); // r3 = 64 + dy
+    a.cmp(3, 128);
+    a.bcond(0x2, "rhi"); // HS: row 128+ never on-panel
+    emit_set_px(a, 3, 2);
+    a.label("rhi");
+    a.movs(5, 128);
+    a.subs_reg(3, 5, 3); // r3 = 128 - (64 + dy) = 64 - dy
+    emit_set_px(a, 3, 2);
+    a.label("rnext");
+    a.adds(2, 1);
+    a.cmp(2, FB_WIDTH as u8);
+    a.bcond(0x3, "rcol"); // LO
+    emit_cave_epilogue(a, anim);
+    emit_cave_pool(a, anim, buf_addr, buf_len);
+    Ok(())
 }
 
+/// Diagonal Sweep (config 4): a thick diagonal bar marches corner to corner.
+///
+/// Diagonal constant `c = (phase * 6) mod 192` (192 = width + height for this
+/// panel, matching `diagonal_sweep_apply`). For each column the cave sets
+/// `DIAG_THICKNESS` pixels at `y = c + d - x`, skipping rows outside 0..=127.
+/// Drawn from a cleared frame.
+///
+/// Registers: r4 = c (phase consumed), r0 = x, r2 = d, r3 = y; `emit_set_px`
+/// preserves r0/r2/r3/r4 and scratches r5/r6/r7.
 pub fn emit_diagonal_sweep(
     a: &mut Asm,
     anim: &AnimationDesc,
     buf_addr: u32,
     buf_len: u32,
 ) -> Result<(), AsmError> {
-    emit_effect_cave(a, anim, buf_addr, buf_len, CONFIG_DIAGONAL_SWEEP, |a| {
-        a.lsls(3, 0, 26); // i << 26
-        a.lsrs(3, 3, 28); // >> 28       (column group = (i & 63) >> 2)
-        a.lsrs(2, 0, 6); // strip s
-        a.adds_reg(3, 3, 2); // strip + column group
-        a.adds_reg(3, 3, 4); // + phase   (period 16)
-        a.ands(3, 6); // & 15
-    })
+    emit_cave_prologue(a, anim, CONFIG_DIAGONAL_SWEEP);
+    emit_clear_frame(a);
+    // Reduce the 32-phase cycle BEFORE multiplication. Since 32 * 6 = 192,
+    // this is equivalent to (phase * 6) % 192 without a phase-sized loop.
+    a.movs(3, 31);
+    a.ands(4, 3);
+    a.movs(3, 6);
+    a.muls(4, 3); // c = (phase & 31) * 6, always 0..=186
+    a.movs(0, 0); // x = 0
+    a.label("dcol");
+    a.movs(2, 0); // d = 0
+    a.label("dthick");
+    // r3 = y = c + d - x
+    a.movs_reg(3, 4);
+    a.adds_reg(3, 3, 2);
+    a.subs_reg(3, 3, 0);
+    // unsigned-compare trick: y > 127 catches negative y too (128 is never on-panel)
+    a.cmp(3, 127);
+    a.bcond(0x8, "dskip"); // HI: row off-panel
+    emit_set_px(a, 3, 0);
+    a.label("dskip");
+    a.adds(2, 1);
+    a.cmp(2, DIAG_THICKNESS as u8);
+    a.bcond(0x3, "dthick"); // LO
+    a.adds(0, 1);
+    a.cmp(0, FB_WIDTH as u8);
+    a.bcond(0x3, "dcol"); // LO
+    emit_cave_epilogue(a, anim);
+    emit_cave_pool(a, anim, buf_addr, buf_len);
+    Ok(())
+}
+
+/// Emits the Wave cave (config 5) — the first effect that renders NEW
+/// content instead of fading the existing pixels: replay the overwritten
+/// timeout test, gate on the config byte, bump the phase global, CLEAR the
+/// whole buffer, then draw the flowing sine wave (one pixel + its vertical
+/// mirror per column; see `wave_apply` for the math).
+///
+/// Register contract: r0 = i (clear loop) then x (draw loop), r1 = buf,
+/// r4 = phase, r5 = LUT pointer, r2/r3/r6/r7 scratch. Store discipline:
+/// strb to the framebuffer only, one phase-global str — same as the fades.
+/// The pixel-block maths needs three register-form T1 ops the builder lacks
+/// as named methods, emitted via `raw16`: LSLS-reg 0x4080 (op 2 in the
+/// 0x40xx data-processing group), ORRS 0x4300 (op 12). Subtraction uses the
+/// ADD/SUB group (`Asm::subs_reg`, 0x1A00) — NOT the 0x40xx family, where
+/// op nibble 6 is SBC.
+pub fn emit_wave(
+    a: &mut Asm,
+    anim: &AnimationDesc,
+    buf_addr: u32,
+    buf_len: u32,
+) -> Result<(), AsmError> {
+    // tst.w r2, #0x20000 — the overwritten hook-site instruction, replayed.
+    a.raw32(0xF412, 0x3F00);
+    a.bcond(0x0, "resume"); // EQ: timeout bit clear -> stock clock path
+    a.ldr_lit(0, "cfg");
+    a.ldrb_imm(0, 0, 0);
+    a.cmp(0, CONFIG_WAVE);
+    a.bcond(0x1, "resume"); // NE: not our effect -> stock path
+    a.ldr_lit(0, "phg");
+    a.ldr_imm(4, 0, 0);
+    a.adds(4, 1); // phase += 1
+    a.str_imm(4, 0, 0);
+    // --- clear the whole framebuffer
+    a.movs(0, 0);
+    a.movs(2, 0);
+    a.ldr_lit(1, "buf");
+    a.ldr_lit(7, "len");
+    a.label("clr");
+    a.ls_reg(2, 2, 1, 0); // strb r2, [r1, r0]
+    a.adds(0, 1);
+    a.subs(7, 1);
+    a.bcond(0x1, "clr"); // NE
+    // --- draw: r0 = x, r5 = LUT
+    a.movs(0, 0);
+    a.ldr_lit(5, "lutp");
+    a.label("dloop");
+    // r6 = a = (x + 4*phase) & 63
+    a.movs_reg(6, 4);
+    a.lsls(6, 6, 2);
+    a.adds_reg(6, 6, 0);
+    a.movs(3, 63);
+    a.ands(6, 3);
+    // r2 = v = LUT[a & 15]
+    a.movs(3, 15);
+    a.movs_reg(2, 6);
+    a.ands(2, 3);
+    a.ls_reg(6, 2, 5, 2); // ldrb r2, [r5, r2]
+    // falling quarter: if a & 16 { v = 255 - v }  (XOR with 255)
+    a.movs(3, 16);
+    a.ands(3, 6);
+    a.bcond(0x0, "w0"); // EQ: skip
+    a.movs(3, 255);
+    a.eors(2, 3);
+    a.label("w0");
+    // r2 = off = (v * 24) >> 8   (v*16 + v*8)
+    a.lsls(3, 2, 4);
+    a.lsls(2, 2, 3);
+    a.adds_reg(2, 2, 3);
+    a.lsrs(2, 2, 8);
+    // r3 = y = a & 32 ? 64 + off : 64 - off
+    a.movs(3, 32);
+    a.ands(3, 6);
+    a.bcond(0x0, "wlo"); // EQ: lower half
+    a.movs(3, 64);
+    a.adds_reg(3, 3, 2);
+    a.b("wdone");
+    a.label("wlo");
+    a.movs(3, 64);
+    a.subs_reg(3, 3, 2); // subs r3, r3, r2  (64 - off)
+    a.label("wdone");
+    // pixel(r3): r7 = 1 << (y & 7); r2 = ((y>>3)<<6) + x; buf[r2] |= r7
+    a.movs(2, 7);
+    a.ands(2, 3);
+    a.movs(7, 1);
+    a.raw16(0x4080 | (2 << 3) | 7); // lsls r7, r2 (register form)
+    a.lsrs(2, 3, 3);
+    a.lsls(2, 2, 6);
+    a.adds_reg(2, 2, 0);
+    a.ls_reg(6, 6, 1, 2); // ldrb r6, [r1, r2]
+    a.raw16(0x4300 | (7 << 3) | 6); // orrs r6, r7
+    a.ls_reg(2, 6, 1, 2); // strb r6, [r1, r2]
+    // mirrored pixel: r3 = 127 - y, same block
+    a.movs(6, 127);
+    a.subs_reg(6, 6, 3); // subs r6, r6, r3  (127 - y)
+    a.movs_reg(3, 6);
+    a.movs(2, 7);
+    a.ands(2, 3);
+    a.movs(7, 1);
+    a.raw16(0x4080 | (2 << 3) | 7); // lsls r7, r2
+    a.lsrs(2, 3, 3);
+    a.lsls(2, 2, 6);
+    a.adds_reg(2, 2, 0);
+    a.ls_reg(6, 6, 1, 2); // ldrb r6, [r1, r2]
+    a.raw16(0x4300 | (7 << 3) | 6); // orrs r6, r7
+    a.ls_reg(2, 6, 1, 2); // strb r6, [r1, r2]
+    // next column
+    a.adds(0, 1);
+    a.cmp(0, 64);
+    a.bcond(0x3, "dloop"); // LO: x < 64
+    // Restore the hook-site register/flag state (same tail as the fades):
+    // re-read the status word into r2, point r3 at the status base, replay
+    // the overwritten tst.w so the resume behaves like unpatched code.
+    a.ldr_lit(3, "stw");
+    a.ldr_imm(2, 3, 0);
+    a.ldr_lit(3, "stb");
+    a.raw32(0xF412, 0x3F00); // tst.w r2, #0x20000
+    a.label("resume");
+    a.b_abs(anim.hook_resume);
+
+    a.pool_word("cfg", anim.config_byte_addr);
+    a.pool_word("phg", anim.phase_global);
+    a.pool_word("buf", buf_addr);
+    a.pool_word("len", buf_len);
+    a.pool_word("stw", anim.status_word_addr);
+    a.pool_word("stb", anim.status_base_addr);
+    a.pool_addr("lutp", "lut");
+    for w in SINE_LUT.chunks(4) {
+        a.pool_word("lut", u32::from_le_bytes([w[0], w[1], w[2], w[3]]));
+    }
+    Ok(())
 }
 
 /// Builds the full patch: 4-byte B.W detour at `hook_site` + cave body at
@@ -387,6 +781,18 @@ pub fn build_diagonal_sweep_patch(desc_json: &str) -> Result<Patch, AnimError> {
         "Diagonal bands sweep the screen on timeout (config byte 4)",
         "diagonal_sweep",
         emit_diagonal_sweep,
+    )
+}
+
+pub fn build_wave_patch(desc_json: &str) -> Result<Patch, AnimError> {
+    build_effect_patch(
+        desc_json,
+        "anim-wave",
+        "Wave (charge-screen screensaver)",
+        "Renders a new flowing double sine wave on the cleared screen on \
+         timeout — content the stock screen never shows (config byte 5)",
+        "wave",
+        emit_wave,
     )
 }
 
@@ -506,7 +912,7 @@ mod tests {
             "status_word_addr": "0x20000008",
             "status_base_addr": "0x20000004",
             "effects": {"gradient_fade": 2, "center_pulse": 3,
-                        "diagonal_sweep": 4} }
+                        "diagonal_sweep": 4, "wave": 5} }
     }"#;
 
     /// Reference apply per effect, uniform signature for the shared tests.
@@ -515,15 +921,8 @@ mod tests {
             "gradient" => gradient_fade_apply(buf, 64, 128, phase),
             "center" => center_pulse_apply(buf, 64, phase),
             "diagonal" => diagonal_sweep_apply(buf, 64, phase),
+            "wave" => wave_apply(buf, phase),
             _ => panic!("unknown effect {effect}"),
-        }
-    }
-
-    /// LUT-index period per effect (full cycle of the phase→frame mapping).
-    fn period(effect: &str) -> u32 {
-        match effect {
-            "gradient" => 64, // 16 LUT entries << 2
-            _ => 16,
         }
     }
 
@@ -563,138 +962,199 @@ mod tests {
     }
 
     #[test]
-    fn test_effects_only_clear_bytes() {
-        for &(w, h, bytes) in &PANEL_GEOMETRIES {
-            for phase in 0..64 {
-                for effect in ["gradient", "center", "diagonal"] {
-                    let mut buf = vec![0xFFu8; bytes];
-                    apply(effect, &mut buf, phase);
+    fn test_wave_renders_new_content_not_fades_text() {
+        // Start from a "text screen" (all-on buffer): wave must WIPE it and
+        // draw its own pattern — a sparse double sine wave, NOT the original
+        // content faded.
+        let mut buf = vec![0xFFu8; 1024];
+        wave_apply(&mut buf, 0);
+        let bits: u32 = buf.iter().map(|b| b.count_ones() as u32).sum();
+        assert_eq!(bits, 128, "64 columns x 2 pixels (wave + mirror)");
+        // exactly two pixels per column — the wave and its mirror cross in
+        // the middle band (y and 127-y are both in 40..87)
+        for x in 0..64usize {
+            let col_bits: u32 = (0..16usize)
+                .map(|s| buf[s * 64 + x].count_ones() as u32)
+                .sum();
+            assert_eq!(col_bits, 2, "column {x}: wave + mirror = 2 pixels");
+        }
+        // pattern is sparse (single bits), unlike the fade bands (0x00/0xFF)
+        assert!(
+            buf.iter().filter(|b| **b != 0).any(|b| *b & (b - 1) != 0 || *b == 1),
+            "wave bytes are bit patterns, not whole-byte bands"
+        );
+    }
+
+    #[test]
+    fn test_wave_period_and_flow() {
+        let mut a = vec![0u8; 1024];
+        let mut b = vec![0u8; 1024];
+        wave_apply(&mut a, 0);
+        wave_apply(&mut b, 16); // angle advances 4/64 per phase -> period 16
+        assert_eq!(a, b, "period 16");
+        let mut c = vec![0u8; 1024];
+        wave_apply(&mut c, 1);
+        assert_ne!(a, c, "wave flows between consecutive phases");
+    }
+
+    #[test]
+    fn test_wave_pixels_stay_in_band_range() {
+        // y = 64 ± 23 -> rows 41..87, so set bytes only in strips 5..=10 and
+        // never outside the buffer.
+        for phase in 0..64u32 {
+            let mut buf = vec![0u8; 1024];
+            wave_apply(&mut buf, phase);
+            for (i, &byte) in buf.iter().enumerate() {
+                if byte != 0 {
+                    let strip = i >> 6;
                     assert!(
-                        buf.iter().all(|b| *b == 0x00 || *b == 0xFF),
-                        "{effect} {w}x{h} phase {phase}: fade family only clears whole bytes in place"
+                        (5..=10).contains(&strip),
+                        "phase {phase}: pixel outside the wave band (byte {i:#x}, strip {strip})"
                     );
                 }
             }
         }
     }
 
+    /// Every effect is now a self-contained drawing: it must CLEAR the stock
+    /// content (so no charge-screen text survives) and then paint its own
+    /// pixels. Asserted on the real charge-screen geometry (64x128).
     #[test]
-    fn test_gradient_fade_band_monotonic_in_phase() {
-        let mut a = vec![0xFFu8; 64 * 128 / 8];
-        let mut b = vec![0xFFu8; 64 * 128 / 8];
-        // The band steps one LUT entry per 4 phases ((strip*8 + phase) >> 2);
-        // adjacent LUT entries are all on the same side of THRESHOLD, so a
-        // 4-phase step changes nothing — 8 phases crosses it (strip 2:
-        // index 4 -> 6, 98 -> 142).
-        gradient_fade_apply(&mut a, 64, 128, 0);
-        gradient_fade_apply(&mut b, 64, 128, 8);
-        assert_ne!(a, b, "frames at phases 0 and 8 must differ");
-        // band is horizontal: each 64-byte strip is constant along its columns
-        for s in 0..16 {
-            let base = s * 64;
-            for i in 0..64 {
-                assert_eq!(a[base + i], a[base], "strip {s} constant along columns");
+    fn test_every_effect_draws_its_own_content() {
+        for phase in 0..64 {
+            for effect in ["gradient", "center", "diagonal", "wave"] {
+                let mut buf = vec![0xFFu8; 1024];
+                apply(effect, &mut buf, phase);
+                assert!(
+                    buf.iter().any(|b| *b != 0xFF),
+                    "{effect} phase {phase}: stock content must not survive"
+                );
+                assert!(
+                    buf.iter().any(|b| *b != 0),
+                    "{effect} phase {phase}: effect must draw something"
+                );
+            }
+        }
+    }
+
+    /// The anti-"manipulated text" property: an effect clears the stock screen
+    /// before drawing, so the output cannot depend on what was on-screen.
+    #[test]
+    fn test_draw_is_independent_of_stock_content() {
+        for phase in 0..64 {
+            for effect in ["gradient", "center", "diagonal", "wave"] {
+                // Same phase, two very different starting screens (all-on and
+                // all-off). A clearing effect must land on the same frame both
+                // times: nothing of the input can influence the result, so the
+                // stock charge text can never be recognised in the output.
+                let mut on = vec![0xFFu8; 1024];
+                let mut off = vec![0u8; 1024];
+                apply(effect, &mut on, phase);
+                apply(effect, &mut off, phase);
+                assert_eq!(
+                    on, off,
+                    "{effect} phase {phase}: output depends on the stock screen (not a clean draw)"
+                );
+                assert!(
+                    on.iter().any(|b| *b != 0),
+                    "{effect} phase {phase}: effect drew nothing"
+                );
             }
         }
     }
 
     #[test]
-    fn test_diagonal_sweep_full_cycle_covers_bands() {
-        // Bands march over any fixed byte: byte 0 (strip 0, column group 0)
-        // must survive at every phase whose LUT index >= 6 (index == phase
-        // for byte 0), i.e. phases 6..=15.
-        let mut survives = vec![false; 16];
-        for phase in 0..16 {
-            let mut buf = vec![0xFFu8; 64 * 128 / 8];
-            diagonal_sweep_apply(&mut buf, 64, phase);
-            survives[phase as usize] = buf[0] == 0xFF;
-        }
-        assert!(
-            survives[6..].iter().all(|s| *s),
-            "byte 0 must survive the marching band at phases 6..=15"
-        );
-        assert!(
-            survives[..6].iter().all(|s| !*s),
-            "byte 0 must be covered by the band at phases 0..=5"
-        );
+    fn test_gradient_bar_sweeps_vertically() {
+        // The bar is a solid horizontal band: every set row spans all 64
+        // columns, and the band's top row advances with phase.
+        let bar_rows = |phase: u32| -> Vec<usize> {
+            let mut buf = vec![0u8; 1024];
+            gradient_fade_apply(&mut buf, 64, 128, phase);
+            (0..FB_HEIGHT)
+                .filter(|&y| {
+                    (0..FB_WIDTH).all(|x| {
+                        let idx = ((y >> 3) << 6) + x;
+                        buf[idx] & (1 << (y & 7)) != 0
+                    })
+                })
+                .collect()
+        };
+        let rows0 = bar_rows(0);
+        assert_eq!(rows0.len(), BAR_THICKNESS, "bar thickness is constant");
+        // contiguous rows (wrapping is possible, so check the cyclic run)
+        let set: Vec<bool> = {
+            let mut v = vec![false; FB_HEIGHT];
+            for y in &rows0 {
+                v[*y] = true;
+            }
+            v
+        };
+        let runs = set.iter().filter(|b| **b).count();
+        assert_eq!(runs, BAR_THICKNESS);
+        // phase 4 (>> 2 = 1, << 3 = 8) moves the top row down by 8
+        assert_eq!(bar_rows(4)[0], 8, "bar top follows ((phase>>2)<<3) & 127");
+        assert_ne!(rows0, bar_rows(4), "bar must move between phases");
     }
 
     #[test]
-    fn test_center_pulse_symmetry() {
-        let mut buf = vec![0xFFu8; 64 * 128 / 8];
+    fn test_gradient_bar_period() {
+        // ((phase >> 2) << 3) & 127 has period 64 phases (top wraps at 128).
+        let mut a = vec![0u8; 1024];
+        let mut b = vec![0u8; 1024];
+        gradient_fade_apply(&mut a, 64, 128, 0);
+        gradient_fade_apply(&mut b, 64, 128, 64);
+        assert_eq!(a, b, "bar sweep period is 64 phases");
+    }
+
+    #[test]
+    fn test_center_rings_are_symmetric_and_pulse() {
+        let mut buf = vec![0u8; 1024];
         center_pulse_apply(&mut buf, 64, 0);
-        // Dark LUT indices are 0..=5 (values < 128). d = s ^ 7 lands in 0..=5
-        // for strips 2..=7; everything else is kept at phase 0.
-        for s in 2..=7 {
-            assert_eq!(buf[s * 64], 0, "strip {s} cleared at phase 0 (d = {} ^ 7)", s);
-        }
-        for s in [0usize, 1, 8, 9, 10, 11, 12, 13, 14, 15] {
-            assert_eq!(buf[s * 64], 0xFF, "strip {s} kept at phase 0");
-        }
-    }
-
-    #[test]
-    fn test_gradient_fade_band_moves_with_phase() {
-        let mut a = vec![0xFFu8; 64 * 128 / 8]; // all pixels on
-        let mut b = a.clone();
-        gradient_fade_apply(&mut a, 64, 128, 0);
-        gradient_fade_apply(&mut b, 64, 128, 32);
-        assert_ne!(a, b, "different phases must dim different rows");
-        // band is horizontal: same strip pattern for every column
-        assert_eq!(a[0], a[1], "columns equal at same strip for phase 0");
-    }
-
-    #[test]
-    fn test_gradient_fade_period() {
-        let mut a = vec![0xFFu8; 64 * 128 / 8];
-        let mut b = a.clone();
-        gradient_fade_apply(&mut a, 64, 128, 0);
-        gradient_fade_apply(&mut b, 64, 128, 64); // full LUT period (16 << 2)
-        assert_eq!(a, b);
-    }
-
-    #[test]
-    fn test_center_pulse_pulses_from_centre() {
-        let mut a = vec![0xFFu8; 64 * 128 / 8];
-        let mut b = a.clone();
-        center_pulse_apply(&mut a, 64, 0);
-        center_pulse_apply(&mut b, 64, 8); // half period: centre <-> edges
-        assert_ne!(a, b);
-        // At phase 0 LUT[0] = 0: strip 7 (d = 7^7 = 0) is the dark centre;
-        // LUT[15] = 255: strip 8 (d = 8^7 = 15) is the bright centre flank.
-        // Dark LUT entries are indices 0..=5 (<= 120).
-        assert_eq!(a[7 * 64], 0, "strip 7 cleared at phase 0");
-        assert_eq!(a[2 * 64], 0, "strip 2 cleared at phase 0 (d = 5)");
-        assert_eq!(a[64], 0xFF, "strip 1 kept at phase 0 (d = 6, LUT[6] = 142)");
-        assert_eq!(a[8 * 64], 0xFF, "strip 8 kept at phase 0 (LUT[15] = 255)");
-        assert_eq!(a[0], 0xFF, "strip 0 kept at phase 0 (d = 7, LUT[7] = 162)");
-    }
-
-    #[test]
-    fn test_diagonal_sweep_marches() {
-        let mut frames: Vec<Vec<u8>> = Vec::new();
-        for ph in 0..16 {
-            let mut f = vec![0xFFu8; 64 * 128 / 8];
-            apply("diagonal", &mut f, ph);
-            frames.push(f);
-        }
-        // all 16 phases distinct (strip+column index spreads the band)
-        for i in 0..16 {
-            for j in (i + 1)..16 {
-                assert_ne!(frames[i], frames[j], "phases {i} and {j} identical");
+        // Ring pixels are vertically mirrored about y = 64: for every set
+        // pixel at row y there is one at 2*64 - y = 128 - y (row 64 is its
+        // own mirror, which is why the check uses 128 - y, not 127 - y).
+        for x in 0..FB_WIDTH {
+            let col: Vec<usize> = (0..FB_HEIGHT)
+                .filter(|&y| buf[((y >> 3) << 6) + x] & (1 << (y & 7)) != 0)
+                .collect();
+            for &y in &col {
+                assert!(
+                    col.contains(&(2 * 64 - y)),
+                    "ring not mirrored at column {x}: row {y} has no mirror at {}",
+                    2 * 64 - y
+                );
             }
         }
+        // The ring grows with phase, so consecutive steps differ.
+        let mut a = vec![0u8; 1024];
+        let mut b = vec![0u8; 1024];
+        center_pulse_apply(&mut a, 64, 0);
+        center_pulse_apply(&mut b, 64, 1);
+        assert_ne!(a, b, "ring must expand between phases");
+        // and the radius cycle is 16 phases
+        let mut c = vec![0u8; 1024];
+        center_pulse_apply(&mut c, 64, RING_STEPS);
+        assert_eq!(a, c, "ring period is RING_STEPS phases");
     }
 
     #[test]
-    fn test_periods() {
-        for effect in ["gradient", "center", "diagonal"] {
-            let mut a = vec![0xFFu8; 64 * 128 / 8];
-            let mut b = a.clone();
-            apply(effect, &mut a, 5);
-            apply(effect, &mut b, 5 + period(effect));
-            assert_eq!(a, b, "{effect}: phase wraps at its period");
+    fn test_diagonal_bar_marches_corner_to_corner() {
+        // Diagonals advance by 6 rows per phase and wrap after 192/6 = 32.
+        let mut prev: Option<Vec<u8>> = None;
+        for phase in 0..32 {
+            let mut buf = vec![0u8; 1024];
+            diagonal_sweep_apply(&mut buf, 64, phase);
+            if let Some(p) = &prev {
+                assert_ne!(*p, buf, "diagonal must move between phases");
+            }
+            prev = Some(buf);
         }
+        // period: c wraps mod 192, and 192 | (6 * 32)
+        let mut a = vec![0u8; 1024];
+        let mut b = vec![0u8; 1024];
+        diagonal_sweep_apply(&mut a, 64, 0);
+        diagonal_sweep_apply(&mut b, 64, 32);
+        assert_eq!(a, b, "diagonal period is 32 phases");
     }
 
     #[test]
@@ -732,6 +1192,7 @@ mod tests {
             build_gradient_fade_patch as fn(&str) -> Result<Patch, AnimError>,
             build_center_pulse_patch,
             build_diagonal_sweep_patch,
+            build_wave_patch,
         ] {
             let p = build(DESC).unwrap();
             let max_cave = p
@@ -745,68 +1206,199 @@ mod tests {
         }
     }
 
-    /// Steps the emitted cave for `effect` in the emu against the Rust
-    /// reference: same inputs must produce the same framebuffer.
-    fn assert_cave_matches_reference(
-        effect: &str,
-        emit: EmitFn,
-        config: u8,
-    ) {
+    #[test]
+    fn test_emit_set_px() {
         use crate::firmware::emu::bus::{Bus, RAM_BASE};
         use crate::firmware::emu::cpu::Cpu;
 
-        let anim: AnimationDesc = serde_json::from_value(
-            serde_json::from_str::<serde_json::Value>(DESC).unwrap()["animation"].clone(),
-        )
-        .unwrap();
-        let mut asm = Asm::new(anim.code_cave.start);
-        emit(&mut asm, &anim, 0x20001000, 0x400).unwrap();
-        let body = asm.finish().unwrap();
+        const CODE: u32 = 0x8000;
+        const DONE: u32 = 0x104;
+        const GUARD: usize = 16;
+        const FRAME_LEN: usize = 64 * 128 / 8;
+        const RAM_LEN: usize = GUARD + FRAME_LEN + GUARD;
+        const BUFFER: u32 = RAM_BASE + GUARD as u32;
 
-        let mut flash = vec![0u8; 0x9000];
-        flash[0x8000..0x8000 + body.len()].copy_from_slice(&body);
-        let mut bus = Bus::new(flash, 0x1400); // RAM covers phase global + buffer
-        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
-        bus.allow_region(0x20001000..0x20001400);
-        bus.set_stub(anim.config_byte_addr, config as u32);
-        bus.write_u32(anim.status_word_addr, 0x20000).unwrap(); // timeout bit set
-        for i in 0..0x400u32 {
-            bus.write_u8(0x20001000 + i, 0xFF).unwrap();
-        }
+        // Exercise both calling conventions without an effect's prologue or
+        // epilogue hiding register clobbers or framebuffer mistakes.
+        for x_reg in [0u8, 2] {
+            let mut asm = Asm::new(CODE);
+            emit_set_px(&mut asm, 3, x_reg);
+            asm.b_abs(DONE);
+            let body = asm.finish().unwrap();
+            let mut flash = vec![0u8; CODE as usize + body.len()];
+            flash[CODE as usize..].copy_from_slice(&body);
 
-        let mut cpu = Cpu::new();
-        cpu.r[2] = 0x20000; // timeout bit set
-        cpu.pc = 0x8000;
-        for _ in 0..(0x400 * 20 + 100) {
-            cpu.step(&mut bus).unwrap();
-            if cpu.pc == 0x104 {
-                break;
+            // All rows cover every bit position and every strip transition,
+            // including 7/8, 63/64 and 119/120, through the final row 127.
+            for y in 0..128usize {
+                for x in [0usize, 1, 31, 32, 62, 63] {
+                    let index = x + 64 * (y / 8);
+                    let mask = 1u8 << (y % 8);
+                    // Alternating bits catch destructive stores; zero catches
+                    // missing/extra bits; full bytes catch toggling set bits.
+                    for initial_byte in [0x00u8, 0x55, 0xAA, 0xFF] {
+                        let context = format!("x=r{x_reg}, ({x},{y}), initial={initial_byte:#04x}");
+                        let mut expected: Vec<u8> = (0..RAM_LEN)
+                            .map(|i| (i as u8).wrapping_mul(37) ^ 0xA5)
+                            .collect();
+                        expected[GUARD + index] = initial_byte;
+                        let mut bus = Bus::new(flash.clone(), RAM_LEN);
+                        bus.allow_region(RAM_BASE..RAM_BASE + RAM_LEN as u32);
+                        for (i, &byte) in expected.iter().enumerate() {
+                            bus.write_u8(RAM_BASE + i as u32, byte).unwrap();
+                        }
+                        expected[GUARD + index] |= mask;
+
+                        let mut cpu = Cpu::new();
+                        cpu.r[..8].copy_from_slice(&[
+                            0x1234_5678, BUFFER, 0x2345_6789, y as u32,
+                            0x4567_89AB, 0x5678_9ABC, 0x6789_ABCD, 0x789A_BCDE,
+                        ]);
+                        cpu.r[x_reg as usize] = x as u32;
+                        let preserved = cpu.r[..5].to_vec();
+                        cpu.pc = CODE;
+                        for _ in 0..64 {
+                            cpu.step(&mut bus)
+                                .unwrap_or_else(|err| panic!("{context}: emulator error: {err:?}"));
+                            if cpu.pc == DONE {
+                                break;
+                            }
+                        }
+                        assert_eq!(cpu.pc, DONE, "{context}: helper must finish");
+                        for (i, &byte) in expected.iter().enumerate() {
+                            assert_eq!(
+                                bus.read_u8(RAM_BASE + i as u32).unwrap(), byte,
+                                "{context}: RAM offset {i:#x} (includes framebuffer guards)"
+                            );
+                        }
+                        assert_eq!(&cpu.r[..5], preserved.as_slice(), "{context}: preserve r0-r4");
+                        assert!(bus.acl_violations.is_empty(), "{context}: out-of-region store");
+                        assert!(bus.dropped_writes.is_empty(), "{context}: peripheral store");
+                    }
+                }
             }
         }
-        assert_eq!(cpu.pc, 0x104, "{effect}: cave must branch back to hook_resume");
-        assert_eq!(cpu.r[4], 1, "{effect}: phase global bumped once");
-        assert_eq!(
-            cpu.r[2], 0x20000,
-            "{effect}: cave must restore r2 (status word) for the stock beq"
-        );
-        assert_eq!(
-            cpu.r[3], 0x20000004,
-            "{effect}: cave must restore r3 to the status base (stock re-reads [base+4])"
-        );
-        assert!(!cpu.z, "{effect}: restored flags must reflect the timeout bit (Z=0)");
-        let mut expect = vec![0xFFu8; 0x400];
-        apply(effect, &mut expect, 1);
-        let got: Vec<u8> = (0..0x400)
-            .map(|i| bus.read_u8(0x20001000 + i as u32).unwrap())
-            .collect();
-        assert_eq!(got, expect, "{effect}: emitted cave must match the Rust reference");
+    }
+
+    /// Each invocation must draw the reference frame, advance phase once, and
+    /// resume stock code without stores outside the phase word/framebuffer.
+    fn assert_cave_matches_reference(effect: &str, emit: EmitFn, config: u8) {
+        use crate::firmware::emu::bus::{Bus, RAM_BASE};
+        use crate::firmware::emu::cpu::Cpu;
+
+        const BUFFER: u32 = 0x20001000;
+        const FRAME_LEN: u32 = 0x400;
+        const GUARD: u32 = 64;
+        const BUDGET: usize = 100_000;
+        const STATUS: u32 = 0x8002_0045; // timeout plus unrelated status bits
+
+        let anim = load_animation_desc(DESC).unwrap();
+        let mut asm = Asm::new(anim.code_cave.start);
+        emit(&mut asm, &anim, BUFFER, FRAME_LEN).unwrap();
+        let body = asm.finish().unwrap();
+        let mut flash = vec![0u8; 0x9000];
+        let code = anim.code_cave.start as usize;
+        flash[code..code + body.len()].copy_from_slice(&body);
+
+        // Two full 64-phase gradient cycles also cover the shorter center,
+        // diagonal and wave cycles, including both sides of every wrap.
+        for phase in (1..=128u32).chain([0x0010_0001, 0x2000_001f]) {
+            for initial in [0x00u8, 0xFF] {
+                let context = format!("{effect}: phase={phase}, initial={initial:#04x}");
+                let mut bus = Bus::new(
+                    flash.clone(), (BUFFER + FRAME_LEN + GUARD - RAM_BASE) as usize,
+                );
+                bus.allow_region(anim.phase_global..anim.phase_global + 4);
+                bus.allow_region(BUFFER..BUFFER + FRAME_LEN);
+                bus.set_stub(anim.config_byte_addr, config as u32);
+                bus.write_u32(anim.phase_global, phase - 1).unwrap();
+                // Setup writes land even outside the ACL. Do not grant the
+                // cave permission to write status or either framebuffer guard.
+                bus.write_u32(anim.status_word_addr, STATUS).unwrap();
+                for i in 0..GUARD {
+                    bus.write_u8(BUFFER - GUARD + i, 0xA5).unwrap();
+                    bus.write_u8(BUFFER + FRAME_LEN + i, 0x5A).unwrap();
+                }
+                for i in 0..FRAME_LEN {
+                    bus.write_u8(BUFFER + i, initial).unwrap();
+                }
+                bus.acl_violations.clear();
+                bus.write_log.clear();
+                assert!(bus.dropped_writes.is_empty(), "{context}: invalid setup");
+
+                let mut cpu = Cpu::new();
+                cpu.r[2] = 0x20000; // active hook; exit must re-read the full status
+                cpu.r[3] = anim.status_base_addr;
+                cpu.pc = anim.code_cave.start;
+                for _ in 0..BUDGET {
+                    cpu.step(&mut bus)
+                        .unwrap_or_else(|err| panic!("{context}: emulator error: {err:?}"));
+                    if cpu.pc == anim.hook_resume {
+                        break;
+                    }
+                }
+                assert_eq!(
+                    cpu.pc, anim.hook_resume,
+                    "{context}: must resume within {BUDGET} instructions"
+                );
+                assert!(
+                    bus.acl_violations.is_empty(),
+                    "{context}: out-of-region stores: {:?}", bus.acl_violations
+                );
+                assert!(
+                    bus.dropped_writes.is_empty(),
+                    "{context}: dropped stores: {:?}", bus.dropped_writes
+                );
+                // Check full store extents, not just their starting addresses.
+                let phase_writes: Vec<_> = bus.write_log.iter().filter(|w| {
+                    !(w.addr >= BUFFER
+                        && u64::from(w.addr) + u64::from(w.size)
+                            <= u64::from(BUFFER + FRAME_LEN))
+                }).collect();
+                assert_eq!(phase_writes.len(), 1, "{context}: exactly one non-frame store");
+                let write = phase_writes[0];
+                assert_eq!(
+                    (write.addr, write.size, write.value), (anim.phase_global, 4, phase),
+                    "{context}: only non-frame store must advance phase once"
+                );
+                assert_eq!(bus.read_u32(anim.phase_global).unwrap(), phase, "{context}: phase");
+                assert_eq!(bus.read_u32(anim.status_word_addr).unwrap(), STATUS, "{context}: status unchanged");
+                assert_eq!(cpu.r[2], STATUS, "{context}: restore full status word in r2");
+                assert_eq!(cpu.r[3], anim.status_base_addr, "{context}: restore status base in r3");
+                assert!(!cpu.z, "{context}: timeout TST must restore Z=0");
+                assert!(!cpu.n, "{context}: timeout TST must restore N=0");
+                for i in 0..GUARD {
+                    assert_eq!(bus.read_u8(BUFFER - GUARD + i).unwrap(), 0xA5, "{context}: leading guard {i}");
+                    assert_eq!(bus.read_u8(BUFFER + FRAME_LEN + i).unwrap(), 0x5A, "{context}: trailing guard {i}");
+                }
+                let mut expect = vec![initial; FRAME_LEN as usize];
+                apply(effect, &mut expect, phase);
+                let got: Vec<u8> = (0..FRAME_LEN)
+                    .map(|i| bus.read_u8(BUFFER + i).unwrap())
+                    .collect();
+                assert_eq!(got, expect, "{context}: emitted cave must match the Rust reference");
+            }
+        }
     }
 
     #[test]
-    fn test_emitted_caves_match_references_in_emu() {
+    fn test_emitted_caves_gradient_matches_reference_in_emu() {
         assert_cave_matches_reference("gradient", emit_gradient_fade, CONFIG_GRADIENT_FADE);
+    }
+
+    #[test]
+    fn test_emitted_caves_center_matches_reference_in_emu() {
         assert_cave_matches_reference("center", emit_center_pulse, CONFIG_CENTER_PULSE);
+    }
+
+    #[test]
+    fn test_emitted_caves_diagonal_matches_reference_in_emu() {
         assert_cave_matches_reference("diagonal", emit_diagonal_sweep, CONFIG_DIAGONAL_SWEEP);
+    }
+
+    #[test]
+    fn test_emitted_caves_wave_matches_reference_in_emu() {
+        assert_cave_matches_reference("wave", emit_wave, CONFIG_WAVE);
     }
 
     #[test]

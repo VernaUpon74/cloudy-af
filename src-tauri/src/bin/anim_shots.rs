@@ -8,7 +8,8 @@
 use cloudy_af_lib::firmware::anim::asm::AnimError;
 use cloudy_af_lib::firmware::anim::effects::{
     build_center_pulse_patch, build_diagonal_sweep_patch, build_gradient_fade_patch,
-    CONFIG_CENTER_PULSE, CONFIG_DIAGONAL_SWEEP, CONFIG_GRADIENT_FADE,
+    build_wave_patch, CONFIG_CENTER_PULSE, CONFIG_DIAGONAL_SWEEP, CONFIG_GRADIENT_FADE,
+    CONFIG_WAVE,
 };
 use cloudy_af_lib::firmware::emu::harness::{
     dump_pgm, load_descriptor, unpack_block1, Harness, RETURN_SENTINEL,
@@ -17,7 +18,7 @@ use cloudy_af_lib::firmware::patch::apply_patch;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-const PHASES: u32 = 16;
+const PHASES: u32 = 64; // full gradient cycle; includes all shorter cycles
 
 fn run_at(h: &mut Harness, entry: u32, budget: u64) {
     h.cpu.pc = entry & !1;
@@ -56,10 +57,11 @@ fn main() {
     let phase_global = anim.phase_global;
     let status_word = anim.status_word_addr;
 
-    let table: [( &str, fn(&str) -> Result<cloudy_af_lib::firmware::patch::Patch, AnimError>, u8); 3] = [
+    let table: [( &str, fn(&str) -> Result<cloudy_af_lib::firmware::patch::Patch, AnimError>, u8); 4] = [
         ("gradient", build_gradient_fade_patch, CONFIG_GRADIENT_FADE),
         ("center", build_center_pulse_patch, CONFIG_CENTER_PULSE),
         ("diagonal", build_diagonal_sweep_patch, CONFIG_DIAGONAL_SWEEP),
+        ("wave", build_wave_patch, CONFIG_WAVE),
     ];
 
     for (name, build_patch, config) in table {

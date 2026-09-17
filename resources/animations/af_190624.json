@@ -8,14 +8,28 @@
     "height": 128
   },
   "ram_globals": [
-    { "start": "0x20000000", "end": "0x20000e00" },
-    { "start": "0x20002be8", "end": "0x20002ce8" }
+    {
+      "start": "0x20000000",
+      "end": "0x20000e00"
+    },
+    {
+      "start": "0x20002be8",
+      "end": "0x20002ce8"
+    }
   ],
-  "args": [0, 0, 0, 0],
+  "args": [
+    0,
+    0,
+    0,
+    0
+  ],
   "animation": {
     "hook_site": "0x9ad2",
     "hook_resume": "0x9ad6",
-    "code_cave": { "start": "0x1c7f0", "size": 2048 },
+    "code_cave": {
+      "start": "0x1c7f0",
+      "size": 2048
+    },
     "config_byte_addr": "0x1f7f0",
     "phase_global": "0x20002ce0",
     "status_word_addr": "0x20002c1c",
@@ -23,10 +37,14 @@
     "effects": {
       "gradient_fade": 2,
       "center_pulse": 3,
-      "diagonal_sweep": 4
+      "diagonal_sweep": 4,
+      "wave": 5
     }
   },
   "stubs": [
-    { "addr": "0x1f7f0", "value": 2 }
+    {
+      "addr": "0x1f7f0",
+      "value": 2
+    }
   ]
 }

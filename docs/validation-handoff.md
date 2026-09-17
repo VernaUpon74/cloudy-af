@@ -116,6 +116,155 @@ Doc drift to reconcile: goals.md's uhid entry still says NOT YET RUN LIVE
 while Task 3 above records 5 consecutive live PASS runs — verify which is
 current before trusting either. Nothing from this session git-committed yet.
 
+## Task 9 — all four effects reworked as self-drawn animations — PAUSED MID-DEBUG (2026-09-16)
+
+Goal per user: the fade family only *cleared* bytes below a sine threshold, so
+the stock charge text stayed visible (dimmed/banded) — "manipulated text". Every
+effect must instead be a **uniquely enumerated animation that draws its own
+content**: clear the framebuffer, then paint a distinct motif. Wave (config 5)
+already did this and is the model.
+
+**Implemented (uncommitted, working tree):**
+
+- `effects.rs` module doc rewritten: each effect is a self-contained drawing.
+- Shared cave helpers replace the old `emit_effect_cave(emit_index)` closure:
+  `emit_cave_prologue` (replay `tst.w`, config gate, phase bump into r4),
+  `emit_cave_epilogue` (restore r2/r3 + replay `tst.w`, `b_abs(hook_resume)`),
+  `emit_cave_pool`, `emit_clear_frame` (wipe `buf[0..len]`), and
+  `emit_set_px(y_reg, x_reg)` (OR one bit at `((y>>3)<<6)+x`).
+- Rust drawing references + emitters, one distinct motif each:
+  - **Gradient Bar (2)**: solid 12-row horizontal bar, top =
+    `((phase>>2)<<3)&127`, wraps; period 64 phases.
+  - **Center Pulse (3)**: panel-scaled ellipse rings, half-width
+    `a = 4 + (phase&7)*4` (4..=32), rows `64 ± isqrt(a²-dx²)*2`; period 8.
+  - **Diagonal Sweep (4)**: thick diagonal bar, `c = (phase*6) mod 192`,
+    rows `y = c + d - x`; period 32.
+  - Wave (5) unchanged.
+- `Asm::subs_reg` added (T1 `0x1A00` form) + golden/emu-decode regression tests —
+  the wave had been emitting `0x41xx` op-nibble 6, which is **SBC**, not SUB.
+- Test module reworked: old "fade" tests replaced with drawing-semantics tests
+  (`test_gradient_bar_sweeps_vertically`, `test_center_rings_are_symmetric_and_pulse`,
+  `test_diagonal_bar_marches_corner_to_corner`,
+  `test_every_effect_draws_its_own_content`,
+  `test_draw_is_independent_of_stock_content` — same phase from an all-on and an
+  all-off screen must produce identical frames, which is the formal
+  anti-"manipulated text" property).
+- `src-tauri/src/bin/anim_dump.rs` (new dev helper, untracked): assembles a cave
+  and disassembles it through the emulator's own decoder.
+
+**Status (2026-09-17): RESOLVED at the emulator level — see Task 10.**
+
+## Task 10 — Task 9 finished (all four effects green); boot runaway refined (2026-09-17)
+
+Resumed the paused Task 9 work in the primary repo and drove it to green.
+
+**Root causes fixed in the emitters (`src-tauri/src/firmware/anim/effects.rs`, uncommitted):**
+
+1. `emit_set_px` computed the bit mask as `(y & 7) << (y & 7)` instead of
+   `1 << (y & 7)` (the `movs r7, r7` "1" literal was the register index, not
+   the value). Gradient wrote 0xFA/0x1A where the reference has 0xFF/0x0F.
+   Now: shift count in r5, `lsls r7, r5`. Contract corrected: scratch
+   r5/r6/r7, preserve r0-r4; `debug_assert!` now REQUIRES y/x in r0/r2/r3/r4.
+   Regression `test_emit_set_px` (6144 cases: every row, boundary columns,
+   4 initial byte patterns, both x-register conventions, guards, r0-r4).
+2. Center Pulse: (a) the `dx² > a²` compare and the isqrt candidate compare
+   used `cmp <regA>, <regB>`-INTENDED code emitted as CMP-immediate — the
+   immediates were register numbers, so the branches were flag-garbage
+   (caused the ACL out-of-frame writes 0x20000FDE..E2 via a bogus sqrt
+   result); both are now real CMP-reg via `raw16(0x4280 | (Rm << 3) | Rn)`
+   (capstone-verified `cmp r6, r5` / `cmp r0, r6`). (b) isqrt subtracted
+   t² from the radicand (classic non-restoring bug) — replaced with the
+   restoring high-bit-first loop seeded at 32. (c) mirror row used
+   `64-(64+dy)` (wraps to 128-dy); now `128-(64+dy)` = 64-dy, and row 128
+   is skipped (HS on cmp 128) — reference drops y=128 via set_px bounds.
+3. Diagonal Sweep: (a) bounds check was `cmp y,128`+LO-store → row 128
+   stored at 0x2000_0FDE (ACL catch); now `cmp 127`+HI skip. (b) The
+   `(phase*6)%192` subtraction loop is O(phase) — phases ≥ ~30k exceeded
+   the 100k budget. Replaced with `(phase & 31) * 6` (bounded, identical
+   sequence since 32·6 = 192); Rust reference reduces before multiplying
+   (overflow-parity). The earlier `cmp r4, r3` reg-encoding repair inside
+   that loop is superseded (loop deleted).
+
+**Harness (`effects.rs` tests):** one `#[test]` per effect
+(`test_emitted_caves_{gradient,center,diagonal,wave}_matches_reference_in_emu`);
+phases 1..=128 × {all-off, all-on} + two multi-megaphase cases; strict ACL
+(only phase word + framebuffer allowed; setup writes pre-cleared), 64-byte
+guards, dropped-write check, r0-r4 preservation, resume PC, r2/r3/flags
+contract, single phase bump.
+
+**Full-cycle gates:** `gate_animation_frames` now replays 1..=64 (full
+gradient cycle; covers all shorter cycles incl. clipping edges) for both
+builds; `anim_shots` PHASES = 64; GIFs regenerated under
+`tmp/anim-shots/<build>/<effect>/` (gitignored).
+
+**Results:** `firmware::anim` 30/30; full lib 182/182 (46 hardware-gated
+`#[ignore]`d as designed); render gates af_190602+af_190624 PASS;
+animation gates both builds PASS (64-phase byte-exact vs reference:
+gradient 768 / center 16 / diagonal 55 / wave 128 final on-pixels,
+identical across builds). Emitted bytes double-checked through host
+capstone 5.0.7 decode (cmp encodings, `movs r5, #0x80`, `push {r3-r7,lr}`).
+
+**§2 boot runaway — refined, NOT fixed (next session's entry point):**
+stock-image boot gate (M041) still budget-fails: after 211,989 insns PC
+leaves the image into the GPIO block and the budget dies. A TEMP value
+watchpoint (added then REVERTED; bus.rs is clean again) caught the push
+site: **pc 0x00000a80 = `push {r3-r7, lr}`** parks 0x40050020/0x40050000
+(GPIO bases in r5/r6/r7) at 0x2000314C/0x20003150 with lr=0x00000a8d (the
+bl 0xa88 return slot). At the stray transition sp=0x20003150 sits on that
+push window and lr=0xa8d — so the runaway is an emulator RETURN-PATH bug
+(pop / IT-block skip size / pushed-LR divergence per Task 7's suspect),
+not a wild store and not animation-cave involvement (the boot gate runs
+the UNPATCHED image). Next session: single breakpoint at the epilogue
+that pops into 0x40050020 (candidates 0x9bd6-family / 0xa46-family),
+compare pop+BX semantics vs ARM ARM.
+
+**Doc reconciliation:** the "§4 static audit DONE" tooling
+(`scripts/audit-cave.py`, `anim_patch_dump.rs`) and the
+`test_af_190602_patched_converges_when_gated_off` golden gate exist only in
+the older Documents mirror (`~/Documents/GitHub/cloudy-af`), not in this
+primary repo, and that audit ran against the PRE-rework emitters — treat
+Tasks 1/2 as needing a rerun against current code. §5 uhid double IS here
+(scripts/uhid_ldrom.py) with 5 recorded live PASSes.
+
+**Known review gaps (not blockers):** GIF previews use unpack_block1
+(vertical packing); the handoff's 2026-09-13 "horizontal MSB-first"
+ground-truth note contradicts both the current RE docs (pixel
+`x+(y/8)*width`, bit y%8, incl. dispatcher-analy §5.4) and the live-Pico
+gate history — re-verify at the bench before trusting visual orientation.
+uhid gate has a TOCTOU race (list_devices once, then open_device() by
+VID/PID) — fine as a dev gate, never wire it to CI against real devices.
+
+**Bugs already found and fixed during this rework (worth remembering):**
+
+1. `Asm::ls_reg(op, rt, rn, rm)` **swaps rn/rm** relative to the ARM ARM: the
+   Thumb-1 T1 form is `0101 op L Rm Rn Rt` (Rm in bits 8:6). The emulator decodes
+   it correctly, so the swap is invisible whenever the operands are interchangeable
+   (the address is `r[rn]+r[rm]`, commutative) — which is why the old fades worked
+   by accident. Only `rt` matters and that one is right. **Do not "fix" the
+   encoder without re-verifying every effect**, but do not rely on rn/rm order.
+2. `0x4180` in the 0x40xx data-processing group is **SBC (op 6), not SUB**; the
+   correct T1 `subs rd, rn, rm` is `0x1A00`. This made the wave's lower-half
+   `y = 64 - off` carry-dependent. `Asm::subs_reg` now exists for this.
+3. `emit_set_px` originally clobbered **r2** (gradient/diagonal loop state) and
+   then **r1** (the framebuffer base — the center pulse's `muls r1,r1` produced
+   `Unmapped { addr: 0x1001df }`). It now scratches only r5/r6/r7 and preserves
+   r0/r2/r3/r4, with a `debug_assert!` rejecting r1/r6/r7 as y/x.
+4. Test-side: `gradient_fade_apply` legitimately fills whole bytes, so "no 0xFF
+   may survive" was the wrong assertion; `test_wave_renders_new_content_not_fades_text`
+   underflowed on `*b - 1` for zero bytes; the ring mirror is about y=64 so it is
+   `128 - y`, not `127 - y`.
+
+**Environment note:** the host disk hit 100% (`df`: 144M free) which broke the
+toolbox container and produced a bogus `could not compile` until
+`src-tauri/target/debug/incremental` (2.4G) was deleted. Reclaim that dir first
+if cargo fails with a container/rollback error.
+
+**Next steps:** (1) fix `emit_set_px`'s byte-index/bit-mask for the solid bar so
+the gradient cave matches its reference; (2) re-run the full anim suite;
+(3) run both `#[ignore]`d emu gates (af_190602 + af_190624) and the `anim_shots`
+GIF capture for all four effects (user-requested visual check);
+(4) commit; (5) update this log and the phase-3 plan's task checkboxes.
+
 ## Task 8 — af_190624 port: animations support the newer build (2026-09-16)
 
 Goal per user: redevelop animations against the CURRENT AF firmware with
