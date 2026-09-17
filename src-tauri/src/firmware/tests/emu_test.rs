@@ -171,12 +171,29 @@ fn test_two_frames_differ_via_phase() {
 #[test]
 #[ignore]
 fn test_af_190602_render_gate() {
+    gate_render("af_190602", 409);
+}
+
+#[test]
+#[ignore]
+fn test_af_190624_render_gate() {
+    // Same gate against the newer Nuvoton-line build (19.06.24). The charge
+    // screen should render the same 409 on-pixels; a drift here is a build
+    // difference to record, not an emulator fault.
+    gate_render("af_190624", 409);
+}
+
+/// Layer-4 render gate, parametric over the build: boots the stock image at
+/// the descriptor's render entry and asserts a clean 4-frame run plus the
+/// golden on-pixel count. Skipped (not failed) when the gitignored decrypted
+/// image is absent.
+fn gate_render(build: &str, expect_on: usize) {
     use std::path::Path;
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    let desc_path = root.join("resources/animations/af_190602.json");
-    let img_path = root.join("AF_fw/decrypted/af_190602.dec.bin");
+    let desc_path = root.join(format!("resources/animations/{build}.json"));
+    let img_path = root.join(format!("AF_fw/decrypted/{build}.dec.bin"));
     if !desc_path.exists() || !img_path.exists() {
-        eprintln!("descriptor or decrypted image missing; skipping gate");
+        eprintln!("{build}: descriptor or decrypted image missing; skipping gate");
         return;
     }
     let desc = load_descriptor(&std::fs::read_to_string(&desc_path).unwrap()).unwrap();
@@ -185,7 +202,7 @@ fn test_af_190602_render_gate() {
     let mut prev = None;
     for frame_no in 0..4 {
         let frame = h.run_frame(5_000_000)
-            .unwrap_or_else(|e| panic!("frame {frame_no}: {e}\n{}", h.cpu.debug_dump()));
+            .unwrap_or_else(|e| panic!("{build} frame {frame_no}: {e}\n{}", h.cpu.debug_dump()));
         if let Some(p) = &prev {
             // stock charge screen may be static; just record. Animation patches
             // assert difference in the effect tests (later phase).
@@ -196,7 +213,7 @@ fn test_af_190602_render_gate() {
         // emulator regression that executes without faulting but renders
         // garbage.
         let on = frame.pixels.iter().filter(|&&px| px != 0).count();
-        assert_eq!(on, 409, "frame {frame_no}: on-pixel count drifted");
+        assert_eq!(on, expect_on, "{build} frame {frame_no}: on-pixel count drifted");
         prev = Some(frame);
     }
 }
@@ -247,6 +264,25 @@ fn run_at(h: &mut Harness, entry: u32, budget: u64) {
 #[test]
 #[ignore]
 fn test_af_190602_animation_frames() {
+    gate_animation_frames("af_190602");
+}
+
+#[test]
+#[ignore]
+fn test_af_190624_animation_frames() {
+    // The animation gate against the newer Nuvoton-line build (19.06.24) —
+    // descriptor resources/animations/af_190624.json was derived from the
+    // af_190602 RE by pattern-anchored porting (code +0xBC early, RAM
+    // literals -0x18; validation-handoff Task 8). This gate is the
+    // empirical proof of the port.
+    gate_animation_frames("af_190624");
+}
+
+/// Layer-5 animation gate, parametric over the build. All addresses come
+/// from the descriptor: the hook host is the even address at hook_site-6
+/// (the prologue ahead of the stock `tst.w r2,#0x20000` at hook_site holds
+/// in both 19.06.x builds).
+fn gate_animation_frames(build: &str) {
     use std::path::Path;
 
     use crate::firmware::anim::asm::AnimError;
@@ -254,23 +290,22 @@ fn test_af_190602_animation_frames() {
         build_center_pulse_patch, build_diagonal_sweep_patch, build_gradient_fade_patch,
         CONFIG_CENTER_PULSE, CONFIG_DIAGONAL_SWEEP, CONFIG_GRADIENT_FADE,
     };
+    use crate::firmware::anim::effects::load_animation_desc;
     use crate::firmware::emu::harness::dump_pgm;
 
-    const CLOCK_RENDERER: u32 = 0x9a10; // FUN_00009a10, host of the hook
-    const PHASE_GLOBAL: u32 = 0x2000_2cf8; // descriptor animation.phase_global
-    // Display-status word [0x20002c30 + 4] (composer literal 0xb698 /
-    // clock-renderer literal 0x9b4c, RE doc §7.1); bit 0x20000 = timed out.
-    const STATUS_WORD: u32 = 0x2000_2c34;
-
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    let desc_path = root.join("resources/animations/af_190602.json");
-    let img_path = root.join("AF_fw/decrypted/af_190602.dec.bin");
+    let desc_path = root.join(format!("resources/animations/{build}.json"));
+    let img_path = root.join(format!("AF_fw/decrypted/{build}.dec.bin"));
     if !desc_path.exists() || !img_path.exists() {
-        eprintln!("descriptor or decrypted image missing; skipping gate");
+        eprintln!("{build}: descriptor or decrypted image missing; skipping gate");
         return;
     }
     let desc_json = std::fs::read_to_string(&desc_path).unwrap();
     let stock_img = std::fs::read(&img_path).unwrap();
+    let anim = load_animation_desc(&desc_json).unwrap();
+    let clock_renderer = (anim.hook_site - 6) & !1; // host of the hook
+    let phase_global = anim.phase_global;
+    let status_word = anim.status_word_addr;
 
     let table: [(
         &str,
@@ -283,9 +318,9 @@ fn test_af_190602_animation_frames() {
         ("diagonal", build_diagonal_sweep_patch, CONFIG_DIAGONAL_SWEEP, apply_diagonal),
     ];
 
-    for (name, build, config, apply) in table {
+    for (name, build_patch, config, apply) in table {
         let mut img = stock_img.clone();
-        let mut patch = build(&desc_json).unwrap();
+        let mut patch = build_patch(&desc_json).unwrap();
         let mut log = HashMap::new();
         apply_patch(&mut img, &mut patch, &mut log).unwrap();
 
@@ -301,19 +336,18 @@ fn test_af_190602_animation_frames() {
 
         // Prime: stock charge screen with the timeout bit clear.
         let prime = h.run_frame(5_000_000).unwrap_or_else(|e| {
-            panic!("{name} prime: {e}\n{}", h.cpu.debug_dump())
+            panic!("{build} {name} prime: {e}\n{}", h.cpu.debug_dump())
         });
         let primed = read_buf(&h);
 
         // Raise the timeout bits the stock dim/idle path needs: 0x20000 makes
-        // the hook's `beq` fall through at 0x9a20; 0x80000 (status bit 19)
-        // makes the `bmi.w 0x9b48` take the pop-only screen-off branch —
-        // without it the code continues to FUN_0000993C, which draws a
-        // different idle screen (RE doc §7.1 glossed over this condition).
-        // Then select this effect (the descriptor stub defaults to Gradient
-        // Fade) and drive the hook host directly.
-        let status = h.bus.read_u32(STATUS_WORD).unwrap_or(0);
-        h.bus.write_u32(STATUS_WORD, status | 0x20000 | 0x80000).unwrap();
+        // the hook's `beq` fall through at hook_site+4; 0x80000 (status bit
+        // 19) makes the `bmi.w` take the pop-only screen-off branch —
+        // without it the code continues to the other idle screen (RE doc
+        // §7.1). Then select this effect (the descriptor stub defaults to
+        // Gradient Fade) and drive the hook host directly.
+        let status = h.bus.read_u32(status_word).unwrap_or(0);
+        h.bus.write_u32(status_word, status | 0x20000 | 0x80000).unwrap();
         let cfg_addr = h.desc.stubs[0].addr;
         h.bus.set_stub(cfg_addr, config as u32);
 
@@ -321,9 +355,9 @@ fn test_af_190602_animation_frames() {
         let unpack = |raw: &[u8]| crate::firmware::emu::harness::unpack_block1(raw, w, hh);
         let mut prev = prime.clone();
         for k in 1..=4u32 {
-            run_at(&mut h, CLOCK_RENDERER, 5_000_000);
-            let phase = h.bus.read_u32(PHASE_GLOBAL).unwrap();
-            assert_eq!(phase, k, "{name}: phase global must count cave runs");
+            run_at(&mut h, clock_renderer, 5_000_000);
+            let phase = h.bus.read_u32(phase_global).unwrap();
+            assert_eq!(phase, k, "{build} {name}: phase global must count cave runs");
             let got = read_buf(&h);
             // The emulator is cumulative: each cave run fades the buffer left
             // by the previous run, so the reference must replay phases
@@ -342,7 +376,7 @@ fn test_af_190602_animation_frames() {
                 .collect();
             assert_eq!(
                 got, expect,
-                "{name}: frame {k} must equal the reference fade of the primed buffer (diffs: {})",
+                "{build} {name}: frame {k} must equal the reference fade of the primed buffer (diffs: {})",
                 first_diffs.join(", ")
             );
             // Consecutive phases may map to the same bands (e.g. Gradient
@@ -355,7 +389,7 @@ fn test_af_190602_animation_frames() {
             if Harness::frames_differ(&unpack(&expect_prev), &unpack(&expect)) {
                 assert!(
                     Harness::frames_differ(&prev, &unpack(&got)),
-                    "{name}: animation must change frames (phase {phase})"
+                    "{build} {name}: animation must change frames (phase {phase})"
                 );
             }
             prev = unpack(&got);
@@ -369,9 +403,9 @@ fn test_af_190602_animation_frames() {
         // the actual gate).
 
         let final_on = prev.pixels.iter().filter(|&&px| px != 0).count();
-        dump_pgm(&prime, Path::new(&format!("/tmp/af_anim_{name}_prime.pgm"))).unwrap();
-        dump_pgm(&prev, Path::new(&format!("/tmp/af_anim_{name}_f4.pgm"))).unwrap();
-        eprintln!("{name}: ok, final on-pixels = {final_on}");
+        dump_pgm(&prime, Path::new(&format!("/tmp/af_anim_{build}_{name}_prime.pgm"))).unwrap();
+        dump_pgm(&prev, Path::new(&format!("/tmp/af_anim_{build}_{name}_f4.pgm"))).unwrap();
+        eprintln!("{build} {name}: ok, final on-pixels = {final_on}");
     }
 }
 // == Full-boot per-PID dispatch emulation (validation §2, plan 2026-09-14) ==

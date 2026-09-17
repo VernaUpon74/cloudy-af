@@ -116,6 +116,46 @@ Doc drift to reconcile: goals.md's uhid entry still says NOT YET RUN LIVE
 while Task 3 above records 5 consecutive live PASS runs — verify which is
 current before trusting either. Nothing from this session git-committed yet.
 
+## Task 8 — af_190624 port: animations support the newer build (2026-09-16)
+
+Goal per user: redevelop animations against the CURRENT AF firmware with
+current knowledge + prepare the physical Nu-Link probe session.
+
+- **Build ground truth:** `af_190624.dec.bin` (116720 B, decrypted, vectors
+  SP=0x200031A8 reset=0x1659) is the newest Nuvoton-line build in hand.
+  af_211009 is the STM32 line (out of scope for the Nuvoton animation path).
+- **Porting method (pattern-anchored, no Ghidra needed):** the 19.06.24 code
+  is the 19.06.02 code with (a) early functions shifted +0xBC (hook host
+  0x9A10→0x9ACC, render 0x8CD1→0x8D8D, tst.w hook site 0x9A16→0x9AD2 — 240-246
+  of 256 bytes match at the shift; only literal-pool words differ), (b) RAM
+  globals shifted −0x18 (status base 0x20002C30→0x20002C18, framebuffer
+  0x20002758→0x20002740; literal-count parity 221/222 and 10/10 confirms),
+  (c) the JWEI marker at 0x1BF13 and the dataflash layout UNCHANGED (data
+  regions don't shift), (d) code-cave scheme unchanged (cave appends past
+  image end 0x1C7F0; config byte still dataflash offset 0x7F0 = 0x1F7F0).
+  Phase global: 0x20002CE0 (the −0x18 analog of 0x20002CF8; zero literals).
+- **Descriptor:** `resources/animations/af_190624.json` (committed). The
+  effects/asm/patch code is build-agnostic given the descriptor — no Rust
+  changes were needed for the port itself.
+- **Gates made build-parametric:** `gate_render(build)` /
+  `gate_animation_frames(build)` in emu_test.rs now derive CLOCK_RENDERER
+  (hook_site−6), PHASE_GLOBAL and STATUS_WORD from the animation descriptor;
+  new `test_af_190624_render_gate` + `test_af_190624_animation_frames`.
+- **Empirical proof:** af_190624 passes BOTH gates first try — render 409
+  on-pixels, and all three effects animate with on-pixel signatures identical
+  to af_190602 (gradient → 0, center 409 @phase 4, diagonal 196 @phase 4).
+- **Visuals:** `anim_shots af_190624` → 17 frames/effect under
+  `tmp/anim-shots/af_190624/<effect>/` incl. animated GIFs.
+- **Bench instructions:** `docs/2026-09-16-nulink-bench-probe-list.md` —
+  safety, wiring, attach (OpenOCD + Nu-Link/Wine paths), and the nine
+  READ-ONLY probes (on-device build identity, FMC identity, LDROM truth +
+  SKU block, dataflash size, live framebuffer popcount 409 vs both
+  descriptors, phase-global spare stability, config-byte cell, 0x4005_0000
+  block, JWEI) with the emulator assumption each probe confirms or kills.
+- Note: which build the user's Pico actually runs gets settled by probe D1
+  (dataflash build stamp 516: `13 06 02` vs `13 06 24`); both are now
+  supported by the patch pipeline either way.
+
 ## Task 7 — SKU scan root-caused: FMC LDROM scan, not dataflash; FMC model lands (2026-09-16)
 
 Session goal: advance §2 as far as the emulator allows before the Nu-Link clip

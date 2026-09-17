@@ -45,7 +45,18 @@ def main() -> None:
     if not root.is_dir():
         sys.exit(f"no shots folder at {root} — run anim_shots first")
 
-    for effect_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+    # Layout: <root>/<build>/<effect>/phase_XX.pgm (older flat layout:
+    # <root>/<effect>/ also accepted).
+    effect_dirs = []
+    for p in sorted(root.iterdir()):
+        if not p.is_dir():
+            continue
+        subs = [q for q in sorted(p.iterdir()) if q.is_dir() and list(q.glob("phase_*.pgm"))]
+        if subs:
+            effect_dirs.extend(subs)
+        elif list(p.glob("phase_*.pgm")):
+            effect_dirs.append(p)
+    for effect_dir in effect_dirs:
         pgms = sorted(effect_dir.glob("phase_*.pgm"))
         if not pgms:
             continue
