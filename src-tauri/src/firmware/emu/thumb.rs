@@ -236,6 +236,34 @@ pub enum Thumb2 {
     /// hw1 bits 7:4 = 0001 (0xF810|Rn). Byte load, zero-extended. No flags.
     /// (Capstone-verified: ldrb r1, [r3], #-1 = F813 1901, af_190602 0x13d18.)
     LdrbT4 { rt: u8, rn: u8, imm: u8, pre: bool, sub: bool },
+    /// LDR/STR (word, immediate) T4 with index/writeback control:
+    /// `ldr/str Rt, [Rn, ±imm8]!` (P=1), `ldr/str Rt, [Rn], ±imm8` (P=0,
+    /// W=1 mandatory). hw1 = 0xF840|Rn (STR) / 0xF850|Rn (LDR) — i.e. bits
+    /// 11:4 = 0100/0101; hw2 = Rt 1 P U W imm8. P=1&&W=0 is the
+    /// unprivileged LDRT/STRT space and is NOT claimed here (returns to the
+    /// pre-existing fall-through, which the firmware never hits).
+    /// Encoding verified against ARMv7-M ARM DDI0403E.b A7.7.42/§STR
+    /// (local PDF), after Capstone 5.0.7 mis-rendered the STR pre-indexed
+    /// form (`str.w r7, [r1, #0xd08]` nonsense).
+    /// af_190602 hits: str r2,[r0],#4 = F840 2B04 (0x606, boot copy loop —
+    /// previously mis-decoded as DpImm `orr r11, r0, #4`, so the store never
+    /// fired and the loop never terminated); str r0,[r1],#4 = F841 0B04
+    /// (0x23b4); ldr r5,[r0,#4]! = F850 5F04 (0x628); ldr pc,[sp],#4 =
+    /// F85D FB04 (exception-return epilogues, Rt = 15).
+    LdrStrT4 { load: bool, rt: u8, rn: u8, imm: u8, pre: bool, sub: bool, wb: bool },
+    /// LDRH/STRH (immediate) T3 with index/writeback control — the halfword
+    /// sibling of LdrStrT4, same hw2 = Rt 1 P U W imm8 shape; hw1 bits 7:4
+    /// = 0010 (STRH, 0xF820|Rn) / 0011 (LDRH, 0xF830|Rn). Zero-extended
+    /// halfword access; no flags. (ARM ARM numbers these "T3"; the plain
+    /// imm12 forms are T2 at 0xF8A0/0xF8B0|Rn, where hw2 bit 11 is just an
+    /// offset bit — the SIZE nibble, not bit 11, separates the spaces, same
+    /// as the byte pair 0xF800/0xF810 vs 0xF880/0xF890.)
+    /// Encoding verified against ARMv7-M ARM DDI0403E.b A7.7.54 LDRH T3 /
+    /// A7.7.167 STRH T3 (local PDF). af_190602 hit: ldrh r2,[r3,#2]! =
+    /// F833 2F02 (0x2414, boot init-table copy into 0x40031004 — previously
+    /// fell through to DpImm garbage; r3 never advanced, 200M-instruction
+    /// budget death at 0x241C).
+    LdrhStrhT4 { load: bool, rt: u8, rn: u8, imm: u8, pre: bool, sub: bool, wb: bool },
     /// SDIV.W Rd, Rn, Rm: signed divide, truncated toward zero. No flags.
     /// hw1 = 11111 011 1001 Rn (0xFB90|Rn), hw2 = 1111 Rd 1111 Rm
     /// (Capstone-verified: sdiv r8, r1, ip = FB91 F8FC, af_190602 0x13d04).
@@ -557,7 +585,9 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         return Some(Instr::Thumb2(Thumb2::Mul { rd, rn, rm, ra, sub }));
     }
 
-    // 32-bit LDRH (immediate) T3: `ldrh.w rt, [rn, #imm12]`.
+    // 32-bit LDRH (immediate) T2: `ldrh.w rt, [rn, #imm12]`. hw2 bit 11 is a
+    // plain offset bit here — the LDRH-T3 writeback form lives at a different
+    // hw1 nibble (0xF830|Rn, LdrhStrhT4 below), NOT behind bit 11.
     // Capstone-verified: ldrh.w lr, [sp, #0x20] = hw1 0xF8BD, hw2 0xE020
     // (af_190602 0x14100, hit by the layer-4 gate).
     if op1 == 0b11111 && (hw1 & 0x0FF0) == 0x08B0 {
@@ -567,7 +597,8 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         return Some(Instr::Thumb2(Thumb2::LdrhImm { rt, rn, imm }));
     }
 
-    // 32-bit LDR (immediate) T4: `ldr.w rt, [rn, #imm12]`.
+    // 32-bit LDR (immediate) T2: `ldr.w rt, [rn, #imm12]` (hw2 bit 11 is a
+    // plain offset bit — the LDR-T4 writeback form is at 0xF850|Rn).
     // Capstone-verified: ldr.w r2, [r8, #0] = hw1 0xF8D8, hw2 0x2000
     // (af_190602 0x8d0a, hit by the layer-4 gate).
     if op1 == 0b11111 && (hw1 & 0x0FF0) == 0x08D0 {
@@ -577,7 +608,10 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         return Some(Instr::Thumb2(Thumb2::LdrImm { rt, rn, imm }));
     }
 
-    // 32-bit STR (immediate) T4: `str.w rt, [rn, #imm12]`.
+    // 32-bit STR (immediate) T4: `str.w rt, [rn, #imm12]`. hw2 bit 11 = 0:
+    // bit 11 = 1 marks the writeback-shape T4 space (LdrStrT4 above) —
+    // without this guard, F8C1 7D08-class encodings shadowed into a
+    // no-writeback imm12 store and silently dropped the base update.
     // Capstone-verified: str.w r8, [sp, #0x14] = hw1 0xF8CD, hw2 0x8014
     // (af_190602 0x8d18, hit by the layer-4 gate).
     if op1 == 0b11111 && (hw1 & 0x0FF0) == 0x08C0 {
@@ -597,9 +631,13 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         return Some(Instr::Thumb2(Thumb2::LdrbImm { rt, rn, imm }));
     }
 
-    // 32-bit STRB (immediate) T3: `strb.w rt, [rn, #imm12]`.
+    // 32-bit STRB (immediate) T2: `strb.w rt, [rn, #imm12]`.
     // Capstone-verified: strb.w r3, [sp, #4] = hw1 0xF88D, hw2 0x3004
-    // (af_190602 0x160, hit by the layer-4 gate). hw2 bit 11 = 0.
+    // (af_190602 0x160, hit by the layer-4 gate).
+    // NOTE: the legacy `hw2 & 0x0800 == 0` guard here is the same wrong
+    // premise removed from StrImm/LdrImm/LdrhImm — bit 11 is a legal offset
+    // bit in this T2 space (the STRB-T4 writeback form is 0xF800|Rn). No
+    // af_190602 site hits imm ≥ 0x800 so it is left as-is; fix if one appears.
     if op1 == 0b11111 && (hw1 & 0x0FF0) == 0x0880 && hw2 & 0x0800 == 0 {
         let rt = ((hw2 >> 12) & 0xF) as u8;
         let rn = (hw1 & 0xF) as u8;
@@ -609,7 +647,7 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
 
     // 32-bit STRH (immediate) T3: `strh.w rt, [rn, #imm12]`.
     // Capstone-verified: strh.w r2, [r5, #0x2a] = hw1 0xF8A5, hw2 0x202A.
-    if op1 == 0b11111 && (hw1 & 0x0FF0) == 0x08A0 && hw2 & 0x0800 == 0 {
+    if op1 == 0b11111 && (hw1 & 0x0FF0) == 0x08A0 {
         let rt = ((hw2 >> 12) & 0xF) as u8;
         let rn = (hw1 & 0xF) as u8;
         let imm = (hw2 & 0xFFF) as u16;
@@ -640,6 +678,54 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         let pre = (hw2 >> 10) & 1 == 1;
         let sub = (hw2 >> 9) & 1 == 0;
         return Some(Instr::Thumb2(Thumb2::LdrbT4 { rt, rn, imm, pre, sub }));
+    }
+
+    // 32-bit LDR/STR (word, immediate) T4 with index/writeback. hw1 bits
+    // 11:4 = 0100 (STR) / 0101 (LDR) → 0xF840|Rn / 0xF850|Rn; hw2 = Rt 1 P U
+    // W imm8. Checked BEFORE the plain-imm12 StrImm/LdrImm arms would shadow
+    // it — those now additionally require hw2 bit 11 = 0 (below). P=1&&W=0
+    // is the LDRT/STRT space: left unclaimed (decode falls through; firmware
+    // never emits it). P=0&&W=0 is UNDEFINED per ARM ARM.
+    // Verified against ARMv7-M ARM DDI0403E.b A7.7.42 (local PDF); Capstone
+    // 5.0.7 mis-renders STR pre-indexed, so these are hand-decoded.
+    // Firmware hits: F840 2B04 (0x606, boot copy loop), F841 0B04 (0x23b4),
+    // F850 5F04 (0x628), F85D FB04 (ldr pc,[sp],#4 epilogues).
+    if op1 == 0b11111 && (hw2 & 0x0800) != 0
+        && ((hw1 & 0x0FF0) == 0x0840 || (hw1 & 0x0FF0) == 0x0850)
+    {
+        let rt = ((hw2 >> 12) & 0xF) as u8;
+        let rn = (hw1 & 0xF) as u8;
+        let imm = (hw2 & 0xFF) as u8;
+        let pre = (hw2 >> 10) & 1 == 1; // P: bit 10 (A7.7.42: index = P)
+        let sub = (hw2 >> 9) & 1 == 0;  // U: bit 9 (add = U)
+        let wb = (hw2 >> 8) & 1 == 1;   // W: bit 8 (wback = W); post ⇒ W=1
+        if !pre && !wb {
+            return None; // P=0 W=0 UNDEFINED per ARM ARM
+        }
+        return Some(Instr::Thumb2(Thumb2::LdrStrT4 { load: (hw1 >> 4) & 1 == 1, rt, rn, imm, pre, sub, wb }));
+    }
+
+    // 32-bit LDRH/STRH (immediate) T3 with index/writeback — halfword
+    // sibling of LdrStrT4 above. hw1 bits 7:4 = 0010 (STRH) / 0011 (LDRH);
+    // hw2 = Rt 1 P U W imm8. NOTE the SIZE nibble (hw1 bits 7:4) separates
+    // these from the plain imm12 T2 forms at 0xF8A0/0xF8B0|Rn — hw2 bit 11
+    // is a legitimate offset bit there and must NOT be treated as a
+    // writeback marker (reverted the earlier wrong bit-11 guards on
+    // StrImm/LdrImm/LdrhImm for the same reason). Same undefined space:
+    // P=0&&W=0. Firmware hit: F833 2F02 (0x2414, boot init-table copy loop).
+    if op1 == 0b11111 && (hw2 & 0x0800) != 0
+        && ((hw1 & 0x0FF0) == 0x0820 || (hw1 & 0x0FF0) == 0x0830)
+    {
+        let rt = ((hw2 >> 12) & 0xF) as u8;
+        let rn = (hw1 & 0xF) as u8;
+        let imm = (hw2 & 0xFF) as u8;
+        let pre = (hw2 >> 10) & 1 == 1;
+        let sub = (hw2 >> 9) & 1 == 0;
+        let wb = (hw2 >> 8) & 1 == 1;
+        if !pre && !wb {
+            return None;
+        }
+        return Some(Instr::Thumb2(Thumb2::LdrhStrhT4 { load: (hw1 >> 4) & 1 == 1, rt, rn, imm, pre, sub, wb }));
     }
 
     // 32-bit SDIV: `sdiv.w rd, rn, rm`.
@@ -1019,6 +1105,151 @@ mod tests {
             }
             _ => panic!("expected StrbT4, got {:?}", i),
         }
+    }
+
+    #[test]
+    fn test_decode32_ldrstr_t4_post_add_wb() {
+        // THE boot-gate instruction: str r2, [r0], #4 = F840 2B04 (af_190602
+        // 0x606). Post-indexed (P=0, hw2 bit 10 = 0), add (U=1), W=1
+        // mandatory for post. Previously mis-decoded as DpImm
+        // `orr r11, r0, #4` (store never fired, copy loop never ended).
+        // Verified against ARMv7-M ARM DDI0403E.b A7.7.42 (local PDF).
+        let i = decode32(0xF840, 0x2B04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrStrT4 { load, rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((load, rt, rn, imm), (false, 2, 0, 4));
+                assert!(!pre && !sub && wb);
+            }
+            _ => panic!("expected LdrStrT4, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_ldrstr_t4_pre_sub_no_wb() {
+        // str r2, [r1, #-4] = F841 2C04 (af_190602 0x6ade et al.): P=1
+        // (bit 10), U=0 (bit 9 — the ONLY way to express a negative offset,
+        // since imm12 forms are unsigned), W=0 (no writeback).
+        let i = decode32(0xF841, 0x2C04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrStrT4 { load, rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((load, rt, rn, imm), (false, 2, 1, 4));
+                assert!(pre && sub && !wb);
+            }
+            _ => panic!("expected LdrStrT4, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_ldrstr_t4_pre_sub_wb() {
+        // str r2, [r1, #-4]! = F841 2D04 (af_190602 0x11564): P=1, U=0, W=1.
+        let i = decode32(0xF841, 0x2D04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrStrT4 { load, rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((load, rt, rn, imm), (false, 2, 1, 4));
+                assert!(pre && sub && wb);
+            }
+            _ => panic!("expected LdrStrT4, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_ldrstr_t4_ldr_pre_add_wb() {
+        // ldr r5, [r0, #4]! = F850 5F04 (af_190602 0x628, sibling copy loop):
+        // hw1 bits 7:4 = 0101 (LDR), P=1, U=1, W=1.
+        let i = decode32(0xF850, 0x5F04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrStrT4 { load, rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((load, rt, rn, imm), (true, 5, 0, 4));
+                assert!(pre && !sub && wb);
+            }
+            _ => panic!("expected LdrStrT4, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_ldrstr_t4_ldr_pc_post() {
+        // ldr pc, [sp], #4 = F85D FB04 (exception-return epilogues):
+        // Rt = 15 (branch on load), post-indexed, W=1.
+        let i = decode32(0xF85D, 0xFB04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrStrT4 { load, rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((load, rt, rn, imm), (true, 15, 13, 4));
+                assert!(!pre && !sub && wb);
+            }
+            _ => panic!("expected LdrStrT4, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_str_imm_not_shadowed_by_t4() {
+        // Regression guard for the shadowing fix: F8C1 7D08-shape hw2 has
+        // bit 11 = 1 (writeback space), so StrImm (imm12, bit 11 = 0
+        // required) must NOT claim it. But the plain imm12 form F8CD 8014
+        // (`str.w r8, [sp, #0x14]`, af_190602 0x8d18) has bit 11 = 0 and
+        // must still decode as StrImm.
+        assert!(matches!(
+            decode32(0xF8CD, 0x8014),
+            Some(Instr::Thumb2(Thumb2::StrImm { rt: 8, rn: 13, imm: 0x14 }))
+        ));
+        // ...and a bit-11 STR encoding (hw1 = STR-T4 space 0xF840|Rn) must
+        // be LdrStrT4, not StrImm: str r7, [r0], #8 = F840 7B08.
+        assert!(matches!(
+            decode32(0xF840, 0x7B08),
+            Some(Instr::Thumb2(Thumb2::LdrStrT4 { load: false, rt: 7, rn: 0, imm: 0x08, pre: false, sub: false, wb: true }))
+        ));
+    }
+
+    #[test]
+    fn test_decode32_ldr_imm_not_shadowed_by_t4() {
+        // Same guard for LDR: the plain imm12 form F8D8 2000
+        // (ldr.w r2, [r8, #0], 0x8d0a) stays LdrImm; a bit-11 LDR encoding
+        // (hw1 = LDR-T4 space 0xF850|Rn) is LdrStrT4:
+        // ldr r3, [r4], #4 = F850 3B04 (af_190602 0x3552).
+        assert!(matches!(
+            decode32(0xF8D8, 0x2000),
+            Some(Instr::Thumb2(Thumb2::LdrImm { rt: 2, rn: 8, imm: 0 }))
+        ));
+        assert!(matches!(
+            decode32(0xF854, 0x3B04),
+            Some(Instr::Thumb2(Thumb2::LdrStrT4 { load: true, rt: 3, rn: 4, imm: 0x04, pre: false, sub: false, wb: true }))
+        ));
+    }
+
+    #[test]
+    fn test_decode32_ldrhstrh_t4_pre_add_wb() {
+        // THE second-boot-blocker: ldrh r2, [r3, #2]! = F833 2F02 (af_190602
+        // 0x2414, init-table copy into 0x40031004). LDRH-T3 = hw1 0xF830|Rn
+        // (size nibble, NOT 0xF8B0|Rn = the T2 imm12 form); previously fell
+        // through to DpImm garbage — r3 never advanced, budget death.
+        let i = decode32(0xF833, 0x2F02).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrhStrhT4 { load, rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((load, rt, rn, imm), (true, 2, 3, 2));
+                assert!(pre && !sub && wb);
+            }
+            _ => panic!("expected LdrhStrhT4, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_ldrh_imm_not_shadowed_by_t4() {
+        // Regression guard: the imm12 T2 form (0xF8B0|Rn — hw2 bit 11 is a
+        // legitimate offset bit) keeps LdrhImm; the T3 writeback form lives
+        // at hw1 0xF830|Rn and routes to LdrhStrhT4.
+        // imm12 ≥ 0x800 case: ldrh.w r0, [r8, #0xa00] = F8B8 0A00 — must be
+        // LdrhImm, NOT fall through to DpImm (the wrong bit-11 guard bug).
+        assert!(matches!(
+            decode32(0xF8BD, 0xE020),
+            Some(Instr::Thumb2(Thumb2::LdrhImm { rt: 14, rn: 13, imm: 0x20 }))
+        ));
+        assert!(matches!(
+            decode32(0xF8B8, 0x0A00),
+            Some(Instr::Thumb2(Thumb2::LdrhImm { rt: 0, rn: 8, imm: 0xA00 }))
+        ));
+        assert!(matches!(
+            decode32(0xF834, 0x3B02),
+            Some(Instr::Thumb2(Thumb2::LdrhStrhT4 { load: true, rt: 3, rn: 4, imm: 0x02, pre: false, sub: false, wb: true }))
+        ));
     }
 
     #[test]

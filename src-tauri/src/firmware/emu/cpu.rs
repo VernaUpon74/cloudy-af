@@ -8,6 +8,10 @@ use std::collections::VecDeque;
 
 const TRACE_CAP: usize = 32;
 
+/// TEMP discovery hook (Task 6): last PC observed by any Cpu, shared with
+/// the bus-side discovery traces. REMOVE with the engine-write trace.
+static LAST_PC: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 /// Variable-shift shifter (register-controlled amount, 0..255) with carry-out.
 fn shift_reg(value: u32, stype: u8, amount: u32, carry_in: bool) -> (u32, bool) {
     match stype {
@@ -120,6 +124,12 @@ pub struct Cpu {
 }
 
 impl Cpu {
+    /// TEMP discovery hook (Task 6): last PC observed by any Cpu, for
+    /// logging from the bus. REMOVE with the engine-write trace.
+    pub fn last_pc_global() -> u32 {
+        crate::firmware::emu::cpu::LAST_PC.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub fn new() -> Self {
         Self {
             r: [0; 13],
@@ -157,6 +167,7 @@ impl Cpu {
 
     /// Fetch/decode/execute one instruction at `pc`.
     pub fn step(&mut self, bus: &mut Bus) -> Result<(), EmuError> {
+        crate::firmware::emu::cpu::LAST_PC.store(self.pc, std::sync::atomic::Ordering::Relaxed);
         self.trace.push_back(self.pc);
         if self.trace.len() > TRACE_CAP {
             self.trace.pop_front();
@@ -816,6 +827,58 @@ impl Cpu {
                 self.set_reg(rt, v as u32);
                 self.pc = self.pc.wrapping_add(4);
             }
+            Instr::Thumb2(Thumb2::LdrStrT4 { load, rt, rn, imm, pre, sub, wb }) => {
+                // 32-bit LDR/STR word with index/writeback (T4). Per ARM ARM
+                // A7.7.42: offset_addr = Rn ± imm8; address = offset_addr
+                // (pre) or R[n] (post); wback ⇒ R[n] = offset_addr ALWAYS
+                // (both P forms), after the memory access value is read but
+                // before R[t] is written — so a post-indexed load where
+                // rn == rt still yields the LOADED value in rt. Rt = 15 load
+                // is a branch (LoadWritePC: bit 0 kept by `& !1` masking
+                // here per the established Ldmia/pop convention; aligned
+                // targets required else UNPREDICTABLE).
+                let base = self.reg(rn);
+                let offset_addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
+                let addr = if pre { offset_addr } else { base };
+                let mut branch = None;
+                if load {
+                    let v = bus.read_u32(addr)?;
+                    if rt == 15 {
+                        branch = Some(v & !1); // LoadWritePC
+                    } else {
+                        // rn == rt with wback is UNPREDICTABLE per ARM ARM;
+                        // the memory read happens first and the writeback
+                        // below runs before this set, so rt ends with the
+                        // LOADED value — the hardware's observable order.
+                        self.set_reg(rt, v);
+                    }
+                } else {
+                    bus.write_u32(addr, self.reg(rt))?;
+                }
+                if wb {
+                    self.set_reg(rn, offset_addr);
+                }
+                self.pc = branch.unwrap_or_else(|| self.pc.wrapping_add(4));
+            }
+            Instr::Thumb2(Thumb2::LdrhStrhT4 { load, rt, rn, imm, pre, sub, wb }) => {
+                // 32-bit LDRH/STRH with index/writeback (T4): identical
+                // addressing semantics to LdrStrT4 but a zero-extended
+                // halfword access. No pc-target form exists for LDRH
+                // (Rt = 15 is UNPREDICTABLE per ARM ARM; not branched).
+                let base = self.reg(rn);
+                let offset_addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
+                let addr = if pre { offset_addr } else { base };
+                if load {
+                    let v = bus.read_u16(addr)? as u32;
+                    self.set_reg(rt, v);
+                } else {
+                    bus.write_u16(addr, (self.reg(rt) & 0xFFFF) as u16)?;
+                }
+                if wb {
+                    self.set_reg(rn, offset_addr);
+                }
+                self.pc = self.pc.wrapping_add(4);
+            }
             Instr::Thumb2(Thumb2::Sdiv { rd, rn, rm }) => {
                 // Signed divide, truncated toward zero. Divide-by-zero yields
                 // 0; INT_MIN / -1 yields INT_MIN (ARMv7-M saturation rule).
@@ -1439,6 +1502,79 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.r[2], 0xCAFE_BABE);
         assert!(bus.acl_violations.is_empty());
+    }
+
+    #[test]
+    fn test_ldrstr_t4_post_indexed_store_advances_base() {
+        // str r2, [r0], #4 = F840 2B04 — THE instruction that deadlocked the
+        // emulated boot copy loop (0x606): previously decoded as DpImm
+        // `orr r11, r0, #4`, so the store never fired and r0 never advanced.
+        // Regression: store must land at the ORIGINAL base and r0 must
+        // advance by 4.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xF840u16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0x2B04u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[0] = RAM_BASE + 0x200;
+        cpu.r[2] = 0xCAFE_BABE;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read_u32(RAM_BASE + 0x200).unwrap(), 0xCAFE_BABE);
+        assert_eq!(cpu.r[0], RAM_BASE + 0x204, "post-indexed writeback must advance r0");
+        assert_eq!(cpu.pc, 4);
+    }
+
+    #[test]
+    fn test_ldrstr_t4_pre_sub_indexed_no_wb() {
+        // str r2, [r1, #-4] = F841 2C04 (af_190602 0x6ade): pre-indexed,
+        // subtract, W=0 — base register must stay untouched.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xF841u16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0x2C04u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
+        let mut cpu = Cpu::new();
+        cpu.r[1] = RAM_BASE + 0x204;
+        cpu.r[2] = 0x1234_5678;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(bus.read_u32(RAM_BASE + 0x200).unwrap(), 0x1234_5678);
+        assert_eq!(cpu.r[1], RAM_BASE + 0x204, "W=0: no writeback");
+    }
+
+    #[test]
+    fn test_ldrhstrh_t4_pre_indexed_load_advances_base() {
+        // ldrh r2, [r3, #2]! = F833 2F02 — the second boot blocker (0x2414):
+        // pre-indexed load from r3+2 must land in r2 AND r3 must become r3+2.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xF833u16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0x2F02u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
+        bus.write_u16(RAM_BASE + 0x82, 0xBEEF).unwrap();
+        let mut cpu = Cpu::new();
+        cpu.r[3] = RAM_BASE + 0x80;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.r[2], 0xBEEF, "zero-extended halfword load from r3+2");
+        assert_eq!(cpu.r[3], RAM_BASE + 0x82, "pre-indexed writeback");
+    }
+
+    #[test]
+    fn test_ldrstr_t4_ldr_pc_post_branches_and_advances_sp() {
+        // ldr pc, [sp], #4 = F85D FB04 (exception-return epilogue): loads
+        // the word into pc as a branch (Thumb bit masked), AND writes sp
+        // back with the post-increment — both effects observable.
+        let mut flash = vec![0u8; 0x100];
+        flash[0..2].copy_from_slice(&0xF85Du16.to_le_bytes());
+        flash[2..4].copy_from_slice(&0xFB04u16.to_le_bytes());
+        let mut bus = Bus::new(flash, 0x1000);
+        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
+        bus.write_u32(RAM_BASE + 0x300, 0x2000_0041).unwrap(); // thumb target
+        let mut cpu = Cpu::new();
+        cpu.sp = RAM_BASE + 0x300;
+        cpu.step(&mut bus).unwrap();
+        assert_eq!(cpu.pc, 0x2000_0040, "LoadWritePC: branch, bit0 masked");
+        assert_eq!(cpu.sp, RAM_BASE + 0x304, "post-indexed writeback must advance sp");
     }
 
     #[test]
