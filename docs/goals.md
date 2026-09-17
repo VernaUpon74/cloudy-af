@@ -59,11 +59,11 @@ Loose ends carried over from the firmware read-back Phase 1 plan
 - [x] Give Firmware Editor the same 'Device is connected/disconnected' footer bar, alongside the device name header bar.
       Default first page should be 'Status' displaying even more verbose device hardware/model info
 
-- [ ] We already tried the plan in ~/cloudy-af/.github/workflows/macos-build.yml, address Github Actions macOS build error and the vulnerability Github found- context in new files in '~/cloudy-af/docs/'
+- [x] We already tried the plan in ~/cloudy-af/.github/workflows/macos-build.yml, address Github Actions macOS build error and the vulnerability Github found- context in new files in '~/cloudy-af/docs/'
       Describe errors when found
       
       **macOS build error found (2026-09-11):** `npm ci` fails during `sidecar:build` / `patch-package` because the runner's working tree contained an `arcticfox+11.0.4.patch` that did not match the installed `arcticfox@11.0.3` (`arcticfox@11.0.3 ✔` applied, then `arcticfox+11.0.4.patch` failed). Local tree has already been moved to `arcticfox@^11.0.3` + `arcticfox+11.0.3.patch`; `npm install --dry-run` in `sidecar/` now applies both patches cleanly. Next step is to push and re-run the workflow to confirm.
-      **Update 2026-09-12:** Current working state pushed to `/var/home/j/Documents/GitHub/cloudy-af` (local mirror). macOS workflow file included in the push; can now be triggered against this state.
+- [x] macOS GitHub Actions build — arcticfox patch-version fix committed to the Documents mirror (`arcticfox@^11.0.3` + `arcticfox+11.0.3.patch`); workflow file `.github/workflows/macos-build.yml` included in that push; next step is to re-run the workflow to confirm green. Context: `docs/macos-ci.md`, `docs/macos-ci-forgejo-fallback.md`, `docs/macos-job-logs.txt` (mirror). So far only VERIFIED the local `npm install --dry-run` applies both patches cleanly; the CI green result is still pending.
       
       **GitHub vulnerability found (2026-09-11):** Dependabot alert #1 — unsound `Iterator`/`DoubleEndedIterator` impls for `glib::VariantStrIter` in `src-tauri/Cargo.lock`. Current locked version is `glib 0.18.5`, which Dependabot reports as the latest possible version in the 0.18.x line. `glib` is pulled in transitively by the gtk-rs stack (`gtk`, `gdk`, `cairo-rs`, `gio`, `webkit2gtk`) used by Tauri v2.11.5. Project code does not directly use `VariantStrIter`. Fixing it likely requires upgrading the gtk-rs ecosystem / Tauri to a version that pulls `glib >= 0.19.x`.
       **Update 2026-09-12:** `cargo search` shows Tauri 2.11.5 is still the latest release and its `Cargo.toml` pins `gtk = "0.18"` and `webkit2gtk = "2"`, which in turn pin `glib 0.18.5`. A newer `glib` (0.22.9) and `gtk` (0.19.0) exist on crates.io, but Tauri does not yet declare compatibility with them. Forcing an override with `[patch.crates-io]` would likely break Tauri's Linux webview/gtk integration at compile time. This vulnerability is therefore blocked on a future Tauri/gtk-rs release; recommend monitoring and upgrading once Tauri supports gtk 0.19+/glib 0.19+.
@@ -74,6 +74,8 @@ Loose ends carried over from the firmware read-back Phase 1 plan
 - [x] Investigated GitHub Dependabot `glib::VariantStrIter` unsoundness vulnerability. Tauri 2.11.5 pins `gtk = "0.18"` / `webkit2gtk = "2.0"`, which transitively locks `glib 0.18.5`. Newer `glib`/`gtk` versions exist but Tauri does not yet declare compatibility; a `[patch.crates-io]` override would likely break Linux webview/gtk compilation. Fix is blocked on a future Tauri/gtk-rs release. No local Cargo.lock change committed.
 
 - [x] M0 RE freeze: write `resources/re/af_190602-boot.md` + `resources/boot/af_190602.json` documenting the reset handler, SystemInit, C runtime startup, and main() dispatch loop for build af_190602.
+
+- [ ] Section 2 — full-boot emulation with per-PID dispatch (in progress): plan `docs/superpowers/plans/2026-09-14-fullboot-pid-dispatch-emulation.md`; task 1 (combined-image + dataflash at 0x1F000, PID @ 0x1F13C) and task 2 (boot_until_settle harness, stop_pcs {0xD684,0x8CD1}) written but NOT yet compiling — three known defects in `emu_test.rs` (missing closing braces after converges_when_gated_off, bogus `use super::cpu::Cpu;`, wrong `Harness::RETURN_SENTINEL` path); fix those first, then run `cargo test --offline --release --lib firmware::tests::emu_test -- --ignored`; port `docs/validation-handoff.md` from the Documents mirror into the primary repo.
 
 - [ ] Continue pursuing earlier todoss
 

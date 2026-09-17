@@ -77,6 +77,25 @@ immediately. Use whenever the flasher protocol is touched.
    effect runs and compare pixel-for-pixel against emulator output. The
    gold-standard cross-check if emulation and reality ever disagree.
 
+### 7a. Emulator-verified probe points (Nu-Link bench kit, 2026-09-16)
+
+Addresses the emulator confirmed are load-bearing during af_190602 boot
+(Task 6 in `docs/validation-handoff.md` — full derivation there). Verify
+each with the Nu-Link memory read before clipping anything else; the
+emulator's MMIO stubs model these, so silicon must show compatible values
+or the stubs get refined:
+
+| Address | Role | Emulator evidence | Expect on silicon |
+|---|---|---|---|
+| `0x110` | LDROM dispatch table (PID-keyed) | boot dispatch reads it before 0x2FF8/panel choice | entries indexed by dataflash PID; nonzero for M041 |
+| `0x4000C000/04/08/0C/10` | block-copy engine regs (program/data/src/dst/trigger) | copy helper 0x5DC programs [C]=0, [10]=1, polls [10]==0, copies via [8] | [10] reads 0 while idle, 1 while busy |
+| `0x20003148` / `0x20003150` | boot copy src / end bounds | live r0/r1 at the 0x5EC loop | stack-adjacent RAM, copied words match src |
+| `0x2FF8` | dispatch-failure hang loop | emulator reaches it on bad PID (Pico Dual hang) | PC parks at 0x2FF8/0x3004 when PID erased |
+| `0x9bd6` (+5 twins) | `ldr pc,[sp],#4` epilogues | newly fixed decode; branch+sp both advance | exception returns land in LDROM |
+
+Framebuffer for the pixel cross-check stays `0x20002758` (§2 below).
+
+
 ## Screen-size ground truth
 
 From NFE v190718 + af_190602 disassembly (see the table in
