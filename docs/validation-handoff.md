@@ -59,6 +59,21 @@ in the working tree and still required).
   but UNVERIFIED (no SVD interrupt-number listing found in the tree);
   verify at the bench or from the device's startup file before trusting
   exception wiring.
+- **IRQ42 == ADINT0 PROVEN from binary + SVD (2026-09-17, later):** a
+  byte-level scan of the decrypted image finds the 0x20000E6C literal in
+  exactly TWO pools: 0x108C4 (handler 0x108B4: `ldr r2,[0x108C4]`;
+  `str r3,[r2]` = the ONLY writer, flag=1; `str.w r3,[r2,#0xF8]` =
+  EADC_STATUS2 W1C acknowledge) and 0x10B34 (waiter 0x10B0C: `str r1,[r2]`
+  with r1=0 = clear, then the 0x10B14 poll). The waiter enables the line
+  via `str r1,[r2,#0x4]` r1=0x400 through pool 0x10B30 = NVIC ISER[1]
+  bit 10 → external IRQ 42 — written immediately before SWTRG — so the
+  polled flag's writer IS the ADINT0 handler. No SVD interrupt table was
+  needed; the ISER bank math is the proof. The exception-delivery slice
+  can now wire `EADC ADIF0 completion → NVIC request_irq(42)` with a
+  proven contract: SWTRG (CTL.ADCEN set) → 8 ticks → ADIF0 (if INTSRC0
+  routes) → pending IRQ42 → if ISER[1].bit10: deliver handler 0x108B4 →
+  flag=1 → poll exits. Next session's slice order stands (round-trip test
+  first); this note removes its only remaining unknown.
 - Next software work (in order): (1) exception entry/return slice in cpu.rs
   (round-trip test first, then delivery, then EXC_RETURN-aware BX/POP/
   ldr-pc epilogues), (2) rerun boot gate — expect either dispatcher reach
