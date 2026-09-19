@@ -2,7 +2,9 @@
 
 # Build script for Cloudy-af: Docker-based Tauri build + Flatpak or AppImage.
 #
-# Usage: ./build.sh [appimage|flatpak] [--experimental|--standard] [-y|--yes]
+# Usage: ./build.sh [appimage|flatpak] [-y|-n] [--experimental|--skip]
+#   -y / --experimental  enable experimental patches, skip prompts
+#   -n / --skip          disable experimental patches, skip prompts
 #   With no arguments the original interactive prompts are used.
 #   Env: CLOUDY_TOOLBOX — toolbox container used for the AppImage deploy/pack
 #        stage (default: arcticfox-build when it exists, else host mode).
@@ -17,11 +19,10 @@ for arg in "$@"; do
         appimage|flatpak) BUILD_TARGET="$arg" ;;
         --appimage)       BUILD_TARGET="appimage" ;;
         --flatpak)        BUILD_TARGET="flatpak" ;;
-        --experimental)    ENABLE_PATCHES=true ;;
-        --standard)        ENABLE_PATCHES=false ;;
-        -y|--yes|--non-interactive) ASSUME_YES=true ;;
+        --experimental|-y) ENABLE_PATCHES=true;  ASSUME_YES=true ;;
+        --skip|--standard|-n) ENABLE_PATCHES=false; ASSUME_YES=true ;;
         -h|--help)
-            sed -n '3,9p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '3,10p' "$0" | sed 's/^# \{0,1\}//'
             exit 0 ;;
         *) echo "Unknown argument: $arg (try --help)" >&2; exit 2 ;;
     esac
