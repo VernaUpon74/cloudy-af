@@ -14,6 +14,7 @@
 | Key | Action |
 |---|---|
 | `Ctrl`+`O` | Open firmware file |
+| `Ctrl`+`D` | Download FW (stock build) |
 | `Ctrl`+`F` | Flash to device |
 
 ## Device Monitor

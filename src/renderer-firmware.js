@@ -721,6 +721,7 @@ $(document).on('keydown', (e) => {
     }
     if (e.ctrlKey || e.metaKey) {
         if (e.key === 'o') { e.preventDefault(); doOpenFirmware(); return; }
+        if (e.key === 'd' || e.key === 'D') { e.preventDefault(); $('#download-stock').click(); return; }
         if (e.key === 'f' || e.key === 'F') { e.preventDefault(); $('#flash-firmware').click(); return; }
         return;
     }
