@@ -715,7 +715,7 @@ attachImageCanvasHandlers();
 // there). Alt+Left/Right cycles the editor tabs without the mouse.
 $(document).on('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
-        if (!(e.altKey)) {
+        if (!(e.altKey || (e.ctrlKey || e.metaKey))) {
             return;
         }
     }
@@ -728,10 +728,8 @@ $(document).on('keydown', (e) => {
         return;
     }
     if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'o') {
-            e.preventDefault();
-            doOpenFirmware();
-        }
+        if (e.key === 'o') { e.preventDefault(); doOpenFirmware(); return; }
+        if (e.key === 'f' || e.key === 'F') { e.preventDefault(); $('#flash-firmware').click(); return; }
         return;
     }
     if (e.key === 'd' || e.key === 'D') {

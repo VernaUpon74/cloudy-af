@@ -420,10 +420,21 @@ $('#screenshot-save').click(() => {
 
 $('#screenshot-close').click(closeScreenshotModal);
 
-// Esc closes the modal; the pause shortcut ignores it (not Space).
+// Esc closes the modal; Ctrl+P/F/S for pause/fire/screenshot shortcuts.
 $(document).on('keydown', (e) => {
     if (e.code === 'Escape' && $('#screenshot-modal').is(':visible')) {
         closeScreenshotModal();
+        return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'p' || e.key === 'P') { e.preventDefault(); setPaused(!paused); return; }
+        if (e.key === 'f' || e.key === 'F') {
+            e.preventDefault();
+            if (fireAutofire) { setAutofire(false); stopFireRepeat(); }
+            else { setAutofire(true); startFireRepeat(); }
+            return;
+        }
+        if (e.key === 's' || e.key === 'S') { e.preventDefault(); $('#monitor-screenshot').click(); return; }
     }
 });
 
