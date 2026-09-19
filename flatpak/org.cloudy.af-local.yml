@@ -31,7 +31,11 @@ modules:
         install -Dm755 src-tauri/target/release/cloudy-af /app/bin/cloudy-af
         install -Dm644 flatpak/org.cloudy.af.desktop /app/share/applications/org.cloudy.af.desktop
         install -Dm644 flatpak/org.cloudy.af.appdata.xml /app/share/metainfo/org.cloudy.af.metainfo.xml
+        # Install all icon sizes so GNOME/Wayland finds the app icon.
         install -Dm644 icon.png /app/share/icons/hicolor/512x512/apps/org.cloudy.af.png
+        install -Dm644 src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/org.cloudy.af.png
+        install -Dm644 src-tauri/icons/128x128@2x.png /app/share/icons/hicolor/256x256/apps/org.cloudy.af.png
+        install -Dm644 src-tauri/icons/32x32.png /app/share/icons/hicolor/32x32/apps/org.cloudy.af.png
         # Bundle sidecar resources and Node runtime.
         mkdir -p /app/lib/cloudy-af/resources
         cp -r sidecar /app/lib/cloudy-af/resources/

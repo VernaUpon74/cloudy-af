@@ -6,3 +6,4 @@ Icon=org.cloudy.af
 Type=Application
 Categories=Utility;Electronics;
 Terminal=false
+StartupWMClass=org.cloudy.af
