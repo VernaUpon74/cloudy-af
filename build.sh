@@ -376,8 +376,23 @@ fi
 # produce it — the host lacks the GTK/soup/dbus/udev dev libraries.
 if [ "$DOCKER_BUILD" != "1" ]; then
     echo "Building fresh Tauri binary..."
+
+    # Detect toolbox for cargo build — the host lacks GTK/soup dev libs.
+    CARGO_TOOLBOX="${CLOUDY_TOOLBOX:-}"
+    if [ -z "$CARGO_TOOLBOX" ] && command -v toolbox >/dev/null 2>&1; then
+        if toolbox list -c 2>/dev/null | grep -q arcticfox-build; then
+            CARGO_TOOLBOX="arcticfox-build"
+        fi
+    fi
+
     cd "$MAIN_REPO_DIR"
-    npm run tauri:build -- --no-bundle
+    if [ -n "$CARGO_TOOLBOX" ]; then
+        echo "Building inside toolbox '$CARGO_TOOLBOX' (host lacks GTK dev libs)..."
+        toolbox run -c "$CARGO_TOOLBOX" sh -c \
+            "cd src-tauri && cargo build --release --features tauri/custom-protocol"
+    else
+        npm run tauri:build -- --no-bundle
+    fi
 
     if [ $? -ne 0 ]; then
         echo "ERROR: Tauri build failed!"
@@ -632,7 +647,7 @@ EOFHOOK
     echo "Deploying dependencies + packing AppImage (in toolbox: $TOOLBOX_NAME)..."
     toolbox run -c "$TOOLBOX_NAME" sh -c "
         set -e
-        PATH='/usr/bin:$SQ/usr/bin' LD_LIBRARY_PATH='$SQ/usr/lib' \
+        PATH='/usr/bin:$SQ/usr/bin:$HOME/.cache/tauri' LD_LIBRARY_PATH='$SQ/usr/lib' \
         APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 \
         '$SQ/usr/bin/linuxdeploy' --output appimage --plugin gtk \
             --exclude-library 'libGL*' --exclude-library 'libEGL*' \
