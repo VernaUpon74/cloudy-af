@@ -332,10 +332,6 @@
   "Tooltips.ProfilesTab": "Profili di vape — potenza, controllo di temperatura, preriscaldamento e impostazioni della coil per ogni profilo.",
   "Tooltips.ScreenTab": "Layout della schermata principale — cosa mostra ogni riga, orologio, logo e luminosità.",
   "Tooltips.ControlsTab": "Comportamento pulsanti — clic fuoco, più e meno, scorciatoie e azioni di risveglio.",
-  "Tooltips.ControlsSettingsTab": "Basic control settings — power step, temperature step, wakeup and button behavior.",
-  "Tooltips.ControlsMultiClicksTab": "Multi-click actions — configure what happens when the fire button is pressed 2, 3, 4 or 5 times.",
-  "Tooltips.ControlsShortcutsVWTab": "VW mode shortcuts — two-button combinations for variable wattage mode.",
-  "Tooltips.ControlsShortcutsTCTab": "TC mode shortcuts — two-button combinations for temperature control mode.",
   "Tooltips.SmartTab": "Modalità Smart — potenza automatica basata sui tuoi tiri recenti.",
   "Tooltips.AdvancedTab": "Impostazioni avanzate — modello batteria, carica, USB, hardware e orologio.",
   "Tooltips.StatsTab": "Statistiche di uso e contatori del dispositivo.",
@@ -376,7 +372,6 @@
   "Tooltips.PuffsCount": "Numero totale di tiri dall'ultimo azzeramento dei contatori.",
   "Tooltips.TotalPuffsTime": "Tempo totale di attivazione, sommato su tutti i tiri dall'ultimo azzeramento dei contatori.",
   "Tooltips.PuffsTimeFormat": "Come viene mostrata la durata del tiro: secondi totali, oppure ore, minuti e secondi.",
-  "Stats.PuffTimeLabel": "Durata del tiro:",
   "Monitor.ScreenshotButton": "Screenshot",
   "Monitor.ScreenshotSave": "Salva PNG",
   "Monitor.ScreenshotClose": "Chiudi",
@@ -389,12 +384,5 @@
   "Screen.Regional.DateFormat": "Formato data",
   "Screen.Regional.TimeFormat": "Formato ora",
   "Screen.Regional.TemperatureUnits": "Unità di temperatura",
-  "Animation.ComingSoon": "Prossimamente — l'animazione dell'orologio richiede una patch del firmware.",
-  "Profile.TFRSetupButton": "Imposta",
-  "TFRCurveEditor.CalcButton": "Calculate from Resistance",
-  "TFRCurveEditor.CalculateButton": "Calculate",
-  "TFRCurveEditor.ApplyButton": "Apply",
-  "TFRCurveEditor.Extrapolate800": "Extrapolate 800°F",
-  "Monitor.FireButton": "Fire",
-  "Tooltips.MonitorFire": "Hold to fire; double-click for autofire"
+  "Animation.ComingSoon": "Prossimamente — l'animazione dell'orologio richiede una patch del firmware."
 }

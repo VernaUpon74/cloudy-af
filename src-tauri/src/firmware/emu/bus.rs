@@ -1,13 +1,7 @@
-use super::eadc::Eadc;
 use super::EmuError;
 
 pub const FLASH_BASE: u32 = 0x0000_0000;
 pub const RAM_BASE: u32 = 0x2000_0000;
-
-/// EADC model: software-triggered conversions complete after this many
-/// core ticks (deterministic placeholder — real conversion latency is not
-/// modeled; refine at the Nu-Link bench if boot timing ever depends on it).
-const EADC_COMPLETION_TICKS: u32 = 8;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WriteRecord {
@@ -30,118 +24,6 @@ pub struct Bus {
     pub write_log: Vec<WriteRecord>,      // all stores that landed in RAM
     pub acl_violations: Vec<WriteRecord>, // stores outside allow-list or into flash
     pub dropped_writes: Vec<WriteRecord>, // stores to peripheral space
-    /// Nuvoton FMC ISP model (0x4000_C000); `pub` so gates can attach an
-    /// LDROM dump for the boot-time SKU scan.
-    pub fmc: Fmc,
-    systick: SysTick,
-    eadc: Eadc,
-}
-
-#[derive(Default)]
-struct SysTick {
-    ctrl: u32,
-    reload: u32,
-    current: u32,
-    countflag: std::cell::Cell<bool>,
-}
-
-impl SysTick {
-    fn read(&self, addr: u32) -> Option<u32> {
-        match addr {
-            0xE000_E010 => Some(self.ctrl | ((self.countflag.replace(false) as u32) << 16)),
-            0xE000_E014 => Some(self.reload),
-            0xE000_E018 => Some(self.current),
-            _ => None,
-        }
-    }
-
-    fn write(&mut self, addr: u32, value: u32) -> bool {
-        match addr {
-            0xE000_E010 => self.ctrl = value & 7,
-            0xE000_E014 => self.reload = value & 0x00FF_FFFF,
-            0xE000_E018 => {
-                self.current = 0;
-                self.countflag.set(false);
-            }
-            _ => return false,
-        }
-        true
-    }
-
-    fn advance_core_tick(&mut self) {
-        if self.ctrl & 5 != 5 {
-            return;
-        }
-        if self.current == 0 {
-            self.current = self.reload;
-        } else {
-            self.current -= 1;
-            if self.current == 0 {
-                self.countflag.set(true);
-            }
-        }
-    }
-}
-
-/// Nuvoton FMC ISP model (M451, base 0x4000C000): ISPCON/ISPADR/ISPDAT/
-/// ISPCMD/ISPTRG at +0x00/+0x04/+0x08/+0x0C/+0x10. On an ISPTRG write of 1
-/// the command executes instantly (ISPTRG reads always 0 = not busy) and its
-/// result is served by later ISPDAT reads. ISP READ (cmd 0) serves the LDROM
-/// (mapped at 0x00100000 from an attached dump) and the flash image
-/// (APROM+dataflash). UID/CID/DID (cmds 4/0xB/0xC) return deterministic
-/// values — the af boot only stores them to globals (0x20000DA4+0x10C..),
-/// nothing compares them (verified 2026-09-16 disassembly, 0x3830..0x3892).
-#[derive(Default)]
-pub struct Fmc {
-    /// LDROM dump mapped at 0x0010_0000; empty = no LDROM (reads yield 0).
-    pub ldrom: Vec<u8>,
-    ispadr: u32,
-    ispcmd: u32,
-    ispdat: u32,
-}
-
-impl Fmc {
-    /// LDROM base on the M451.
-    pub const LDROM_BASE: u32 = 0x0010_0000;
-
-    fn read_word(&self, flash: &[u8], addr: u32) -> u32 {
-        let ld_lo = Self::LDROM_BASE as usize;
-        let ld_hi = ld_lo + self.ldrom.len();
-        let a = addr as usize;
-        if a >= ld_lo && a + 4 <= ld_hi {
-            let o = a - ld_lo;
-            u32::from_le_bytes(self.ldrom[o..o + 4].try_into().unwrap())
-        } else if a + 4 <= flash.len() {
-            u32::from_le_bytes(flash[a..a + 4].try_into().unwrap())
-        } else {
-            0
-        }
-    }
-
-    /// Execute the latched ISP command (ISPTRG := 1 written).
-    fn trigger(&mut self, flash: &[u8]) {
-        self.ispdat = match self.ispcmd {
-            0x00 => self.read_word(flash, self.ispadr), // READ double word
-            0x04 => match self.ispadr {
-                // READ_UID: 6 words at 0..0x18 — deterministic dummy.
-                0x00 => 0x1357_2468,
-                0x04 => 0x2468_ACE0,
-                0x08 => 0xBEEF_0042,
-                0x10 => 0x0BAD_C0DE,
-                0x14 => 0x1234_5678,
-                0x18 => 0x9ABC_DEF0,
-                _ => 0,
-            },
-            0x0B => 0x0000_00DA, // READ_CID (Nuvoton company id)
-            0x0C => match self.ispadr {
-                // READ_DID: two words at 0/4 — M451-series dummy values.
-                0x00 => 0x0D42_1000,
-                0x04 => 0x0000_0001,
-                _ => 0,
-            },
-            _ => 0, // program/erase forms: not modeled (boot never emits them)
-        };
-    }
 }
 
 impl Bus {
@@ -154,29 +36,8 @@ impl Bus {
             write_log: Vec::new(),
             acl_violations: Vec::new(),
             dropped_writes: Vec::new(),
-            fmc: Fmc::default(),
-            systick: SysTick::default(),
-            eadc: Eadc::default(),
         }
     }
-
-    /// Advance the SysTick model by one CPU clock tick: the counter
-    /// decrements toward zero (reloading from RELOAD on wrap) when
-    /// ENABLE+CLKSOURCE are set, and reaching zero raises COUNTFLAG.
-    /// Register semantics follow ARMv7-M B3.3.3; timing is one tick per
-    /// `Cpu::step` (no cycle accuracy, no external clock, no interrupt).
-    pub fn advance_core_tick(&mut self) {
-        self.systick.advance_core_tick();
-        self.eadc.advance_core_tick();
-    }
-
-    /// Configure the EADC result served for sample module `m` once its
-    /// conversion completes (test hook — real analog inputs feed the
-    /// physical chip, not this model).
-    pub fn set_eadc_sample(&mut self, module: usize, value: u16) {
-        self.eadc.sample[module] = value;
-    }
-
 
     pub fn allow_region(&mut self, range: std::ops::Range<u32>) {
         self.allow.push(range);
@@ -208,12 +69,6 @@ impl Bus {
         }
     }
 
-    /// ARMv7-M allows unaligned LDR/STR/ LDRH/STRH (only LDM/STM and some
-    /// exclusives require alignment) — and the af boot genuinely reads a
-    /// word at 0x20000161 — so normal loads/stores are accepted at any
-    /// address; the byte-wise read_le/write loops handle the split.
-    /// `check_align` stays for callers that must enforce it (none today).
-    #[allow(dead_code)]
     fn check_align(&self, addr: u32, size: u8) -> Result<(), EmuError> {
         if addr % size as u32 != 0 {
             Err(EmuError::Unaligned { addr, size })
@@ -223,37 +78,14 @@ impl Bus {
     }
 
     fn read(&self, addr: u32, size: u8) -> Result<u32, EmuError> {
+        self.check_align(addr, size)?;
         let size_us = size as usize;
         match self.resolve(addr, size)? {
             Region::Flash(off) => Ok(self.read_le(&self.flash, off, size_us)),
             Region::Ram(off) => Ok(self.read_le(&self.ram, off, size_us)),
-            Region::Peripheral => {
-                // Latched peripheral models (word accesses only): SysTick
-                // (core CLKSOURCE), EADC, and NVIC ISER/ICER; unmodeled
-                // peripheral reads fall through to stubs/zero below.
-                if size == 4 {
-                    if let Some(v) = self.systick.read(addr) {
-                        return Ok(v);
-                    }
-                    if let Some(v) = self.eadc.read(addr) {
-                        return Ok(v);
-                    }
-                }
-                // FMC ISP: ISPDAT reads return the last command result,
-                // ISPTRG reads 0 (commands complete instantly).
-                if addr == 0x4000_C008 {
-                    Ok(self.fmc.ispdat)
-                } else {
-                    Ok(self.stubs.get(&addr).copied().unwrap_or(0))
-                }
-            }
+            Region::Peripheral => Ok(self.stubs.get(&addr).copied().unwrap_or(0)),
         }
     }
-
-    // TEMP discovery (Task 6, SKU-scan): kept for the next decode-gap hunt.
-    // The 0x20000CA4 "scan buffer" hypothesis was DISPROVEN (2026-09-16: the
-    // SKU scan reads the LDROM via FMC, not a RAM buffer) — the hook was
-    // removed with the scan-buffer theory; this comment records the dead end.
 
     fn read_le(&self, mem: &[u8], off: usize, size: usize) -> u32 {
         let mut v: u32 = 0;
@@ -285,6 +117,7 @@ impl Bus {
     }
 
     fn write(&mut self, addr: u32, value: u32, size: u8) -> Result<(), EmuError> {
+        self.check_align(addr, size)?;
         let record = WriteRecord { addr, value, size };
         match self.resolve(addr, size)? {
             Region::Flash(_) => {
@@ -301,40 +134,6 @@ impl Bus {
                 self.write_log.push(record);
             }
             Region::Peripheral => {
-                // TEMP discovery (Task 6): when CLOUDY_ENGINE_TRACE is set,
-                // print FMC writes to model its semantics; REMOVE once the
-                // FMC model is silicon-verified at the Nu-Link bench.
-                if (0x4000_C000..0x4000_C018).contains(&addr)
-                    && std::env::var("CLOUDY_ENGINE_TRACE").is_ok()
-                {
-                    eprintln!("[engine-write] 0x{:08X} <= 0x{:08X} (pc=0x{:08X})", addr, value, crate::firmware::emu::cpu::Cpu::last_pc_global());
-                }
-                // Latched peripheral models (word accesses only): SysTick
-                // (CLK source) and EADC. Writes still land in
-                // dropped_writes — the record doubles as the peripheral-
-                // write log the IRQ42 acknowledge assertion relies on.
-                if size == 4 {
-                    if self.systick.write(addr, value) {
-                        self.dropped_writes.push(record);
-                        return Ok(());
-                    }
-                    if self.eadc.write(addr, value) {
-                        self.dropped_writes.push(record);
-                        return Ok(());
-                    }
-                }
-                // FMC ISP register latch/trigger (word writes only).
-                if size == 4 {
-                    match addr {
-                        0x4000_C004 => self.fmc.ispadr = value,
-                        0x4000_C008 => self.fmc.ispdat = value, // ISPDIN (write data)
-                        0x4000_C00C => self.fmc.ispcmd = value,
-                        0x4000_C010 if value & 1 != 0 => {
-                            self.fmc.trigger(&self.flash);
-                        }
-                        _ => {}
-                    }
-                }
                 self.dropped_writes.push(record);
             }
         }
@@ -362,117 +161,6 @@ mod tests {
         let mut b = Bus::new(vec![0u8; 0x1000], 0x1000);
         b.allow_region(RAM_BASE + 0x100..RAM_BASE + 0x200);
         b
-    }
-
-    #[test]
-    fn test_systick_register_masks() {
-        let mut b = bus();
-        b.write_u32(0xE000_E010, u32::MAX).unwrap();
-        b.write_u32(0xE000_E014, u32::MAX).unwrap();
-        b.write_u32(0xE000_E018, u32::MAX).unwrap();
-        assert_eq!(b.read_u32(0xE000_E010).unwrap(), 7);
-        assert_eq!(b.read_u32(0xE000_E014).unwrap(), 0x00FF_FFFF);
-        assert_eq!(b.read_u32(0xE000_E018).unwrap(), 0);
-    }
-
-    #[test]
-    fn test_systick_reload_and_countflag_lifecycle() {
-        let mut b = bus();
-        b.write_u32(0xE000_E014, 2).unwrap();
-        b.write_u32(0xE000_E010, 5).unwrap();
-        for expected in [2, 1, 0] {
-            b.advance_core_tick();
-            assert_eq!(b.read_u32(0xE000_E018).unwrap(), expected);
-        }
-        assert_eq!(b.read_u32(0xE000_E010).unwrap(), 0x0001_0005);
-        assert_eq!(b.read_u32(0xE000_E010).unwrap(), 5);
-        for _ in 0..6 {
-            b.advance_core_tick();
-        }
-        b.write_u32(0xE000_E010, 5).unwrap();
-        assert_eq!(b.read_u32(0xE000_E010).unwrap(), 0x0001_0005);
-        for _ in 0..3 {
-            b.advance_core_tick();
-        }
-        b.write_u32(0xE000_E018, u32::MAX).unwrap();
-        assert_eq!(b.read_u32(0xE000_E018).unwrap(), 0);
-        assert_eq!(b.read_u32(0xE000_E010).unwrap(), 5);
-        b.advance_core_tick();
-        assert_eq!(b.read_u32(0xE000_E018).unwrap(), 2);
-    }
-
-    #[test]
-    fn test_systick_enable_clock_selection_and_reload_update() {
-        let mut b = bus();
-        b.write_u32(0xE000_E014, 3).unwrap();
-        for ctrl in [0, 4, 1, 3] {
-            b.write_u32(0xE000_E010, ctrl).unwrap();
-            b.advance_core_tick();
-            assert_eq!(b.read_u32(0xE000_E018).unwrap(), 0);
-            assert_eq!(b.read_u32(0xE000_E010).unwrap(), ctrl);
-        }
-        b.write_u32(0xE000_E010, 7).unwrap();
-        b.advance_core_tick();
-        assert_eq!(b.read_u32(0xE000_E018).unwrap(), 3);
-        b.write_u32(0xE000_E014, 1).unwrap();
-        b.write_u32(0xE000_E010, 4).unwrap();
-        b.advance_core_tick();
-        assert_eq!(b.read_u32(0xE000_E018).unwrap(), 3);
-        b.write_u32(0xE000_E010, 5).unwrap();
-        for expected in [2, 1, 0, 1] {
-            b.advance_core_tick();
-            assert_eq!(b.read_u32(0xE000_E018).unwrap(), expected);
-        }
-        assert_eq!(b.read_u32(0xE000_E010).unwrap(), 0x0001_0005);
-        assert!(b.write_log.is_empty());
-        assert!(b.acl_violations.is_empty());
-    }
-
-    #[test]
-    fn test_systick_zero_reload_does_not_set_countflag() {
-        let mut b = bus();
-        b.write_u32(0xE000_E010, 5).unwrap();
-        for _ in 0..10 {
-            b.advance_core_tick();
-            assert_eq!(b.read_u32(0xE000_E018).unwrap(), 0);
-            assert_eq!(b.read_u32(0xE000_E010).unwrap(), 5);
-        }
-    }
-
-    #[test]
-    fn test_eadc_swtrg_completion_status_and_dat() {
-        let mut b = bus();
-        const EADC: u32 = 0x4004_3000;
-        b.set_eadc_sample(18, 0x0ABC);
-        b.write_u32(EADC + 0x50, 5).unwrap(); // ADCEN | ADCIEN0
-        b.write_u32(EADC + 0xD0, 1 << 18).unwrap(); // route module 18 to ADINT0
-        b.write_u32(EADC + 0xF8, 1).unwrap(); // clear stale ADIF0 (W1C)
-        b.write_u32(EADC + 0x54, 1 << 18).unwrap(); // SWTRG module 18
-        for _ in 0..EADC_COMPLETION_TICKS - 1 {
-            b.advance_core_tick();
-        }
-        assert_eq!(b.read_u32(EADC + 0xF8).unwrap(), 0, "ADIF0 before completion");
-        b.advance_core_tick();
-        assert_eq!(b.read_u32(EADC + 0xF8).unwrap(), 1, "ADIF0 on completion");
-        assert_eq!(b.read_u32(EADC + 0x48).unwrap() & 0xFFFF, 0x0ABC, "DAT18");
-        assert_eq!(b.read_u32(EADC + 0x50).unwrap(), 5);
-        assert_eq!(b.read_u32(EADC + 0xD0).unwrap(), 1 << 18);
-        b.write_u32(EADC + 0xF8, 1).unwrap(); // W1C
-        assert_eq!(b.read_u32(EADC + 0xF8).unwrap(), 0);
-        b.write_u32(EADC + 0x50, 4).unwrap(); // ADCEN off
-        b.write_u32(EADC + 0x54, 1 << 18).unwrap();
-        for _ in 0..EADC_COMPLETION_TICKS {
-            b.advance_core_tick();
-        }
-        assert_eq!(b.read_u32(EADC + 0xF8).unwrap(), 0, "disabled ADC ignores SWTRG");
-        // SysTick interaction unchanged by the EADC model: tick 1 reloads,
-        // tick 2 counts down to zero and raises COUNTFLAG.
-        b.write_u32(0xE000_E014, 1).unwrap();
-        b.write_u32(0xE000_E010, 5).unwrap();
-        b.advance_core_tick();
-        assert_eq!(b.read_u32(0xE000_E010).unwrap(), 5);
-        b.advance_core_tick();
-        assert_eq!(b.read_u32(0xE000_E010).unwrap(), 0x0001_0005);
     }
 
     #[test]
@@ -514,14 +202,10 @@ mod tests {
 
     #[test]
     fn test_unmapped_and_unaligned() {
-        // ARMv7-M permits unaligned LDR/STR (the af boot loads a word at
-        // 0x20000161), so unaligned accesses succeed; only unmapped space
-        // faults.
         let mut b = bus();
         assert!(matches!(b.read_u32(0x8000_0000), Err(EmuError::Unmapped { .. })));
-        b.write_u32(RAM_BASE + 0x100, 0x1122_3344).unwrap();
-        assert_eq!(b.read_u32(RAM_BASE + 0x101).unwrap(), 0x0011_2233);
-        assert_eq!(b.read_u16(RAM_BASE + 0x101).unwrap(), 0x2233);
+        assert!(matches!(b.read_u32(RAM_BASE + 0x101), Err(EmuError::Unaligned { size: 4, .. })));
+        assert!(matches!(b.write_u16(RAM_BASE + 0x101, 0), Err(EmuError::Unaligned { size: 2, .. })));
     }
 
     #[test]

@@ -200,7 +200,7 @@
               <tr data-lang-title="Tooltips.Resistance">
                 <td class="c1" data-lang="Profile.ResistanceLabel">Resistance</td>
                 <td class="c2">
-                  <input class="fox-pval" type="number" id="Resistance" step="0.01"> &#8486;
+                  <input class="fox-pval" type="number" id="Resistance"> &#8486;
                 </td>
                 <td class="c3">
                   <span class="fox-tconly">
@@ -231,7 +231,6 @@
                 </td>
                 <td class="c3">
                   <input length="4" class="fox-pval" type="number" id="TCR">
-                  <button id="tfr-setup" class="fox-tconly btn btn-mini btn-default" data-lang="Profile.TFRSetupButton" style="display:none">Setup</button>
                 </td>
                 <td class="c4"></td>
               </tr>
@@ -467,6 +466,7 @@
                   <td class="c4"></td>
                 </tr>
               </table>
+              <div style="padding-top:28px; padding-left: 12px; font-size: 10px" data-lang="Screen.Appearance.TooltipLabel"></div>
 
             </div>
 
@@ -1452,16 +1452,16 @@
 
         <div class="view" id="view-controls" style="display:none">
           <div class="tab-group" id="controls">
-            <div class="tab-item active" data-view="controls-settings" data-lang="Controls.SettingsTab" data-lang-title="Tooltips.ControlsSettingsTab">
+            <div class="tab-item active" data-view="controls-settings" data-lang="Controls.SettingsTab">
               Settings
             </div>
-            <div class="tab-item" data-view="controls-multiclicks" data-lang="Controls.MultiClicksTab" data-lang-title="Tooltips.ControlsMultiClicksTab">
+            <div class="tab-item" data-view="controls-multiclicks" data-lang="Controls.MultiClicksTab">
               Multi Clicks
             </div>
-            <div class="tab-item" data-view="controls-shortcutsvw" data-lang="Controls.ShortcutsVWTab" data-lang-title="Tooltips.ControlsShortcutsVWTab">
+            <div class="tab-item" data-view="controls-shortcutsvw" data-lang="Controls.ShortcutsVWTab">
               Shortcuts VW
             </div>
-            <div class="tab-item" data-view="controls-shortcutstc" data-lang="Controls.ShortcutsTCTab" data-lang-title="Tooltips.ControlsShortcutsTCTab">
+            <div class="tab-item" data-view="controls-shortcutstc" data-lang="Controls.ShortcutsTCTab">
               Shortcuts TC
             </div>
           </div>
@@ -2339,6 +2339,7 @@
                   <td class="c4"></td>
                 </tr>
               </table>
+              <div style="padding-top:20px; padding-left: 12px; font-size: 10px" data-lang="Advanced.Settings.TooltipLabel"></div>
               <div style="padding: 12px;">
                 <button id="firmware-editor" class="btn btn-default" data-lang-title="Tooltips.FirmwareEditor">Firmware Editor</button>
               </div>
@@ -2404,7 +2405,7 @@
               <td class="c4"></td>
             </tr>
             <tr data-lang-title="Tooltips.PuffsTimeFormat">
-              <td class="c1" data-lang="Stats.PuffTimeLabel">Puff Time:</td>
+              <td class="c1" data-lang="Stats.PuffTimeHHMMSSLabel">Puff Time (HH:MM:SS)</td>
               <td class="c2">
                 <input class="fox-val" type="text" inputmode="numeric" id="PuffsTime">
               </td>

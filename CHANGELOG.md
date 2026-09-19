@@ -1,23 +1,5 @@
 # Changelog
 
-## 1.2.1 — 2026-09-18
-
-### Added
-- **Build script disk space check**: `check_disk_space()` runs before each build (AppImage/Flatpak), checks free space and offers to clear caches when below threshold. Supports `-y` for non-interactive mode.
-- **Controls sub-tab tooltips**: Settings, Multi Clicks, Shortcuts VW, and Shortcuts TC tabs now show descriptive tooltips on hover.
-- **Device Monitor fire button**: press-and-hold fires; double-click toggles autofire mode with visual indicator.
-- **Screenshot download**: Firmware Editor screenshot now properly decodes 1bpp framebuffer data.
-
-### Changed
-- **Device Monitor button moved back to Stats tab** (out of Advanced → Settings).
-- **Screenshot modal improvements**: panel now constrains to viewport with scroll, z-index ensures buttons are always visible.
-- **Resistance precision**: Device Monitor shows resistance values to 3 decimal places.
-
-### Fixed
-- **Firmware Editor duplicate screenshot buttons**: removed duplicate block in firmware.html.
-- **Boot gate bit fix**: bus write hook sets bit 2 (not bit 3) of RAM 0x20002C30, matching firmware's `lsls r3, #0x1d` check.
-- **Flatpak runtime-repo**: install uses `--runtime-repo=https://flathub.org/repo/flathub.flatpakrepo`.
-
 ## 1.2.0 — 2026-09-12
 
 ### Added

@@ -71,7 +71,7 @@ The stock `tauri build --bundles appimage` output is not usable as-is: it
 bundles the system GL/EGL stack (crashes WebKitWebProcess at exit on NVIDIA
 hosts), drops a broken `put` symlink into the sidecar node_modules, lacks a
 `node` binary for the sidecar, and extract-and-run doesn't put `usr/bin` on
-PATH. Use `./build.sh` (AppImage target) or the manual procedure:
+PATH. Use `scripts/build-appimage.sh` (FUSE3-compatible repack) or the
 manual procedure:
 
 1. Regenerate the AppDir: `APPIMAGE_EXTRACT_AND_RUN=1 npm run tauri:build -- --bundles appimage`

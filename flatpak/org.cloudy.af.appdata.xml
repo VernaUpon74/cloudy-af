@@ -34,11 +34,6 @@
     <keyword>linux</keyword>
   </keywords>
   <releases>
-    <release version="1.2.1" date="2026-09-18">
-      <description>
-        <p>Build script disk space check, Controls sub-tab tooltips, Device Monitor fire button with autofire mode, screenshot framebuffer decoding fix, resistance precision improvement, and Device Monitor button relocated back to Stats tab.</p>
-      </description>
-    </release>
     <release version="1.2.0" date="2026-09-12">
       <description>
         <p>Firmware Editor gains a Status tab with verbose device info and the shared connected/disconnected footer, image table tools with resource-pack preview, and batch apply/rollback for patches. Fixes a JavaScript syntax error that broke the editor bundle, curve chart reflow on resize, and local Flatpak build issues.</p>

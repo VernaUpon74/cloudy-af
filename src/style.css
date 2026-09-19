@@ -421,12 +421,6 @@ body,
     background-color: var(--hover-bg) !important;
 }
 
-#monitor-fire.autofire-active {
-    background-color: var(--accent-color) !important;
-    color: #fff !important;
-    border-color: var(--accent-color) !important;
-}
-
 input,
 textarea,
 .form-control,

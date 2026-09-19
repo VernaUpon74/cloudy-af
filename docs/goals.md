@@ -38,10 +38,6 @@ Loose ends carried over from the firmware read-back Phase 1 plan
       Backend read (`read_monitoring_data`, cmd 0x66) implemented in
       `flasher.rs`; the UI window is implemented. Added a secondary y-axis
       for resistance so it is readable alongside temperature.
-      (Update 2026-09-15: the chart was reverted to a single fixed y-axis
-      0–640 in the working tree — resistance is plotted on the shared axis
-      again; the `yAxis` field stays in `SENSORS` so the dual-axis can be
-      restored cheaply if wanted.)
 - [x] Emulation harness gate: layers 1–3 done (plan
       `docs/superpowers/plans/2026-08-28-firmware-emulation-harness.md`).
       Layer 4 (`test_af_190602_render_gate`) and Layer 5
@@ -59,11 +55,11 @@ Loose ends carried over from the firmware read-back Phase 1 plan
 - [x] Give Firmware Editor the same 'Device is connected/disconnected' footer bar, alongside the device name header bar.
       Default first page should be 'Status' displaying even more verbose device hardware/model info
 
-- [x] We already tried the plan in ~/cloudy-af/.github/workflows/macos-build.yml, address Github Actions macOS build error and the vulnerability Github found- context in new files in '~/cloudy-af/docs/'
+- [ ] We already tried the plan in ~/cloudy-af/.github/workflows/macos-build.yml, address Github Actions macOS build error and the vulnerability Github found- context in new files in '~/cloudy-af/docs/'
       Describe errors when found
       
       **macOS build error found (2026-09-11):** `npm ci` fails during `sidecar:build` / `patch-package` because the runner's working tree contained an `arcticfox+11.0.4.patch` that did not match the installed `arcticfox@11.0.3` (`arcticfox@11.0.3 ✔` applied, then `arcticfox+11.0.4.patch` failed). Local tree has already been moved to `arcticfox@^11.0.3` + `arcticfox+11.0.3.patch`; `npm install --dry-run` in `sidecar/` now applies both patches cleanly. Next step is to push and re-run the workflow to confirm.
-- [x] macOS GitHub Actions build — arcticfox patch-version fix committed to the Documents mirror (`arcticfox@^11.0.3` + `arcticfox+11.0.3.patch`); workflow file `.github/workflows/macos-build.yml` included in that push; next step is to re-run the workflow to confirm green. Context: `docs/macos-ci.md`, `docs/macos-ci-forgejo-fallback.md`, `docs/macos-job-logs.txt` (mirror). So far only VERIFIED the local `npm install --dry-run` applies both patches cleanly; the CI green result is still pending.
+      **Update 2026-09-12:** Current working state pushed to `/var/home/j/Documents/GitHub/cloudy-af` (local mirror). macOS workflow file included in the push; can now be triggered against this state.
       
       **GitHub vulnerability found (2026-09-11):** Dependabot alert #1 — unsound `Iterator`/`DoubleEndedIterator` impls for `glib::VariantStrIter` in `src-tauri/Cargo.lock`. Current locked version is `glib 0.18.5`, which Dependabot reports as the latest possible version in the 0.18.x line. `glib` is pulled in transitively by the gtk-rs stack (`gtk`, `gdk`, `cairo-rs`, `gio`, `webkit2gtk`) used by Tauri v2.11.5. Project code does not directly use `VariantStrIter`. Fixing it likely requires upgrading the gtk-rs ecosystem / Tauri to a version that pulls `glib >= 0.19.x`.
       **Update 2026-09-12:** `cargo search` shows Tauri 2.11.5 is still the latest release and its `Cargo.toml` pins `gtk = "0.18"` and `webkit2gtk = "2"`, which in turn pin `glib 0.18.5`. A newer `glib` (0.22.9) and `gtk` (0.19.0) exist on crates.io, but Tauri does not yet declare compatibility with them. Forcing an override with `[patch.crates-io]` would likely break Tauri's Linux webview/gtk integration at compile time. This vulnerability is therefore blocked on a future Tauri/gtk-rs release; recommend monitoring and upgrading once Tauri supports gtk 0.19+/glib 0.19+.
@@ -75,17 +71,7 @@ Loose ends carried over from the firmware read-back Phase 1 plan
 
 - [x] M0 RE freeze: write `resources/re/af_190602-boot.md` + `resources/boot/af_190602.json` documenting the reset handler, SystemInit, C runtime startup, and main() dispatch loop for build af_190602.
 
-- [x] Section 2 — full-boot emulation with per-PID dispatch (done 2026-09-18):
-      plan `docs/superpowers/plans/2026-09-14-fullboot-pid-dispatch-emulation.md`;
-      three compilation defects fixed (missing braces, bogus `use`, wrong
-      `RETURN_SENTINEL` path); boot gate (`test_af_190602_boot_dispatch_by_pid`)
-      now passes — all 9 known PIDs settle at dispatcher 0x0000d684, unknown
-      PID XXXX hits the 0x2FF8 hang.  Key fix: bus write hook for 0x40040000
-      models the hardware side-effect (sets bit 2 of RAM 0x20002C30) that
-      unblocks the clock_pll_init polling loop at 0x17452.
-
-- [x] Continue pursuing earlier todoss — boot gate (Section 2) completed,
-      AppImage flicker follow-ups completed (2026-09-18).
+- [ ] Continue pursuing earlier todoss
 
 - [x] Fix Firmware Editor syntax blocker (2026-09-12): commit `ebde818` shipped
       `src/renderer-firmware.js` with a duplicated `function setImagesVisible(hasHandle) {`
@@ -113,20 +99,10 @@ Loose ends carried over from the firmware read-back Phase 1 plan
       in renderer-firmware/tfr; Patches tab behind an untracked
       `local-flags.json` build flag (off on GitHub builds, on in ~/cloudy-af
       until feature testing passes).
-- [x] Firmware Editor Strings/Resource Packs tabs (2026-09-12): T2 delegate
-      (queue2) found no port was needed — refreshStringsTab (renderer-firmware.js
-      :1369) and refreshResourcePacksTab (:1638) already exist from the preserved
-      87435d8 feature set, with tab markup in firmware.html (:169,:188) calling
-      the resources.rs backend (listStringsCmd/listResourcePacks). Remaining:
-      functional test with a firmware fixture (glyph editor, pack preview,
-      extract/inject round-trip vs NFirmwareEditor parity).
-- [x] AppImage device-detection flicker (resolved 2026-09-18): root cause
-      was two devices or two software instances connected simultaneously,
-      not a code defect.  Follow-ups (renderer edge-detect, bridge
-      first-failure guard) applied as defensive measures.
-- [x] Build script disk space check (2026-09-18): added `check_disk_space()`
-      function to `build.sh` that runs before each build (AppImage/Flatpak).
-      Checks available disk space and offers to clear caches (pip, npm, cargo,
-      flatpak-builder, etc.) when below minimum threshold. Supports `-y` flag
-      for non-interactive mode.
+- [ ] Firmware Editor Strings/Resource Packs tabs: delegate port from
+      decompiled NFirmwareEditor (~/.cache/ntoolbox-src/NFirmwareEditor.decompiled)
+      onto the existing resources.rs backend — audit delegate output when the
+      queue (/tmp/cline-queue.log) finishes.
+- [ ] AppImage device-detection flicker: delegate root-cause analysis at
+      /tmp/cline-tasks/T3-report.md — audit and fix when queue finishes.
 

@@ -332,10 +332,6 @@
   "Tooltips.ProfilesTab": "Profile wapowania — moc, kontrola temperatury, podgrzewanie i ustawienia grzałki dla każdego profilu.",
   "Tooltips.ScreenTab": "Układ ekranu głównego — co pokazuje każda linia, zegar, logo i jasność.",
   "Tooltips.ControlsTab": "Zachowanie przycisków — kliknięcia fire, plus i minus, skróty i akcje wybudzania.",
-  "Tooltips.ControlsSettingsTab": "Basic control settings — power step, temperature step, wakeup and button behavior.",
-  "Tooltips.ControlsMultiClicksTab": "Multi-click actions — configure what happens when the fire button is pressed 2, 3, 4 or 5 times.",
-  "Tooltips.ControlsShortcutsVWTab": "VW mode shortcuts — two-button combinations for variable wattage mode.",
-  "Tooltips.ControlsShortcutsTCTab": "TC mode shortcuts — two-button combinations for temperature control mode.",
   "Tooltips.SmartTab": "Tryb Smart — automatyczna moc na podstawie ostatnich wapowań.",
   "Tooltips.AdvancedTab": "Ustawienia zaawansowane — model baterii, ładowanie, USB, sprzęt i zegar.",
   "Tooltips.StatsTab": "Statystyki użycia i liczniki urządzenia.",
@@ -376,7 +372,6 @@
   "Tooltips.PuffsCount": "Łączna liczba wapowań od ostatniego zresetowania liczników.",
   "Tooltips.TotalPuffsTime": "Łączny czas grzania, sumowany ze wszystkich wapowań od ostatniego zresetowania liczników.",
   "Tooltips.PuffsTimeFormat": "Sposób wyświetlania czasu wapowania: suma sekund lub godziny, minuty i sekundy.",
-  "Stats.PuffTimeLabel": "Czas wapowania:",
   "Monitor.ScreenshotButton": "Zrzut ekranu",
   "Monitor.ScreenshotSave": "Zapisz PNG",
   "Monitor.ScreenshotClose": "Zamknij",
@@ -389,12 +384,5 @@
   "Screen.Regional.DateFormat": "Format daty",
   "Screen.Regional.TimeFormat": "Format czasu",
   "Screen.Regional.TemperatureUnits": "Jednostki temperatury",
-  "Animation.ComingSoon": "Wkrótce — animacja zegara wymaga poprawki firmware.",
-  "Profile.TFRSetupButton": "Edytuj",
-  "TFRCurveEditor.CalcButton": "Calculate from Resistance",
-  "TFRCurveEditor.CalculateButton": "Calculate",
-  "TFRCurveEditor.ApplyButton": "Apply",
-  "TFRCurveEditor.Extrapolate800": "Extrapolate 800°F",
-  "Monitor.FireButton": "Fire",
-  "Tooltips.MonitorFire": "Hold to fire; double-click for autofire"
+  "Animation.ComingSoon": "Wkrótce — animacja zegara wymaga poprawki firmware."
 }

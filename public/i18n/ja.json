@@ -332,10 +332,6 @@
   "Tooltips.ProfilesTab": "ベイピングプロファイル — 各プロファイルごとの出力、温度制御、予熱、およびコイル設定。",
   "Tooltips.ScreenTab": "メイン画面のレイアウト — 各行の表示内容、時計、ロゴ、輝度。",
   "Tooltips.ControlsTab": "ボタンの動作 — ファイア、プラスおよびマイナスクリック、ショートカット、および起動アクション。",
-  "Tooltips.ControlsSettingsTab": "Basic control settings — power step, temperature step, wakeup and button behavior.",
-  "Tooltips.ControlsMultiClicksTab": "Multi-click actions — configure what happens when the fire button is pressed 2, 3, 4 or 5 times.",
-  "Tooltips.ControlsShortcutsVWTab": "VW mode shortcuts — two-button combinations for variable wattage mode.",
-  "Tooltips.ControlsShortcutsTCTab": "TC mode shortcuts — two-button combinations for temperature control mode.",
   "Tooltips.SmartTab": "スマートモード — 最近のパフに基づく自動パワー調整。",
   "Tooltips.AdvancedTab": "詳細設定 — バッテリーモデル、充電、USB、ハードウェア、および時計のオプション。",
   "Tooltips.StatsTab": "使用統計とデバイスカウンター。",
@@ -376,7 +372,6 @@
   "Tooltips.PuffsCount": "カウンターが最後にリセットされてからの総パフ回数。",
   "Tooltips.TotalPuffsTime": "カウンターが最後にリセットされてからの加熱時間の合計。",
   "Tooltips.PuffsTimeFormat": "パフ時間の表示方法：合計秒数、または時・分・秒。",
-  "Stats.PuffTimeLabel": "パフ時間：",
   "Monitor.ScreenshotButton": "スクリーンショット",
   "Monitor.ScreenshotSave": "PNG保存",
   "Monitor.ScreenshotClose": "閉じる",
@@ -389,12 +384,5 @@
   "Screen.Regional.DateFormat": "日付の形式",
   "Screen.Regional.TimeFormat": "時刻の形式",
   "Screen.Regional.TemperatureUnits": "温度の単位",
-  "Animation.ComingSoon": "近日対応 — 時計アニメーションにはファームウェアパッチが必要です。",
-  "Profile.TFRSetupButton": "設定",
-  "TFRCurveEditor.CalcButton": "Calculate from Resistance",
-  "TFRCurveEditor.CalculateButton": "Calculate",
-  "TFRCurveEditor.ApplyButton": "Apply",
-  "TFRCurveEditor.Extrapolate800": "Extrapolate 800°F",
-  "Monitor.FireButton": "Fire",
-  "Tooltips.MonitorFire": "Hold to fire; double-click for autofire"
+  "Animation.ComingSoon": "近日対応 — 時計アニメーションにはファームウェアパッチが必要です。"
 }

@@ -132,14 +132,6 @@ impl Asm {
         self.emit(0x1800 | (((rm & 0x7) as u16) << 6) | (((rn & 0x7) as u16) << 3) | (rd & 0x7) as u16)
     }
 
-    /// `subs rd, rn, rm` — low-register subtract, sets flags. T1 encoding
-    /// `0001 101 Rm Rn Rd` (0x1A00). Note this is the ADD/SUB register group,
-    /// NOT the 0x40xx data-processing family — `0x41xx` opcode 6 is SBC, not
-    /// SUB, and using it silently produces a carry-dependent result.
-    pub fn subs_reg(&mut self, rd: u8, rn: u8, rm: u8) -> &mut Self {
-        self.emit(0x1A00 | (((rm & 0x7) as u16) << 6) | (((rn & 0x7) as u16) << 3) | (rd & 0x7) as u16)
-    }
-
     pub fn adds(&mut self, rdn: u8, imm8: u8) -> &mut Self {
         self.emit(0x3000 | (((rdn & 0x7) as u16) << 8) | imm8 as u16)
     }
@@ -455,37 +447,6 @@ mod tests {
         assert_eq!(cpu.r[1], 0x2000_1000, "ldr_lit must deliver the pool word");
         cpu.step(&mut bus).unwrap(); // strb r0, [r1, #15]
         assert_eq!(bus.read_u8(0x2000_100F).unwrap(), 0xFF);
-    }
-
-    #[test]
-    fn test_golden_adds_subs_reg() {
-        // T1 ADD/SUB register group: `0001 10 op Rm Rn Rd`.
-        // adds r3, r6, r0 -> 0x1833 ; subs r3, r3, r2 -> 0x1A9B.
-        // Regression guard: SUB must NOT be emitted as 0x41xx, where op
-        // nibble 6 is SBC (carry-dependent) and silently corrupts the result.
-        let mut a = Asm::new(0);
-        a.adds_reg(3, 6, 0);
-        a.subs_reg(3, 3, 2);
-        assert_eq!(a.finish().unwrap(), vec![0x33, 0x18, 0x9B, 0x1A]);
-    }
-
-    #[test]
-    fn test_subs_reg_roundtrip_through_emulator_decode() {
-        // The emitted halfword must decode as the ADD/SUB-group sub with
-        // rd/rn/rm exactly as requested (never as DataProc SBC).
-        use crate::firmware::emu::thumb::{decode, Instr};
-        for (rd, rn, rm) in [(3u8, 3u8, 2u8), (6, 6, 3), (0, 1, 2), (7, 7, 7)] {
-            let mut a = Asm::new(0);
-            a.subs_reg(rd, rn, rm);
-            let bytes = a.finish().unwrap();
-            let hw = u16::from_le_bytes([bytes[0], bytes[1]]);
-            match decode(hw) {
-                Some(Instr::SubReg { rd: d, rn: n, rm: m }) => {
-                    assert_eq!((d, n, m), (rd, rn, rm), "subs r{rd}, r{rn}, r{rm} = {hw:#06x}");
-                }
-                other => panic!("subs r{rd}, r{rn}, r{rm} = {hw:#06x} decoded as {other:?}"),
-            }
-        }
     }
 
     #[test]

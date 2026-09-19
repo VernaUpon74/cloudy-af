@@ -8,10 +8,6 @@ use std::collections::VecDeque;
 
 const TRACE_CAP: usize = 32;
 
-/// TEMP discovery hook (Task 6): last PC observed by any Cpu, shared with
-/// the bus-side discovery traces. REMOVE with the engine-write trace.
-static LAST_PC: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-
 /// Variable-shift shifter (register-controlled amount, 0..255) with carry-out.
 fn shift_reg(value: u32, stype: u8, amount: u32, carry_in: bool) -> (u32, bool) {
     match stype {
@@ -124,12 +120,6 @@ pub struct Cpu {
 }
 
 impl Cpu {
-    /// TEMP discovery hook (Task 6): last PC observed by any Cpu, for
-    /// logging from the bus. REMOVE with the engine-write trace.
-    pub fn last_pc_global() -> u32 {
-        crate::firmware::emu::cpu::LAST_PC.load(std::sync::atomic::Ordering::Relaxed)
-    }
-
     pub fn new() -> Self {
         Self {
             r: [0; 13],
@@ -167,7 +157,6 @@ impl Cpu {
 
     /// Fetch/decode/execute one instruction at `pc`.
     pub fn step(&mut self, bus: &mut Bus) -> Result<(), EmuError> {
-        crate::firmware::emu::cpu::LAST_PC.store(self.pc, std::sync::atomic::Ordering::Relaxed);
         self.trace.push_back(self.pc);
         if self.trace.len() > TRACE_CAP {
             self.trace.pop_front();
@@ -203,7 +192,6 @@ impl Cpu {
             let instr = decode(hw).ok_or(EmuError::Undefined { pc, instr: hw })?;
             (instr, 2)
         };
-        bus.advance_core_tick();
         // IT-block conditional execution: pop this instruction's condition
         // and skip (no side effects, pc still advances) when it fails.
         if self.it_left > 0 {
@@ -644,25 +632,6 @@ impl Cpu {
                 self.sp = addr;
                 self.pc = new_pc.unwrap_or_else(|| self.pc.wrapping_add(4));
             }
-            Instr::Thumb2(Thumb2::LdmIA { rn, list, wb }) => {
-                let mut addr = self.reg(rn);
-                let mut new_pc = None;
-                for i in 0..16u8 {
-                    if list >> i & 1 == 1 {
-                        let value = bus.read_u32(addr)?;
-                        if i == 15 {
-                            new_pc = Some(value & !1);
-                        } else {
-                            self.set_reg(i, value);
-                        }
-                        addr = addr.wrapping_add(4);
-                    }
-                }
-                if wb {
-                    self.set_reg(rn, addr);
-                }
-                self.pc = new_pc.unwrap_or_else(|| self.pc.wrapping_add(4));
-            }
             Instr::Thumb2(Thumb2::StmIA { rn, list }) => {
                 // STMIA Rn, {list}: ascending word stores from Rn, NO
                 // writeback (the W=0 store-multiple form, e.g.
@@ -845,72 +814,6 @@ impl Cpu {
                 let v = bus.read_u8(if pre { addr } else { base })?;
                 self.set_reg(rn, addr);
                 self.set_reg(rt, v as u32);
-                self.pc = self.pc.wrapping_add(4);
-            }
-            Instr::Thumb2(Thumb2::Extend { signed, half, rd, rm, rot }) => {
-                // UXTB/UXTH/SXTB/SXTH: operand = Rm ROR (imm2*8), masked to
-                // the byte/half lane, then zero- (UX) or sign- (SX) extended.
-                // No flags.
-                let v = self.reg(rm).rotate_right(rot as u32 * 8);
-                let v = if half { v & 0xFFFF } else { v & 0xFF };
-                let v = if signed {
-                    if half { (v as i16) as i32 as u32 } else { (v as i8) as i32 as u32 }
-                } else {
-                    v
-                };
-                self.set_reg(rd, v);
-                self.pc = self.pc.wrapping_add(4);
-            }
-            Instr::Thumb2(Thumb2::LdrStrT4 { load, rt, rn, imm, pre, sub, wb }) => {
-                // 32-bit LDR/STR word with index/writeback (T4). Per ARM ARM
-                // A7.7.42: offset_addr = Rn ± imm8; address = offset_addr
-                // (pre) or R[n] (post); wback ⇒ R[n] = offset_addr ALWAYS
-                // (both P forms), after the memory access value is read but
-                // before R[t] is written — so a post-indexed load where
-                // rn == rt still yields the LOADED value in rt. Rt = 15 load
-                // is a branch (LoadWritePC: bit 0 kept by `& !1` masking
-                // here per the established Ldmia/pop convention; aligned
-                // targets required else UNPREDICTABLE).
-                let base = self.reg(rn);
-                let offset_addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
-                let addr = if pre { offset_addr } else { base };
-                let mut branch = None;
-                if load {
-                    let v = bus.read_u32(addr)?;
-                    if rt == 15 {
-                        branch = Some(v & !1); // LoadWritePC
-                    } else {
-                        // rn == rt with wback is UNPREDICTABLE per ARM ARM;
-                        // the memory read happens first and the writeback
-                        // below runs before this set, so rt ends with the
-                        // LOADED value — the hardware's observable order.
-                        self.set_reg(rt, v);
-                    }
-                } else {
-                    bus.write_u32(addr, self.reg(rt))?;
-                }
-                if wb {
-                    self.set_reg(rn, offset_addr);
-                }
-                self.pc = branch.unwrap_or_else(|| self.pc.wrapping_add(4));
-            }
-            Instr::Thumb2(Thumb2::LdrhStrhT4 { load, rt, rn, imm, pre, sub, wb }) => {
-                // 32-bit LDRH/STRH with index/writeback (T4): identical
-                // addressing semantics to LdrStrT4 but a zero-extended
-                // halfword access. No pc-target form exists for LDRH
-                // (Rt = 15 is UNPREDICTABLE per ARM ARM; not branched).
-                let base = self.reg(rn);
-                let offset_addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
-                let addr = if pre { offset_addr } else { base };
-                if load {
-                    let v = bus.read_u16(addr)? as u32;
-                    self.set_reg(rt, v);
-                } else {
-                    bus.write_u16(addr, (self.reg(rt) & 0xFFFF) as u16)?;
-                }
-                if wb {
-                    self.set_reg(rn, offset_addr);
-                }
                 self.pc = self.pc.wrapping_add(4);
             }
             Instr::Thumb2(Thumb2::Sdiv { rd, rn, rm }) => {
@@ -1522,60 +1425,6 @@ mod tests {
     }
 
     #[test]
-    fn test_systick_ticks_once_per_decoded_step_including_it_skip() {
-        let flash = vec![0x00, 0xBF, 0x08, 0xBF, 0x01, 0x20, 0xFF, 0xDE];
-        let mut bus = Bus::new(flash, 0x1000);
-        bus.write_u32(0xE000_E014, 2).unwrap();
-        bus.write_u32(0xE000_E010, 5).unwrap();
-        let mut cpu = Cpu::new();
-        for expected in [2, 1, 0] {
-            cpu.step(&mut bus).unwrap();
-            assert_eq!(bus.read_u32(0xE000_E018).unwrap(), expected);
-        }
-        assert_eq!(cpu.r[0], 0);
-        assert_eq!(cpu.pc, 6);
-        assert_eq!(bus.read_u32(0xE000_E010).unwrap(), 0x0001_0005);
-        assert!(cpu.step(&mut bus).is_err());
-        assert_eq!(bus.read_u32(0xE000_E018).unwrap(), 0);
-        assert_eq!(bus.read_u32(0xE000_E010).unwrap(), 5);
-    }
-
-    #[test]
-    fn test_ldmia_w_general_base_and_writeback() {
-        // Capstone/ARM T2 vectors: E895 000F = ldm.w r5, {r0-r3};
-        // E8B5 000F = ldm.w r5!, {r0-r3}. Neither is a POP from SP.
-        for (hw1, writeback) in [(0xE895u16, false), (0xE8B5, true)] {
-            let mut flash = vec![0u8; 0x100];
-            flash[..2].copy_from_slice(&hw1.to_le_bytes());
-            flash[2..4].copy_from_slice(&0x000Fu16.to_le_bytes());
-            let mut bus = Bus::new(flash, 0x1000);
-            bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
-            let base = RAM_BASE + 0x100;
-            let stack = RAM_BASE + 0x800;
-            let values = [11u32, 22, 33, 44];
-            for (i, value) in values.iter().enumerate() {
-                bus.write_u32(base + i as u32 * 4, *value).unwrap();
-                bus.write_u32(stack + i as u32 * 4, 0xBAD0_0000 + i as u32).unwrap();
-            }
-            bus.write_log.clear();
-            let mut cpu = Cpu::new();
-            cpu.r[5] = base;
-            cpu.sp = stack;
-            cpu.n = true;
-            cpu.z = false;
-            cpu.c = true;
-            cpu.v = true;
-            cpu.step(&mut bus).unwrap();
-            assert_eq!(&cpu.r[..4], &values, "load from r5, not SP ({hw1:04x})");
-            assert_eq!(cpu.r[5], base + if writeback { 16 } else { 0 });
-            assert_eq!(cpu.sp, stack, "general-base LDM must not change SP");
-            assert_eq!((cpu.n, cpu.z, cpu.c, cpu.v), (true, false, true, true));
-            assert_eq!(cpu.pc, 4);
-            assert!(bus.write_log.is_empty());
-        }
-    }
-
-    #[test]
     fn test_str_ldr_imm_word() {
         // 0x6008 = str r0, [r1, #0] ; 0x680A = ldr r2, [r1, #0]
         let mut flash = vec![0u8; 0x100];
@@ -1590,79 +1439,6 @@ mod tests {
         cpu.step(&mut bus).unwrap();
         assert_eq!(cpu.r[2], 0xCAFE_BABE);
         assert!(bus.acl_violations.is_empty());
-    }
-
-    #[test]
-    fn test_ldrstr_t4_post_indexed_store_advances_base() {
-        // str r2, [r0], #4 = F840 2B04 — THE instruction that deadlocked the
-        // emulated boot copy loop (0x606): previously decoded as DpImm
-        // `orr r11, r0, #4`, so the store never fired and r0 never advanced.
-        // Regression: store must land at the ORIGINAL base and r0 must
-        // advance by 4.
-        let mut flash = vec![0u8; 0x100];
-        flash[0..2].copy_from_slice(&0xF840u16.to_le_bytes());
-        flash[2..4].copy_from_slice(&0x2B04u16.to_le_bytes());
-        let mut bus = Bus::new(flash, 0x1000);
-        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
-        let mut cpu = Cpu::new();
-        cpu.r[0] = RAM_BASE + 0x200;
-        cpu.r[2] = 0xCAFE_BABE;
-        cpu.step(&mut bus).unwrap();
-        assert_eq!(bus.read_u32(RAM_BASE + 0x200).unwrap(), 0xCAFE_BABE);
-        assert_eq!(cpu.r[0], RAM_BASE + 0x204, "post-indexed writeback must advance r0");
-        assert_eq!(cpu.pc, 4);
-    }
-
-    #[test]
-    fn test_ldrstr_t4_pre_sub_indexed_no_wb() {
-        // str r2, [r1, #-4] = F841 2C04 (af_190602 0x6ade): pre-indexed,
-        // subtract, W=0 — base register must stay untouched.
-        let mut flash = vec![0u8; 0x100];
-        flash[0..2].copy_from_slice(&0xF841u16.to_le_bytes());
-        flash[2..4].copy_from_slice(&0x2C04u16.to_le_bytes());
-        let mut bus = Bus::new(flash, 0x1000);
-        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
-        let mut cpu = Cpu::new();
-        cpu.r[1] = RAM_BASE + 0x204;
-        cpu.r[2] = 0x1234_5678;
-        cpu.step(&mut bus).unwrap();
-        assert_eq!(bus.read_u32(RAM_BASE + 0x200).unwrap(), 0x1234_5678);
-        assert_eq!(cpu.r[1], RAM_BASE + 0x204, "W=0: no writeback");
-    }
-
-    #[test]
-    fn test_ldrhstrh_t4_pre_indexed_load_advances_base() {
-        // ldrh r2, [r3, #2]! = F833 2F02 — the second boot blocker (0x2414):
-        // pre-indexed load from r3+2 must land in r2 AND r3 must become r3+2.
-        let mut flash = vec![0u8; 0x100];
-        flash[0..2].copy_from_slice(&0xF833u16.to_le_bytes());
-        flash[2..4].copy_from_slice(&0x2F02u16.to_le_bytes());
-        let mut bus = Bus::new(flash, 0x1000);
-        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
-        bus.write_u16(RAM_BASE + 0x82, 0xBEEF).unwrap();
-        let mut cpu = Cpu::new();
-        cpu.r[3] = RAM_BASE + 0x80;
-        cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.r[2], 0xBEEF, "zero-extended halfword load from r3+2");
-        assert_eq!(cpu.r[3], RAM_BASE + 0x82, "pre-indexed writeback");
-    }
-
-    #[test]
-    fn test_ldrstr_t4_ldr_pc_post_branches_and_advances_sp() {
-        // ldr pc, [sp], #4 = F85D FB04 (exception-return epilogue): loads
-        // the word into pc as a branch (Thumb bit masked), AND writes sp
-        // back with the post-increment — both effects observable.
-        let mut flash = vec![0u8; 0x100];
-        flash[0..2].copy_from_slice(&0xF85Du16.to_le_bytes());
-        flash[2..4].copy_from_slice(&0xFB04u16.to_le_bytes());
-        let mut bus = Bus::new(flash, 0x1000);
-        bus.allow_region(RAM_BASE..RAM_BASE + 0x1000);
-        bus.write_u32(RAM_BASE + 0x300, 0x2000_0041).unwrap(); // thumb target
-        let mut cpu = Cpu::new();
-        cpu.sp = RAM_BASE + 0x300;
-        cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.pc, 0x2000_0040, "LoadWritePC: branch, bit0 masked");
-        assert_eq!(cpu.sp, RAM_BASE + 0x304, "post-indexed writeback must advance sp");
     }
 
     #[test]
@@ -1721,19 +1497,15 @@ mod tests {
     }
 
     #[test]
-    fn test_unaligned_ldr_succeeds() {
-        // 0x6808 = ldr r0, [r1, #0]. ARMv7-M allows unaligned LDR (the af
-        // boot genuinely loads a word at 0x20000161) — the load must
-        // succeed and return the little-endian byte sequence.
+    fn test_unaligned_ldr_faults() {
+        // 0x6808 = ldr r0, [r1, #0] at an odd address
         let mut flash = vec![0u8; 0x100];
         flash[0..2].copy_from_slice(&0x6808u16.to_le_bytes());
         let mut bus = Bus::new(flash, 0x1000);
-        bus.write_u32(RAM_BASE + 0x100, 0x1122_3344).unwrap();
         let mut cpu = Cpu::new();
         cpu.r[1] = RAM_BASE + 0x101;
-        cpu.step(&mut bus).unwrap();
-        // bytes at 0x101..0x105 = 33 22 11 00 → 0x00112233
-        assert_eq!(cpu.r[0], 0x0011_2233, "little-endian split across the word");
+        let err = cpu.step(&mut bus).unwrap_err();
+        assert!(matches!(err, EmuError::Unaligned { size: 4, .. }));
     }
 
     #[test]
@@ -1929,17 +1701,14 @@ mod tests {
     fn test_wild_address_faults_not_panics() {
         // carried ruling: address arithmetic must wrap, not panic in debug.
         // 0x6848 = ldr r0, [r1, #4] with r1 = 0xFFFF_FFFE wraps the base+offset
-        // add to 2. With ARMv7-M-legal unaligned loads, address 2 resolves to
-        // flash (offset 2 < image len) — the step must succeed with the value
-        // read from there (zeros in this fixture), not panic in debug.
+        // add to 2; the step must produce a clean EmuError (unaligned here).
         let mut flash = vec![0u8; 0x100];
         flash[0..2].copy_from_slice(&0x6848u16.to_le_bytes());
         let mut bus = Bus::new(flash, 0x1000);
         let mut cpu = Cpu::new();
         cpu.r[1] = 0xFFFF_FFFE;
-        cpu.step(&mut bus).unwrap();
-        assert_eq!(cpu.r[0], 0);
-        assert_eq!(cpu.pc, 2); // 16-bit ldr
+        let err = cpu.step(&mut bus).unwrap_err();
+        assert!(matches!(err, EmuError::Unaligned { addr: 2, size: 4 }));
     }
 
     #[test]

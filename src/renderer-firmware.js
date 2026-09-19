@@ -705,6 +705,32 @@ ipc.on('connect', (event, status) => {
     updateConnectionStatus(Boolean(status), currentDevice && currentDevice.productId);
 });
 
+$('#status-screenshot').click(async () => {
+    try {
+        setStatus('Capturing screenshot…');
+        const b64 = await screenshot();
+        const img = new Image();
+        img.onload = () => {
+            const c = $('#status-screenshot-canvas')[0];
+            c.width = img.width;
+            c.height = img.height;
+            const ctx = c.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            $('#status-screenshot-preview').show();
+            c.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                $('#status-screenshot-link').attr('href', url).show().text('Download ' + img.width + '×' + img.height + ' PNG');
+            }, 'image/png');
+        };
+        img.src = 'data:image/png;base64,' + b64;
+        setStatus('Screenshot captured');
+    } catch (err) {
+        console.error('screenshot failed', err);
+        setStatus('Screenshot failed: ' + err.toString());
+        alert('Screenshot failed: ' + err.toString());
+    }
+});
+
 loadLocale();
 initTabs();
 attachImageCanvasHandlers();
@@ -715,25 +741,30 @@ attachImageCanvasHandlers();
 // there). Alt+Left/Right cycles the editor tabs without the mouse.
 $(document).on('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
-        if (!(e.ctrlKey || e.metaKey)) {
+        if (!(e.altKey)) {
             return;
         }
     }
-    if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'Tab') {
-            e.preventDefault();
-            const tabs = $('.tab-item').toArray();
-            const idx = tabs.findIndex(t => t.classList.contains('active'));
-            const next = e.shiftKey ? (idx - 1 + tabs.length) % tabs.length : (idx + 1) % tabs.length;
-            $(tabs[next]).click();
-            return;
-        }
-        if (e.key === 'o') { e.preventDefault(); doOpenFirmware(); return; }
-        if (e.key === 'd' || e.key === 'D') { e.preventDefault(); $('#download-stock').click(); return; }
-        if (e.key === 'f' || e.key === 'F') { e.preventDefault(); $('#flash-firmware').click(); return; }
+    if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+        e.preventDefault();
+        const tabs = $('.tab-item').toArray();
+        const idx = tabs.findIndex(t => t.classList.contains('active'));
+        const next = e.key === 'ArrowRight' ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
+        $(tabs[next]).click();
         return;
     }
-    if (e.key === 'Escape') {
+    if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'o') {
+            e.preventDefault();
+            doOpenFirmware();
+        }
+        return;
+    }
+    if (e.key === 'd' || e.key === 'D') {
+        $('#download-stock').click();
+    } else if (e.key === 'u' || e.key === 'U') {
+        $('#flash-firmware').click();
+    } else if (e.key === 'Escape') {
         selectedCell = -1;
         renderStringCells();
     }

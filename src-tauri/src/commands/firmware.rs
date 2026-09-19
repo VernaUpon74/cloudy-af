@@ -9,7 +9,6 @@ use base64::Engine;
 use crate::firmware::anim::asm::AnimError;
 use crate::firmware::anim::effects::{
     build_center_pulse_patch, build_diagonal_sweep_patch, build_gradient_fade_patch,
-    build_wave_patch,
     image_supports_animation, load_animation_desc,
 };
 use crate::firmware::definition::{parse_definition, FirmwareDefinition};
@@ -214,7 +213,6 @@ fn animation_patches(app: &AppHandle, image: &[u8]) -> Vec<Patch> {
             build_gradient_fade_patch as fn(&str) -> Result<Patch, AnimError>,
             build_center_pulse_patch,
             build_diagonal_sweep_patch,
-            build_wave_patch,
         ] {
             if let Ok(patch) = build(&desc_json) {
                 result.push(patch);

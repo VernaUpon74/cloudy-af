@@ -3,35 +3,23 @@
 ## Delegation hardware profile
 
 The workstation: 12 CPU cores, 62 GB RAM, RTX 4050 Laptop with only 6 GB
-VRAM. There are NO cgroup limits on ollama (CPUQuota/MemoryMax = infinity).
-
-BEST SETTINGS (benchmarked 2026-09-12, one-test-at-a-time, `keep_alive:0`;
-artifacts `/tmp/clean-bench`): `ollama serve` with
-OLLAMA_FLASH_ATTENTION=1 + OLLAMA_KV_CACHE_TYPE=q8_0 on the RTX 4050 (CUDA).
-With that config `qwen3-coder:latest` (18 GB MoE, ~3B active params) runs
-at ~24 tok/s — full parity with `qwen2.5-coder:7b` (23.9 tok/s) — so use
-qwen3-coder for coding tasks with no speed penalty. The Intel iGPU
-shared-memory path (OLLAMA_IGPU_ENABLE=1 + OLLAMA_VULKAN=1; Vulkan sees
-46.8 GiB) works and holds the whole 18 GB model, but is 2.5× slower
-(9.7 tok/s) — reserve it for when the dGPU is busy. 7B on iGPU is 6×
-slower than CUDA (4.2 tok/s). Cloud models are not to be used (see energy
-policy above).
-
-Benchmarking convention: run exactly ONE test at a time (single request,
-nothing else loaded, `keep_alive:0` between tests so models unload) —
-parallel or back-to-back runs without unloading pollute VRAM/KV-cache state
-and skew tok/s. Stop the other ollama instance before measuring.
+VRAM. There are NO cgroup limits on ollama (CPUQuota/MemoryMax = infinity) —
+delegates already get full hardware access, but any model larger than ~4.5 GB
+quantized spills to CPU (the 20 GB qwen3-coder runs 81/19 CPU/GPU and is
+slow). Prefer `qwen2.5-coder:7b` (fits VRAM, ~5-10× faster) for mechanical
+tasks; reserve the 30B for genuinely open-ended analysis. Cloud models are
+not to be used (see energy policy above). RAM cannot substitute for VRAM on
+this hardware (CUDA has no unified-memory mode; Intel iGPU would need the
+IPEX-LLM fork).
 
 ## Task delegation
 
-**Convention: run local-model delegates ONE AT A TIME** — never two local
-models (or two ollama inferences) concurrently; the box only has headroom for
-a single 18 GB model and parallel runs thrash and stall. Delegating to the
-local model is fine while an interactive (cloud) session is active — the
-limit is concurrent LOCAL models, not local-vs-cloud. Queue local tasks
-sequentially through a runner script (e.g. `/tmp/cline-queue.sh`: a `for`
-loop invoking `cline` per task, each appending to its own log, `setsid nohup`
-so it survives the agent session). Launch exactly one queue.
+**Convention: run local-model delegates ONE AT A TIME.** The box only has
+headroom for a single ollama inference (18 GB models); parallel cline runs
+thrash and stall. Queue tasks sequentially through a runner script
+(e.g. `/tmp/cline-queue.sh`: a `for` loop invoking `cline` per task, each
+appending to its own log, `setsid nohup` so it survives the agent session).
+Launch exactly one queue, never parallel cline instances.
 
 Use local models for subagent/task delegation whenever possible —
 `cline` CLI (free models, `/var/home/j/.npm-global/bin/cline`, e.g.
@@ -39,8 +27,8 @@ Use local models for subagent/task delegation whenever possible —
 tasks (UI markup, mechanical ports from a complete spec, drafting
 tests), and ollama (`ollama serve` then`ollama run <model>` / the local
 API at `127.0.0.1:11434`) for drafting and review work; check
-`ollama list` for what's pulled. Currently pulled: `qwen3-coder:latest`
-(18 GB MoE, primary coding model), `qwen2.5-coder:7b` (light alternative). Fall back to cloud CLIs
+`ollama list` for what's pulled. Currently useful: `qwen3-coder:30b`
+(coding), `gemma4:26b-chat`, `llama3:70b`. Fall back to cloud CLIs
 (qwen, etc.) only when local models can't handle the task. Only use
 sustainable energy cloud models. Reserve full agent dispatches for
 multi-step work that needs tool use across the repo.
@@ -67,16 +55,6 @@ toolbox run -c arcticfox-build sh -c \
 /tmp/fakelib holds a `libusb-1.0.so` symlink to the runtime `.so.0` — the
 toolbox lacks the -devel package. The shipped binary is `build/Release/
 HID_hidraw.node`; the `HID.node` libusb variant is unused on Linux.)
-
-Note: node-hid 2.x is an N-API addon, so HID_hidraw.node is ABI-independent
-(it does not need rebuilding per node ABI — only when the patch or node-hid
-version changes). `scripts/prepare-linux-sidecar.sh` (AppImage path) copies
-the host's `sidecar/node_modules` verbatim and now REFUSES to bundle unless
-the patch markers are present in the copied source AND the binary is newer
-than `src/HID.cc` — the verification gate added 2026-09-12 after the AppImage
-flicker analysis. The flicker was not present in builds ≥ 2026-09-10 09:27
-(those shipped the patched binary); an older AppImage exhibiting flicker was
-likely built from the Documents mirror with an unpatched addon.
 
 ## Version bumps
 

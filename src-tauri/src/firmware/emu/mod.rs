@@ -2,7 +2,6 @@ pub mod bus;
 pub mod thumb;
 pub mod cpu;
 pub mod harness;
-pub mod eadc;
 
 use thiserror::Error;
 

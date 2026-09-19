@@ -332,10 +332,6 @@
   "Tooltips.ProfilesTab": "Buharlaşma profilleri — her profil için güç, sıcaklık kontrolü, ön ısıtma ve coil ayarları.",
   "Tooltips.ScreenTab": "Ana ekran düzeni — her satırın gösterdiği, saat, logo ve parlaklık.",
   "Tooltips.ControlsTab": "Düğme davranışı — ateşleme, artı ve eksi tıklamaları, kısayollar ve uyandırma eylemleri.",
-  "Tooltips.ControlsSettingsTab": "Basic control settings — power step, temperature step, wakeup and button behavior.",
-  "Tooltips.ControlsMultiClicksTab": "Multi-click actions — configure what happens when the fire button is pressed 2, 3, 4 or 5 times.",
-  "Tooltips.ControlsShortcutsVWTab": "VW mode shortcuts — two-button combinations for variable wattage mode.",
-  "Tooltips.ControlsShortcutsTCTab": "TC mode shortcuts — two-button combinations for temperature control mode.",
   "Tooltips.SmartTab": "Smart modu — son çekişlerinize göre otomatik güç.",
   "Tooltips.AdvancedTab": "Gelişmiş ayarlar — pil modeli, şarj, USB, donanım ve saat seçenekleri.",
   "Tooltips.StatsTab": "Kullanım istatistikleri ve cihaz sayaçları.",
@@ -376,7 +372,6 @@
   "Tooltips.PuffsCount": "Sayaçlar son sıfırlandığından beri yapılan toplam çekiş sayısı.",
   "Tooltips.TotalPuffsTime": "Sayaçlar son sıfırlandığından beri tüm çekişlerde toplam ateşleme süresi.",
   "Tooltips.PuffsTimeFormat": "Çekiş süresinin nasıl gösterildiği: toplam saniye veya saat, dakika ve saniye.",
-  "Stats.PuffTimeLabel": "Çekiş süresi:",
   "Monitor.ScreenshotButton": "Ekran Görüntüsü",
   "Monitor.ScreenshotSave": "PNG Kaydet",
   "Monitor.ScreenshotClose": "Kapat",
@@ -389,12 +384,5 @@
   "Screen.Regional.DateFormat": "Tarih biçimi",
   "Screen.Regional.TimeFormat": "Saat biçimi",
   "Screen.Regional.TemperatureUnits": "Sıcaklık birimleri",
-  "Animation.ComingSoon": "Yakında — saat animasyonu için firmware yaması gerekiyor.",
-  "Profile.TFRSetupButton": "Ayarlar",
-  "TFRCurveEditor.CalcButton": "Calculate from Resistance",
-  "TFRCurveEditor.CalculateButton": "Calculate",
-  "TFRCurveEditor.ApplyButton": "Apply",
-  "TFRCurveEditor.Extrapolate800": "Extrapolate 800°F",
-  "Monitor.FireButton": "Fire",
-  "Tooltips.MonitorFire": "Hold to fire; double-click for autofire"
+  "Animation.ComingSoon": "Yakında — saat animasyonu için firmware yaması gerekiyor."
 }

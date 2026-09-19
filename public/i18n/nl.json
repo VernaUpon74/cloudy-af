@@ -332,10 +332,6 @@
   "Tooltips.ProfilesTab": "Vape-profielen — vermogen, temperatuurregeling, voorverwarming en coil-instellingen voor elk profiel.",
   "Tooltips.ScreenTab": "Hoofdschermindeling — wat elke regel toont, klok, logo en helderheid.",
   "Tooltips.ControlsTab": "Knopgedrag — fire-, plus- en min-klikken, sneltoetsen en wekacties.",
-  "Tooltips.ControlsSettingsTab": "Basic control settings — power step, temperature step, wakeup and button behavior.",
-  "Tooltips.ControlsMultiClicksTab": "Multi-click actions — configure what happens when the fire button is pressed 2, 3, 4 or 5 times.",
-  "Tooltips.ControlsShortcutsVWTab": "VW mode shortcuts — two-button combinations for variable wattage mode.",
-  "Tooltips.ControlsShortcutsTCTab": "TC mode shortcuts — two-button combinations for temperature control mode.",
   "Tooltips.SmartTab": "Smart-modus — automatisch vermogen op basis van je recente trekjes.",
   "Tooltips.AdvancedTab": "Geavanceerde instellingen — batterijmodel, laden, USB, hardware en klok.",
   "Tooltips.StatsTab": "Gebruiksstatistieken en apparaattellers.",
@@ -376,7 +372,6 @@
   "Tooltips.PuffsCount": "Totaal aantal trekjes sinds de tellers voor het laatst zijn gereset.",
   "Tooltips.TotalPuffsTime": "Totale vuurtijd, opgeteld over alle trekjes sinds de tellers voor het laatst zijn gereset.",
   "Tooltips.PuffsTimeFormat": "Hoe trektijd wordt weergegeven: totale seconden, of uren, minuten en seconden.",
-  "Stats.PuffTimeLabel": "Trektijd:",
   "Monitor.ScreenshotButton": "Screenshot",
   "Monitor.ScreenshotSave": "PNG opslaan",
   "Monitor.ScreenshotClose": "Sluiten",
@@ -389,12 +384,5 @@
   "Screen.Regional.DateFormat": "Datumnotatie",
   "Screen.Regional.TimeFormat": "Tijdnotatie",
   "Screen.Regional.TemperatureUnits": "Temperatuureenheden",
-  "Animation.ComingSoon": "Binnenkort — klok-animatie vereist een firmware-patch.",
-  "Profile.TFRSetupButton": "Instellingen",
-  "TFRCurveEditor.CalcButton": "Calculate from Resistance",
-  "TFRCurveEditor.CalculateButton": "Calculate",
-  "TFRCurveEditor.ApplyButton": "Apply",
-  "TFRCurveEditor.Extrapolate800": "Extrapolate 800°F",
-  "Monitor.FireButton": "Fire",
-  "Tooltips.MonitorFire": "Hold to fire; double-click for autofire"
+  "Animation.ComingSoon": "Binnenkort — klok-animatie vereist een firmware-patch."
 }

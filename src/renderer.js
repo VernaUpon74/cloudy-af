@@ -10,11 +10,8 @@ import { DEFAULT_TFR_TABLES, DEFAULT_POWER_CURVES } from './lib/default-curves.j
 let config;
 let lang;
 let appVersion = '1.2.0';
-let lastConnectStatus = null;
 
 ipc.on('connect', (event, status) => {
-    if (status === lastConnectStatus) return;
-    lastConnectStatus = status;
     $('#connection-status').html(_('Status.Device') + ' ' + (status ? _('Status.Connected') : _('Status.Disconnected')));
 });
 
@@ -238,10 +235,11 @@ function uiTempControl(val) {
 }
 
 function uiTcr(material) {
-    const isTcr = material === '4';
-    const isTfr = Number(material) >= 5;
-    $('#TCR').toggle(isTcr);
-    $('#tfr-setup').toggle(isTfr);
+    if (material === '4') {
+        $('#TCR').show();
+    } else {
+        $('#TCR').hide();
+    }
 }
 
 // Convert a temperature value between Celsius and Fahrenheit, rounding to the
@@ -375,7 +373,7 @@ function uiProfile(p) {
             if ($(this).attr('type') === 'checkbox') {
                 $(this).prop('checked', val);
             } else {
-                $(this).val(id === 'Resistance' && typeof val === 'number' ? val.toFixed(3) : val);
+                $(this).val(val);
             }
         } else if ($(this).is('select')) {
             $(this).find('option[value="' + val + '"]').prop('selected', true);
@@ -417,14 +415,6 @@ async function loadDefaultConfig() {
 function uiInitButtons() {
     $('#tc-setup').click(function () {
         ipc.send('pireg', config.profiles[activeProfile]);
-    });
-
-    $('#tfr-setup').click(function () {
-        const material = Number($('#Material').val());
-        if (material >= 5) {
-            const index = material - 5;
-            ipc.send('tfr', { index, table: config.TFRTables[index] });
-        }
     });
 
     // Use event delegation for footer buttons; some WebKit/Tauri builds don't
@@ -497,7 +487,7 @@ function uiUpdate() {
     const tfrDisplayNames = ['Ni', 'Ti', '304', '316', '316L', '321', 'NF30', 'NiFe'];
     $MaterialTable.addClass('curve-grid');
     config.TFRTables.forEach((tfr, index) => {
-        $Material.append('<option value="' + (index + 5) + '">' + (tfrDisplayNames[index] || 'TFR' + (index + 1)) + '</option>');
+        $Material.append('<option value="' + (index + 5) + '">TFR' + (index + 1) + '</option>');
         const displayName = tfrDisplayNames[index] || tfr.Name.replace(/\u0000/g, '');
         $MaterialTable.append(
             '<div class="curve-card tfr-card" data-tfr="' + index + '">' +
@@ -954,18 +944,21 @@ $(document).on('keydown', function (e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
         return;
     }
-    if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'Tab') {
-            e.preventDefault();
-            const tabs = $('.tab-group#main .tab-item').toArray();
-            const idx = tabs.findIndex(t => t.classList.contains('active'));
-            const next = e.shiftKey ? (idx - 1 + tabs.length) % tabs.length : (idx + 1) % tabs.length;
-            $(tabs[next]).click();
-            return;
-        }
-        if (e.key === 'd' || e.key === 'D') { e.preventDefault(); window.downloadSettings(); return; }
-        if (e.key === 'u' || e.key === 'U') { e.preventDefault(); window.uploadSettings(); return; }
-        if (e.key === 'r' || e.key === 'R') { e.preventDefault(); window.resetSettings(); return; }
+    // Alt+Left/Right cycle the main tabs without the mouse (shared scheme with
+    // the Firmware Editor; d/u below are shared with it too — see
+    // docs/keyboard-shortcuts.md).
+    if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+        e.preventDefault();
+        const tabs = $('.tab-group#main .tab-item').toArray();
+        const idx = tabs.findIndex(t => t.classList.contains('active'));
+        const next = e.key === 'ArrowRight' ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
+        $(tabs[next]).click();
+        return;
+    }
+    if (e.key === 'd' || e.key === 'D') {
+        window.downloadSettings();
+    } else if (e.key === 'u' || e.key === 'U') {
+        window.uploadSettings();
     }
 });
 
