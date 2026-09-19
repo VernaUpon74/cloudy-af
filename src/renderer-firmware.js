@@ -705,64 +705,6 @@ ipc.on('connect', (event, status) => {
     updateConnectionStatus(Boolean(status), currentDevice && currentDevice.productId);
 });
 
-// --- Screenshot (0xC1) -------------------------------------------------
-// 1024 raw framebuffer bytes, 1bpp vertical packing: byte = x + (y/8)*width,
-// bit y%8, LSB = top pixel. Geometry: 96x16 if bytes 192..1024 are all zero
-// (its 1bpp image is 96*16/8 = 192 bytes and the tail is padding), else 64x128
-// (exactly 64*128/8 = 1024 bytes). ArcticFox firmware only — stock firmware
-// has no 0xC1 handler and the read times out.
-const SCREENSHOT_GEOMS = [
-    { width: 96, height: 16 },
-    { width: 64, height: 128 },
-];
-
-function decodeScreenshot(raw) {
-    let geom = SCREENSHOT_GEOMS[1];
-    let tailZero = true;
-    for (let i = 192; i < raw.length; i++) {
-        if (raw[i] !== 0) { tailZero = false; break; }
-    }
-    if (tailZero) geom = SCREENSHOT_GEOMS[0];
-    const { width, height } = geom;
-    const c = $('#status-screenshot-canvas')[0];
-    const ZOOM = 4;
-    c.width = width * ZOOM;
-    c.height = height * ZOOM;
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, c.width, c.height);
-    ctx.fillStyle = '#9acd32'; // ArcticFox LCD green
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            if (raw[x + (y >> 3) * width] & (1 << (y & 7))) {
-                ctx.fillRect(x * ZOOM, y * ZOOM, ZOOM, ZOOM);
-            }
-        }
-    }
-    return geom;
-}
-
-$('#status-screenshot').click(async () => {
-    try {
-        setStatus('Capturing screenshot…');
-        const b64 = await screenshot();
-        const bin = atob(b64);
-        const raw = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
-        const geom = decodeScreenshot(raw);
-        $('#status-screenshot-preview').show();
-        c.toBlob((blob) => {
-            const url = URL.createObjectURL(blob);
-            $('#status-screenshot-link').attr('href', url).show().text('Download ' + geom.width + '×' + geom.height + ' PNG');
-        }, 'image/png');
-        setStatus('Screenshot captured');
-    } catch (err) {
-        console.error('screenshot failed', err);
-        setStatus('Screenshot failed: ' + err.toString());
-        alert('Screenshot failed: ' + err.toString());
-    }
-});
-
 loadLocale();
 initTabs();
 attachImageCanvasHandlers();

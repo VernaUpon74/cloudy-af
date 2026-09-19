@@ -44,9 +44,6 @@
 </head>
 <body>
 <div class="window">
-    <header class="toolbar toolbar-header">
-        <h1 class="title">Firmware Editor</h1>
-    </header>
 
     <div class="toolbar toolbar-actions" style="padding: 8px; display: flex; align-items: center; gap: 10px;">
         <span id="fw-device-name" style="font-weight: bold; min-width: 180px;">No device</span>
@@ -87,13 +84,6 @@
                     <tr><td>Build ID</td><td id="status-fw-build">—</td></tr>
                 </tbody>
             </table>
-            <div style="margin-top: 12px;">
-                <button id="status-screenshot" class="btn btn-default" title="Capture the currently connected device screen (requires a live device)">Capture Screenshot</button>
-                <a id="status-screenshot-link" style="display: none; margin-left: 8px;" download="screenshot.png">Download</a>
-            </div>
-            <div id="status-screenshot-preview" style="margin-top: 8px; display: none;">
-                <canvas id="status-screenshot-canvas" class="fw-pixelated"></canvas>
-            </div>
             <p style="margin-top: 12px; font-size: 11px; color: var(--fg-color);">
                 Open a firmware file or connect a device to populate this page.
             </p>
