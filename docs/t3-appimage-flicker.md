@@ -59,6 +59,20 @@ In the packaged AppImage the device-detection / connection status flickers
 - `src-tauri/src/lib.rs`: autoconnect now sent on sidecar `ready` event;
   removed the fixed 1500 ms sleep (comment explains the race).
 
+## Follow-ups applied (2026-09-18)
+1. **Renderer edge-detect** (`src/renderer.js:14`): added `lastConnectStatus`
+   guard — DOM is only rewritten when the status actually changes, eliminating
+   UI churn from redundant events.
+2. **Bridge first-failure guard** (`sidecar/hid-bridge.js:228`): the
+   unresponsive-probe path now only emits `connect(false)` on the *first*
+   timeout failure (`firstFailure` flag). Subsequent probe failures keep
+   the existing "Disconnected" status without re-emitting, preventing the
+   `probe → timeout → emit(false) → probe → …` flicker loop.
+3. **ENOENT/ENODEV**: already handled — `fox.connect()` failures in the
+   reconnect loop don't emit `connect(false)`; only `onClose()` (device was
+   opened then closed) and `downloadConfig()` timeout (device opened but
+   unresponsive) emit status, both of which are genuine state changes.
+
 ## Recommended follow-ups (not yet applied)
 1. Renderer: edge-detect the connect event — only update
    `#connection-status` when `status` actually changed (1-line guard in

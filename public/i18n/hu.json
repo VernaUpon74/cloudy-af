@@ -332,6 +332,10 @@
   "Tooltips.ProfilesTab": "Slukkolási profilok — teljesítmény, hőmérsékletszabályozás, előmelegítés és ellenállásbeállítások minden profilhoz.",
   "Tooltips.ScreenTab": "A főképernyő elrendezése — mit mutat egyes sorok, óra, logó és fényerő.",
   "Tooltips.ControlsTab": "Gombműködés — tűz, plusz és mínusz kattintások, gyorsbillentyűk és ébresztési műveletek.",
+  "Tooltips.ControlsSettingsTab": "Basic control settings — power step, temperature step, wakeup and button behavior.",
+  "Tooltips.ControlsMultiClicksTab": "Multi-click actions — configure what happens when the fire button is pressed 2, 3, 4 or 5 times.",
+  "Tooltips.ControlsShortcutsVWTab": "VW mode shortcuts — two-button combinations for variable wattage mode.",
+  "Tooltips.ControlsShortcutsTCTab": "TC mode shortcuts — two-button combinations for temperature control mode.",
   "Tooltips.SmartTab": "Smart mód — automatikus teljesítmény a legutóbbi slukkok alapján.",
   "Tooltips.AdvancedTab": "Speciális beállítások — akkumodell, töltés, USB, hardver és óra.",
   "Tooltips.StatsTab": "Használati statisztikák és eszközszámlálók.",
@@ -385,5 +389,12 @@
   "Screen.Regional.DateFormat": "Dátumformátum",
   "Screen.Regional.TimeFormat": "Időformátum",
   "Screen.Regional.TemperatureUnits": "Hőmérsékleti egységek",
-  "Animation.ComingSoon": "Hamarosan — az óra-animációhoz firmware-javítás szükséges."
+  "Animation.ComingSoon": "Hamarosan — az óra-animációhoz firmware-javítás szükséges.",
+  "Profile.TFRSetupButton": "Beállítás",
+  "TFRCurveEditor.CalcButton": "Calculate from Resistance",
+  "TFRCurveEditor.CalculateButton": "Calculate",
+  "TFRCurveEditor.ApplyButton": "Apply",
+  "TFRCurveEditor.Extrapolate800": "Extrapolate 800°F",
+  "Monitor.FireButton": "Fire",
+  "Tooltips.MonitorFire": "Hold to fire; double-click for autofire"
 }

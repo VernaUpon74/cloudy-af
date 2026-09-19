@@ -75,9 +75,17 @@ Loose ends carried over from the firmware read-back Phase 1 plan
 
 - [x] M0 RE freeze: write `resources/re/af_190602-boot.md` + `resources/boot/af_190602.json` documenting the reset handler, SystemInit, C runtime startup, and main() dispatch loop for build af_190602.
 
-- [ ] Section 2 — full-boot emulation with per-PID dispatch (in progress): plan `docs/superpowers/plans/2026-09-14-fullboot-pid-dispatch-emulation.md`; task 1 (combined-image + dataflash at 0x1F000, PID @ 0x1F13C) and task 2 (boot_until_settle harness, stop_pcs {0xD684,0x8CD1}) written but NOT yet compiling — three known defects in `emu_test.rs` (missing closing braces after converges_when_gated_off, bogus `use super::cpu::Cpu;`, wrong `Harness::RETURN_SENTINEL` path); fix those first, then run `cargo test --offline --release --lib firmware::tests::emu_test -- --ignored`; port `docs/validation-handoff.md` from the Documents mirror into the primary repo.
+- [x] Section 2 — full-boot emulation with per-PID dispatch (done 2026-09-18):
+      plan `docs/superpowers/plans/2026-09-14-fullboot-pid-dispatch-emulation.md`;
+      three compilation defects fixed (missing braces, bogus `use`, wrong
+      `RETURN_SENTINEL` path); boot gate (`test_af_190602_boot_dispatch_by_pid`)
+      now passes — all 9 known PIDs settle at dispatcher 0x0000d684, unknown
+      PID XXXX hits the 0x2FF8 hang.  Key fix: bus write hook for 0x40040000
+      models the hardware side-effect (sets bit 2 of RAM 0x20002C30) that
+      unblocks the clock_pll_init polling loop at 0x17452.
 
-- [ ] Continue pursuing earlier todoss
+- [x] Continue pursuing earlier todoss — boot gate (Section 2) completed,
+      AppImage flicker follow-ups completed (2026-09-18).
 
 - [x] Fix Firmware Editor syntax blocker (2026-09-12): commit `ebde818` shipped
       `src/renderer-firmware.js` with a duplicated `function setImagesVisible(hasHandle) {`
@@ -112,11 +120,13 @@ Loose ends carried over from the firmware read-back Phase 1 plan
       the resources.rs backend (listStringsCmd/listResourcePacks). Remaining:
       functional test with a firmware fixture (glyph editor, pack preview,
       extract/inject round-trip vs NFirmwareEditor parity).
-- [ ] AppImage device-detection flicker: root-cause analysis redone
-      in-repo (the original /tmp delegate report was lost) —
-      **`docs/t3-appimage-flicker.md`**: startup race (blind 1500 ms
-      pre-ready connect sleep) identified as primary cause and FIXED
-      (event-driven autoconnect on sidecar `ready`, 2026-09-15);
-      timer-duplication and redundant status emission documented as
-      follow-ups; on-device verification still pending.
+- [x] AppImage device-detection flicker (resolved 2026-09-18): root cause
+      was two devices or two software instances connected simultaneously,
+      not a code defect.  Follow-ups (renderer edge-detect, bridge
+      first-failure guard) applied as defensive measures.
+- [x] Build script disk space check (2026-09-18): added `check_disk_space()`
+      function to `build.sh` that runs before each build (AppImage/Flatpak).
+      Checks available disk space and offers to clear caches (pip, npm, cargo,
+      flatpak-builder, etc.) when below minimum threshold. Supports `-y` flag
+      for non-interactive mode.
 

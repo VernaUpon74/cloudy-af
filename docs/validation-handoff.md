@@ -4,6 +4,113 @@ Running log for the non-hardware validation plan
 (`docs/superpowers/plans/2026-09-13-nonhw-validation-routes.md`, routes from
 `docs/firmware-validation.md`). Newest entries first within each section.
 
+## Active — UI features + TFR calculator (2026-09-18)
+
+Software feature work resumed after shelving SWD hardware probing.
+Baseline: 205 passed / 47 ignored; `cargo check --release --tests` clean;
+working tree has uncommitted emulator changes (exception delivery, decode
+fixes, EADC) from the prior session.
+
+### SWD root cause (diagnosed, shelved)
+
+All previous SWD reads returned adapter product_id `0x30012009` because
+wrong SWD pins were used: PE13/PE14 are M2351 pins, not M041 pins. The
+Eleaf Pico 75W uses an M041 (Cortex-M0, chip_type 0x101) with SWD on
+P4.6/ICE_CLK (pin 30) and P4.7/ICE_DAT (pin 31). The existing PARTNO
+binary patch (offset 0x1a4e96: mov $6,%eax) won't interfere — M041's
+PARTNO 0xC20 should already be in the binary's PARTNO table.
+`nulink_usb_open` already tries EXTMODE_M0A21 for M0 targets. Work
+SHELVED per user directive.
+
+### Features planned
+
+1. **Resistance precision** — always Ω with 2 decimal places in both
+   config editor inputs and monitor display. Monitor already uses
+   `.toFixed(2)` (renderer-monitor.js:107,188). Config editor needs
+   `step="0.01"` on `index.html:203` Resistance input and `.toFixed(2)`
+   formatting in `renderer.js:376` uiProfile().
+
+2. **Flatpak build output path** — `build.sh:595-608` has a stub flatpak
+   section. Implement it to output `builds/cloudy-af-$VERSION.flatpak`
+   into the script parent directory (matching AppImage behavior).
+   `translations-watch-rebuild.sh:28` already does this correctly.
+
+3. **Fire button** (press-and-hold in Device Monitor) — full stack:
+   - Rust: `fire_cmd` in `firmware.rs:640+`, registered in `lib.rs:720+`
+   - Sidecar: `case 'fire'` in `hid-bridge.js:253+`
+   - Bridge: `fireDevice(seconds)` in `tauri-bridge.js`
+   - Monitor: button in `monitor.html` toolbar, press-and-hold handlers
+     in `renderer-monitor.js`
+   - Protocol: `createCommand(0x44, seconds, 0)` sends 18-byte HID
+     packet; firmware manages puff timer internally.
+
+4. **TFR Setup button** next to Coil Material dropdown — follows exact
+   pattern of `tc-setup` button (index.html:221). Button hidden by
+   default, shown when TFR material selected (values 5-12). Click opens
+   TFR editor for `config.TFRTables[selectedValue - 5]`. Requires
+   modifying `uiTcr()` (renderer.js:237) to toggle visibility.
+
+5. **TFR Calculator** inside TFR editor (tfr.html) — collapsible
+   "Calculate from Resistance" panel. User enters measured resistance
+   (Ω) at standard temperatures (68°F–800°F). Core math: `factor[i] =
+   R[i] / R[0]` (R[0] always at 68°F, factor 1.0). Optional 800°F
+   extrapolation: `factor[prev] × 1.05`. Pure JS, no Rust/sidecar.
+
+### License note
+
+Skrunk-Mod-EXT (TFR calculation tool by Aiden Lopez) is CC BY-NC-SA 4.0.
+The TFR algorithm (`R/R0` ratio) is mathematical fact — not copyrightable.
+Implementation will be a clean-room JS reimplementation. Attribution as
+courtesy: "TFR calculation inspired by SkrunksModEXT by Aiden Lopez."
+
+### Coil Material ↔ Materials tab continuity
+
+Mapping verified: Material select values 5-12 → TFRTables[0-7] →
+Materials tab cards with display names Ni/Ti/304/316/316L/321/NF30/NiFe.
+No mismatches found. The new TFR Setup button and the Materials card
+clicks both open the same TFR editor window (tfr.html).
+
+## SHELVED — emulator work paused for the Nu-Link bench (2026-09-17, latest)
+
+Software-emulator work is SHELVED (user decision): a real USB Nu-Link ICE
+adaptor (0416:511c, /dev/hidraw5) is available, so the remaining unknowns get
+answered on hardware first. Working tree is left UNCOMMITTED and full lib
+suite GREEN (205 passed / 47 ignored; `cargo check --release --tests` clean;
+`git diff --check` clean). What is in the tree (NOT committed):
+
+- Exception delivery landed and round-trip-proven: NVIC latch in bus.rs
+  (ISER/ICER W1S/W1C + lowest pending+enabled take), `Bus::request_irq`/
+  `take_pending_exception`, EADC ADIF0-completion → request_irq(42),
+  cpu.rs `exception_enter`/`exception_return` (8-word basic frame) with
+  EXC_RETURN recognition (exact values, guarded by `exception_depth != 0`)
+  in Bx/Pop/Ldmia/LdmIA/LdrStrT4. EXC_RETURN constants CORRECTED by
+  regression tests: THREAD_MSP=0xFFFF_FFF9, HANDLER_MSP=0xFFFF_FFF1 (was
+  swapped); LDR-T4/POP/LDM return paths now apply writeback BEFORE the
+  unstack, not after.
+- **Root cause of the boot-gate 0x10B14 hang found and fixed** (independent
+  RED tests, Keystone/Capstone-verified encodings): decode32 classified
+  modified-immediate BIC as AND (op bit 5 of hw1 was ignored) → the boot
+  path's `bic r3,r3,#4` cleared ADCEN after enabling it, so SWTRG never
+  started a conversion and the 0x10B14 wait spun forever. Decoder now
+  distinguishes And/Bic and Orn/Orr (`mvn r12,#0xA00` = F46F 6C20 at
+  0x2BD6 landed as Orn; DpOp gained `Orn`, executed as `lhs | !imm`).
+- EADC fixes from independent tests: countdown now RELOADS when other
+  modules remain pending (was skipped on the routed-early-return path);
+  interrupt signal respects ADCIEN0 (CTL bit2) — ADIF0 still sets.
+- Boot gate now dies EARLIER, at a NEW decode gap: `Undefined { instr:
+  0xF994, pc: 0x2BD6 }` = `ldrsb.w r3,[r4,#0x11]` (bytes 94 F9 11 30,
+  confirmed in the decrypted image; THUMB ldrsb.w T2 encoding is simply
+  not in decode32). Next emulator session: add LdrsbT4 (32-bit LDRSB T3
+  form) — likely a small sibling of LdrsbT1 if that exists; verify
+  against Capstone, then rerun the boot gate.
+- Caveat for the next session: the 5-fix chain (BIC decode, EXC_RET swap,
+  writeback-before-return, EADC reload, ADCIEN0) was verified with a mix
+  of independent RED→GREEN tests and the boot gate's live decode faults;
+  treat the whole chain as plausible-but-unbenchmarked until the boot
+  gate passes. Regression tests added: decode BIC≠AND, BIC bit0
+  preservation, 4 exception round-trips, 2 EADC ordering/enable tests,
+  MVN immediate test, all green in `cargo test --release --lib`.
+
 ## Latest verification — SysTick model + EADC model (2026-09-17, later session)
 
 Supersedes the LDMIA/IRQ42 entry below (that LDMIA fix is still uncommitted

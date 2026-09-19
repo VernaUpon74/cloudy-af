@@ -332,6 +332,10 @@
   "Tooltips.ProfilesTab": "Profils de vapotage — puissance, contrôle de température, préchauffage et réglages du coil pour chaque profil.",
   "Tooltips.ScreenTab": "Disposition de l'écran principal — contenu de chaque ligne, horloge, logo et luminosité.",
   "Tooltips.ControlsTab": "Comportement des boutons — clics fire, plus et moins, raccourcis et actions de réveil.",
+  "Tooltips.ControlsSettingsTab": "Basic control settings — power step, temperature step, wakeup and button behavior.",
+  "Tooltips.ControlsMultiClicksTab": "Multi-click actions — configure what happens when the fire button is pressed 2, 3, 4 or 5 times.",
+  "Tooltips.ControlsShortcutsVWTab": "VW mode shortcuts — two-button combinations for variable wattage mode.",
+  "Tooltips.ControlsShortcutsTCTab": "TC mode shortcuts — two-button combinations for temperature control mode.",
   "Tooltips.SmartTab": "Mode Smart — puissance automatique basée sur vos bouffées récentes.",
   "Tooltips.AdvancedTab": "Paramètres avancés — modèle de batterie, charge, USB, matériel et horloge.",
   "Tooltips.StatsTab": "Statistiques d'utilisation et compteurs de l'appareil.",
@@ -385,5 +389,12 @@
   "Screen.Regional.DateFormat": "Format de date",
   "Screen.Regional.TimeFormat": "Format de l'heure",
   "Screen.Regional.TemperatureUnits": "Unités de température",
-  "Animation.ComingSoon": "Bientôt disponible — l'animation d'horloge nécessite un patch firmware."
+  "Animation.ComingSoon": "Bientôt disponible — l'animation d'horloge nécessite un patch firmware.",
+  "Profile.TFRSetupButton": "Configuration",
+  "TFRCurveEditor.CalcButton": "Calculate from Resistance",
+  "TFRCurveEditor.CalculateButton": "Calculate",
+  "TFRCurveEditor.ApplyButton": "Apply",
+  "TFRCurveEditor.Extrapolate800": "Extrapolate 800°F",
+  "Monitor.FireButton": "Fire",
+  "Tooltips.MonitorFire": "Hold to fire; double-click for autofire"
 }

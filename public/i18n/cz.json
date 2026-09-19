@@ -332,6 +332,10 @@
   "Tooltips.ProfilesTab": "Vapovací profily — výkon, regulace teploty, předehřev a nastavení spirálky pro každý profil.",
   "Tooltips.ScreenTab": "Rozvržení hlavní obrazovky — co každý řádek zobrazuje, hodiny, logo a jas.",
   "Tooltips.ControlsTab": "Chování tlačítek — kliknutí fire, plus a minus, zkratky a akce probuzení.",
+  "Tooltips.ControlsSettingsTab": "Basic control settings — power step, temperature step, wakeup and button behavior.",
+  "Tooltips.ControlsMultiClicksTab": "Multi-click actions — configure what happens when the fire button is pressed 2, 3, 4 or 5 times.",
+  "Tooltips.ControlsShortcutsVWTab": "VW mode shortcuts — two-button combinations for variable wattage mode.",
+  "Tooltips.ControlsShortcutsTCTab": "TC mode shortcuts — two-button combinations for temperature control mode.",
   "Tooltips.SmartTab": "Režim Smart — automatický výkon podle posledních potáhnutí.",
   "Tooltips.AdvancedTab": "Pokročilá nastavení — model baterie, nabíjení, USB, hardware a hodiny.",
   "Tooltips.StatsTab": "Statistiky používání a počítadla zařízení.",
@@ -385,5 +389,12 @@
   "Screen.Regional.DateFormat": "Formát data",
   "Screen.Regional.TimeFormat": "Formát času",
   "Screen.Regional.TemperatureUnits": "Jednotky teploty",
-  "Animation.ComingSoon": "Již brzy — pro animaci hodin je vyžadována oprava firmwaru."
+  "Animation.ComingSoon": "Již brzy — pro animaci hodin je vyžadována oprava firmwaru.",
+  "Profile.TFRSetupButton": "Nastav.",
+  "TFRCurveEditor.CalcButton": "Calculate from Resistance",
+  "TFRCurveEditor.CalculateButton": "Calculate",
+  "TFRCurveEditor.ApplyButton": "Apply",
+  "TFRCurveEditor.Extrapolate800": "Extrapolate 800°F",
+  "Monitor.FireButton": "Fire",
+  "Tooltips.MonitorFire": "Hold to fire; double-click for autofire"
 }

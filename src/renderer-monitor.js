@@ -2,7 +2,7 @@ import 'photonkit/dist/css/photon.css';
 import './style.css';
 import $ from 'jquery';
 import Highcharts from 'highcharts';
-import { getLocale, readTextFile, resolveResourcePath, readMonitoringData, screenshot } from './lib/tauri-bridge.js';
+import { getLocale, readTextFile, resolveResourcePath, readMonitoringData, screenshot, fireDevice } from './lib/tauri-bridge.js';
 
 let lang = {};
 
@@ -48,8 +48,8 @@ const SENSORS = [
     { id: 'temperatureSet', color: '#8b0000', unitOf: s => s.is_celsius ? '°C' : '°F', langKey: 'Monitor.TemperatureSet', value: s => s.temperature_set }, // dark red
     { id: 'outputCurrent', color: '#ffa500', unit: 'A', langKey: 'Monitor.OutputCurrent', value: s => s.output_current }, // orange
     { id: 'outputVoltage', color: '#87cefa', unit: 'V', langKey: 'Monitor.OutputVoltage', value: s => s.output_voltage }, // light sky blue
-    { id: 'resistance', color: '#ee82ee', unit: 'Ω', langKey: 'Monitor.Resistance', value: s => s.resistance }, // violet
-    { id: 'realResistance', color: '#8a2be2', unit: 'Ω', langKey: 'Monitor.RealResistance', value: s => s.real_resistance }, // blue violet
+    { id: 'resistance', color: '#ee82ee', unit: 'Ω', decimals: 3, langKey: 'Monitor.Resistance', value: s => s.resistance }, // violet
+    { id: 'realResistance', color: '#8a2be2', unit: 'Ω', decimals: 3, langKey: 'Monitor.RealResistance', value: s => s.real_resistance }, // blue violet
     { id: 'boardTemperature', color: '#8b4513', unitOf: s => s.is_celsius ? '°C' : '°F', langKey: 'Monitor.BoardTemperature', value: s => s.board_temperature }, // saddle brown
 ];
 
@@ -104,7 +104,7 @@ function updateLegend(sample) {
             $row.hide();
         } else {
             $row.show();
-            $('#val-' + s.id).text(v.toFixed(2) + ' ' + unitOf(s, sample));
+            $('#val-' + s.id).text(v.toFixed(s.decimals || 2) + ' ' + unitOf(s, sample));
         }
     });
 }
@@ -185,7 +185,7 @@ function chartOptions(theme) {
                 const unit = unitOf(sensor, this.series.userOptions._sample || {});
                 return '<span style="color:' + this.color + '">\u25CF</span> ' +
                     this.series.name + ': <b>' +
-                    (this.y === null ? '—' : this.y.toFixed(2)) + '</b>' +
+                    (this.y === null ? '—' : this.y.toFixed(sensor.decimals || 2)) + '</b>' +
                     (unit ? ' ' + unit : '') + '<br/>';
             },
         },
@@ -286,6 +286,63 @@ function setPaused(p) {
 }
 
 $('#monitor-pause').click(() => setPaused(!paused));
+
+// --- Fire button (press-and-hold + double-click autofire) --------------------
+// Press-and-hold: sends fireDevice(1) on mousedown, re-sends every 800ms
+// while held, clears on mouseup.  Double-click toggles autofire mode:
+// the 800ms repeat runs without holding the button; double-click again
+// (or single-click while autofire is active) to stop.  The firmware
+// manages the puff timer internally, so no stop command is needed.
+let fireInterval = null;
+let fireAutofire = false;
+
+function startFireRepeat() {
+    if (fireInterval !== null) return;
+    fireDevice(1).catch(() => {});
+    fireInterval = setInterval(() => fireDevice(1).catch(() => {}), 800);
+}
+
+function stopFireRepeat() {
+    if (fireInterval !== null) {
+        clearInterval(fireInterval);
+        fireInterval = null;
+    }
+}
+
+function setAutofire(on) {
+    fireAutofire = on;
+    $('#monitor-fire').toggleClass('autofire-active', on);
+}
+
+$('#monitor-fire').on('mousedown touchstart', function (e) {
+    e.preventDefault();
+    if (fireAutofire) {
+        // Single-click while autofire is on → stop autofire
+        setAutofire(false);
+        stopFireRepeat();
+        return;
+    }
+    startFireRepeat();
+});
+
+$('#monitor-fire').on('dblclick', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Toggle autofire
+    if (fireAutofire) {
+        setAutofire(false);
+        stopFireRepeat();
+    } else {
+        setAutofire(true);
+        startFireRepeat();
+    }
+});
+
+$(document).on('mouseup touchend', function () {
+    if (!fireAutofire) {
+        stopFireRepeat();
+    }
+});
 
 // --- Screenshot (0xC1) -------------------------------------------------
 // 1024 raw framebuffer bytes, 1bpp vertical packing: byte = x + (y/8)*width,

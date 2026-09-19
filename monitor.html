@@ -117,6 +117,10 @@
             border-radius: 4px;
             padding: 12px;
             text-align: center;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow: auto;
+            z-index: 101;
         }
         #screenshot-canvas {
             image-rendering: pixelated;
@@ -124,6 +128,8 @@
             border: 1px solid var(--border-color, #444);
             display: block;
             margin: 0 auto 10px;
+            max-width: 100%;
+            height: auto;
         }
         #screenshot-buttons {
             display: flex;
@@ -146,6 +152,7 @@
                 <span id="monitor-flags"></span>
                 <span style="flex:1"></span>
                 <button id="monitor-pause" class="btn btn-default" data-lang="Monitor.PauseButton">Pause</button>
+                <button id="monitor-fire" class="btn btn-default" data-lang="Monitor.FireButton" data-lang-title="Tooltips.MonitorFire">Fire</button>
                 <button id="monitor-screenshot" class="btn btn-default" data-lang="Monitor.ScreenshotButton" data-lang-title="Tooltips.MonitorScreenshot">Screenshot</button>
             </div>
             <div class="monitor-body">

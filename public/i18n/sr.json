@@ -332,6 +332,10 @@
   "Tooltips.ProfilesTab": "Profili pušenja — snaga, kontrola temperature, zagrevanje i podešavanja kalema za svaki profil.",
   "Tooltips.ScreenTab": "Raspored glavnog ekrana — šta svaki red prikazuje, sat, logo i osvetljenje.",
   "Tooltips.ControlsTab": "Ponašanje dugmadi — klikovi paljenja, plus i minus, prečice i akcije buđenja.",
+  "Tooltips.ControlsSettingsTab": "Basic control settings — power step, temperature step, wakeup and button behavior.",
+  "Tooltips.ControlsMultiClicksTab": "Multi-click actions — configure what happens when the fire button is pressed 2, 3, 4 or 5 times.",
+  "Tooltips.ControlsShortcutsVWTab": "VW mode shortcuts — two-button combinations for variable wattage mode.",
+  "Tooltips.ControlsShortcutsTCTab": "TC mode shortcuts — two-button combinations for temperature control mode.",
   "Tooltips.SmartTab": "Smart režim — automatska snaga na osnovu nedavnih pušenja.",
   "Tooltips.AdvancedTab": "Napredna podešavanja — model baterije, punjenje, USB, hardver i sat.",
   "Tooltips.StatsTab": "Statistika korišćenja i brojači uređaja.",
@@ -385,5 +389,12 @@
   "Screen.Regional.DateFormat": "Формат датума",
   "Screen.Regional.TimeFormat": "Формат времена",
   "Screen.Regional.TemperatureUnits": "Јединице температуре",
-  "Animation.ComingSoon": "Ускоро — за анимацију сата потребна је закрпа фирмвера."
+  "Animation.ComingSoon": "Ускоро — за анимацију сата потребна је закрпа фирмвера.",
+  "Profile.TFRSetupButton": "Podesi",
+  "TFRCurveEditor.CalcButton": "Calculate from Resistance",
+  "TFRCurveEditor.CalculateButton": "Calculate",
+  "TFRCurveEditor.ApplyButton": "Apply",
+  "TFRCurveEditor.Extrapolate800": "Extrapolate 800°F",
+  "Monitor.FireButton": "Fire",
+  "Tooltips.MonitorFire": "Hold to fire; double-click for autofire"
 }

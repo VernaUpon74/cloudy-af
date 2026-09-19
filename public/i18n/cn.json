@@ -332,6 +332,10 @@
   "Tooltips.ProfilesTab": "吸烟配置 — 每个配置的功率、温度控制、预热和线圈设置。",
   "Tooltips.ScreenTab": "主屏幕布局 — 每行显示内容、时钟、标志和亮度。",
   "Tooltips.ControlsTab": "按键行为 — 点火、加减键点击、快捷方式和唤醒动作。",
+  "Tooltips.ControlsSettingsTab": "Basic control settings — power step, temperature step, wakeup and button behavior.",
+  "Tooltips.ControlsMultiClicksTab": "Multi-click actions — configure what happens when the fire button is pressed 2, 3, 4 or 5 times.",
+  "Tooltips.ControlsShortcutsVWTab": "VW mode shortcuts — two-button combinations for variable wattage mode.",
+  "Tooltips.ControlsShortcutsTCTab": "TC mode shortcuts — two-button combinations for temperature control mode.",
   "Tooltips.SmartTab": "智能模式 — 根据您最近的吸气自动调整功率。",
   "Tooltips.AdvancedTab": "高级设置 — 电池型号、充电、USB、硬件和时钟选项。",
   "Tooltips.StatsTab": "使用统计和设备计数器。",
@@ -385,5 +389,12 @@
   "Screen.Regional.DateFormat": "日期格式",
   "Screen.Regional.TimeFormat": "时间格式",
   "Screen.Regional.TemperatureUnits": "温度单位",
-  "Animation.ComingSoon": "即将推出——时钟动画需要固件补丁支持。"
+  "Animation.ComingSoon": "即将推出——时钟动画需要固件补丁支持。",
+  "Profile.TFRSetupButton": "设置",
+  "TFRCurveEditor.CalcButton": "Calculate from Resistance",
+  "TFRCurveEditor.CalculateButton": "Calculate",
+  "TFRCurveEditor.ApplyButton": "Apply",
+  "TFRCurveEditor.Extrapolate800": "Extrapolate 800°F",
+  "Monitor.FireButton": "Fire",
+  "Tooltips.MonitorFire": "Hold to fire; double-click for autofire"
 }
