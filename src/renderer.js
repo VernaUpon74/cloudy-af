@@ -966,20 +966,6 @@ $(document).on('keydown', function (e) {
         if (e.key === 'd' || e.key === 'D') { e.preventDefault(); window.downloadSettings(); return; }
         if (e.key === 'u' || e.key === 'U') { e.preventDefault(); window.uploadSettings(); return; }
         if (e.key === 'r' || e.key === 'R') { e.preventDefault(); window.resetSettings(); return; }
-        return;
-    }
-    if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
-        e.preventDefault();
-        const tabs = $('.tab-group#main .tab-item').toArray();
-        const idx = tabs.findIndex(t => t.classList.contains('active'));
-        const next = e.key === 'ArrowRight' ? (idx + 1) % tabs.length : (idx - 1 + tabs.length) % tabs.length;
-        $(tabs[next]).click();
-        return;
-    }
-    if (e.key === 'd' || e.key === 'D') {
-        window.downloadSettings();
-    } else if (e.key === 'u' || e.key === 'U') {
-        window.uploadSettings();
     }
 });
 

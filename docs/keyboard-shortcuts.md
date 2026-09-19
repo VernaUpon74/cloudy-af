@@ -8,9 +8,6 @@
 | `Ctrl`+`D` | Download Settings |
 | `Ctrl`+`U` | Upload Settings |
 | `Ctrl`+`R` | Reset Settings |
-| `d` | Download Settings |
-| `u` | Upload Settings |
-| `Alt`+`→` / `Alt`+`←` | Next / previous main tab |
 
 ## Firmware Editor
 
@@ -18,9 +15,6 @@
 |---|---|
 | `Ctrl`+`O` | Open firmware file |
 | `Ctrl`+`F` | Flash to device |
-| `d` | Download FW (stock build) |
-| `u` | Flash to device |
-| `Alt`+`→` / `Alt`+`←` | Next / previous editor tab |
 
 ## Device Monitor
 
@@ -33,5 +27,4 @@
 | `Esc` | Close screenshot modal |
 
 Keys are ignored while typing in an input/textarea/select (except `Ctrl` combos
-and Alt arrow tabs, which also work while a field has focus in the Firmware
-Editor).
+which also work while a field has focus in the Firmware Editor).
