@@ -2,7 +2,7 @@
 
 # Build script for Cloudy-af: Docker-based Tauri build + Flatpak or AppImage.
 #
-# Usage: ./build.sh [appimage|flatpak] [--patches] [-y|--yes]
+# Usage: ./build.sh [appimage|flatpak] [--experimental|--standard] [-y|--yes]
 #   With no arguments the original interactive prompts are used.
 #   Env: CLOUDY_TOOLBOX — toolbox container used for the AppImage deploy/pack
 #        stage (default: arcticfox-build when it exists, else host mode).
@@ -17,8 +17,8 @@ for arg in "$@"; do
         appimage|flatpak) BUILD_TARGET="$arg" ;;
         --appimage)       BUILD_TARGET="appimage" ;;
         --flatpak)        BUILD_TARGET="flatpak" ;;
-        --patches)        ENABLE_PATCHES=true ;;
-        --no-patches)     ENABLE_PATCHES=false ;;
+        --experimental)    ENABLE_PATCHES=true ;;
+        --standard)        ENABLE_PATCHES=false ;;
         -y|--yes|--non-interactive) ASSUME_YES=true ;;
         -h|--help)
             sed -n '3,9p' "$0" | sed 's/^# \{0,1\}//'

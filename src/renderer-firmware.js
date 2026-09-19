@@ -728,14 +728,6 @@ $(document).on('keydown', (e) => {
             $(tabs[next]).click();
             return;
         }
-        if (e.key === '`') {
-            e.preventDefault();
-            const tabs = $('.tab-item').toArray();
-            const idx = tabs.findIndex(t => t.classList.contains('active'));
-            const next = (idx + 1) % tabs.length;
-            $(tabs[next]).click();
-            return;
-        }
         if (e.key === 'o') { e.preventDefault(); doOpenFirmware(); return; }
         if (e.key === 'd' || e.key === 'D') { e.preventDefault(); $('#download-stock').click(); return; }
         if (e.key === 'f' || e.key === 'F') { e.preventDefault(); $('#flash-firmware').click(); return; }
