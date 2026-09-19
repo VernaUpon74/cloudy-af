@@ -565,6 +565,7 @@ Exec=cloudy-af
 Icon=cloudy-af
 Categories=Utility;
 Terminal=false
+StartupWMClass=org.cloudy.af
 EOFDESKTOP
     cp "$MAIN_REPO_DIR/src-tauri/icons/icon.png" "$APPDIR/Cloudy AF.png"
 
