@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "デバイスオフ",
   "DischargeCurveEditor.CancelButton": "キャンセル",
   "DischargeCurveEditor.ChartNameLabel": "放電カーブ:",
+  "DischargeCurveEditor.NameLabel": "名前:",
   "DischargeCurveEditor.CutoffLabel": "カットオフ:",
   "DischargeCurveEditor.ExportButton": "出力",
   "DischargeCurveEditor.ImportButton": "入力",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "日付の形式",
   "Screen.Regional.TimeFormat": "時刻の形式",
   "Screen.Regional.TemperatureUnits": "温度の単位",
-  "Animation.ComingSoon": "近日対応 — 時計アニメーションにはファームウェアパッチが必要です。"
+  "Animation.ComingSoon": "近日対応 — 時計アニメーションにはファームウェアパッチが必要です。",
+  "Animation.Clock": "時計",
+  "Animation.PendingRE": "クロックフックのRE確認待ち",
+  "Stats.PuffTimeHHMMSSLabel": "パフ時間 (HH:MM:SS)"
 }

@@ -4,9 +4,17 @@
 //! maps each framebuffer byte's band index to a brightness; bytes below the
 //! half-amplitude threshold are cleared in place. Integer math only.
 //!
-//! Buffer geometry (see `resources/re/af_190602-render.md`): 64x128 1bpp,
-//! vertically packed (`pixel x+(y/8)*width, bit y%8`), so byte `i` lives in
-//! 8-pixel strip `i >> 6` at column `i & 63` — 16 strips of 64 bytes.
+//! Buffer geometry: 64x128 1bpp, HORIZONTALLY packed, MSB = leftmost pixel
+//! (`byte = y*8 + x/8`, `bit = 0x80 >> (x%8)`) — the layout NToolbox copies
+//! the 0xC1 screenshot bytes into a GDI+ Format1bppIndexed bitmap verbatim,
+//! confirmed on hardware (Pico 25 capture renders readable text only under
+//! this packing; see resources/re/af_190602-render.md §"Packing correction").
+//! So for byte `i`: row `y = i >> 3`, byte-column `bc = i & 7` (pixels
+//! `bc*8 .. bc*8+7`). A 64-byte group `i >> 6` spans 8 full rows — the same
+//! 8-row band the old vertical-packing model called a "strip", which is why
+//! Gradient Fade and Center Pulse (band-indexed by `i >> 6`) accidentally
+//! rendered correctly on hardware while Diagonal Sweep (indexed by byte
+//! column) did not.
 //!
 //! Injection (see `resources/re/af_190602-dispatcher-analy.md` §7): a 4-byte
 //! B.W at the timeout decision point `0x9a16` (in `FUN_00009a10`) detours
@@ -17,6 +25,7 @@
 //!
 //! The config byte (a spare dataflash byte) selects the effect:
 //! 2 = Gradient Fade, 3 = Center Pulse, 4 = Diagonal Sweep.
+//! See `CONFIG_*` constants below for the full assigned value list.
 
 use serde::Deserialize;
 
@@ -73,9 +82,33 @@ pub const SINE_LUT: [u8; 16] = [0, 25, 50, 74, 98, 120, 142, 162, 180, 197, 212,
 const THRESHOLD: u8 = 128;
 
 /// Config-byte values selecting each effect.
+/// 
+/// These values are persisted in a spare dataflash byte (`config_byte_addr` in
+/// the animation descriptor) and read by the injected cave at runtime. The
+/// existing charge-screen effects share the timeout decision point hook site
+/// (`0x9a16` in `FUN_00009a10`) documented in `resources/re/af_190602-dispatcher-analy.md` §7.
+/// 
+/// Value assignments (do not reorder — frontend dropdown options and existing
+/// patches depend on these):
+/// - 0: Off (stock behavior, no animation)
+/// - 1: Swirl (reserved — not yet implemented in this codebase)
+/// - 2: Gradient Fade (charge-screen timeout animation)
+/// - 3: Center Pulse (charge-screen timeout animation)
+/// - 4: Diagonal Sweep (charge-screen timeout animation)
+/// - 5: Rippling Wave (Phase 4 addition — charge-screen timeout animation)
+/// - 6: Clock Animation (PENDING — requires separate RE confirmation for clock-side
+///   injection seam; see `resources/re/af_190602-dispatcher-analy.md` §7.3. The
+///   clock hook is NOT the same as the charge-screen timeout hook; the clock is drawn
+///   when the timeout bit is CLEAR at `0x9a32`, a distinct pathway from the timeout
+///   branch at `0x9a20`. Clock animation injection requires identifying a hook site
+///   in the clock renderer (`FUN_00009a10` → clock drawing path via `0x136b4`,
+///   `0x90`, `0xb230`, `0x13760`, `0x13798`) — addresses from RE notes, confirm
+///   against `af_190602.dec.bin` before flash.)
 pub const CONFIG_GRADIENT_FADE: u8 = 2;
 pub const CONFIG_CENTER_PULSE: u8 = 3;
 pub const CONFIG_DIAGONAL_SWEEP: u8 = 4;
+pub const CONFIG_RIPPLING_WAVE: u8 = 5;
+pub const CONFIG_CLOCK_ANIMATION: u8 = 6;
 
 /// The descriptor's `"animation"` object.
 #[derive(Debug, Deserialize)]
@@ -125,9 +158,9 @@ pub fn fade_apply(buf: &mut [u8], width: usize, phase: u32, index: impl Fn(usize
 
 /// Gradient Fade (config 2): horizontal brightness bands sweep vertically.
 ///
-/// Each 64-byte strip shares one brightness value:
-/// `SINE_LUT[((strip*8 + phase) >> 2) & 15]`; the `>> 2` keeps the
-/// phase→strip mapping expressible in Thumb shifts (period 64 phases).
+/// Each 8-row band (64-byte group `i / width`) shares one brightness value:
+/// `SINE_LUT[((band*8 + phase) >> 2) & 15]`; the `>> 2` keeps the
+/// phase→band mapping expressible in Thumb shifts (period 64 phases).
 pub fn gradient_fade_apply(buf: &mut [u8], width: usize, _height: usize, phase: u32) {
     fade_apply(buf, width, phase, |i, ph| {
         (((i / width) as u32 * 8 + ph) >> 2) as usize
@@ -135,8 +168,8 @@ pub fn gradient_fade_apply(buf: &mut [u8], width: usize, _height: usize, phase: 
 }
 
 /// Center Pulse (config 3): brightness rings pulse outward from the vertical
-/// centre of the screen. Strip distance from the centre is `strip ^ 7`
-/// (strips 7/8 → 0, edges → 15); period 16 phases.
+/// centre of the screen. 8-row-band distance from the centre is `band ^ 7`
+/// (bands 7/8 → 0, edges → 15); period 16 phases.
 pub fn center_pulse_apply(buf: &mut [u8], width: usize, phase: u32) {
     fade_apply(buf, width, phase, |i, ph| {
         let d = (i / width) as u32 ^ 7;
@@ -145,11 +178,14 @@ pub fn center_pulse_apply(buf: &mut [u8], width: usize, phase: u32) {
 }
 
 /// Diagonal Sweep (config 4): diagonal bands march corner to corner. The LUT
-/// index combines the strip, the byte's column group `((i & 63) >> 2)`, and
-/// the phase; period 16 phases.
+/// index combines the 8-row band `s = i >> 6`, the byte's column group
+/// `xg = (i & 7) << 1` (8 byte-columns of 8 px = 16 half-byte groups), and
+/// the phase; period 16 phases. (`xg` was `(i & 63) >> 2` under the old
+/// vertical-packing model — on the real horizontally-packed buffer that
+/// mixed rows and columns and rendered streaky blocks instead of diagonals.)
 pub fn diagonal_sweep_apply(buf: &mut [u8], _width: usize, phase: u32) {
     fade_apply(buf, 64, phase, |i, ph| {
-        let xg = ((i & 63) >> 2) as u32;
+        let xg = ((i & 7) << 1) as u32;
         let s = (i >> 6) as u32;
         s.wrapping_add(xg).wrapping_add(ph) as usize
     })
@@ -238,8 +274,8 @@ pub fn emit_gradient_fade(
     buf_len: u32,
 ) -> Result<(), AsmError> {
     emit_effect_cave(a, anim, buf_addr, buf_len, CONFIG_GRADIENT_FADE, |a| {
-        a.lsrs(3, 0, 6); // i >> 6        (byte strip = 64 bytes)
-        a.lsls(3, 3, 3); // * 8           (y of the strip's pixel group)
+        a.lsrs(3, 0, 6); // i >> 6        (8-row band = 64 bytes)
+        a.lsls(3, 3, 3); // * 8           (y of the band's first row)
         a.adds_reg(3, 3, 4); // + phase
         a.lsrs(3, 3, 2); // >> 2          (period 64 phases)
         a.ands(3, 6); // & 15
@@ -253,7 +289,7 @@ pub fn emit_center_pulse(
     buf_len: u32,
 ) -> Result<(), AsmError> {
     emit_effect_cave(a, anim, buf_addr, buf_len, CONFIG_CENTER_PULSE, |a| {
-        a.lsrs(3, 0, 6); // strip s
+        a.lsrs(3, 0, 6); // 8-row band s = i >> 6
         a.movs(2, 7); // centre constant (r2 is the byte temp, free here)
         a.eors(3, 2); // d = s ^ 7   (distance from vertical centre)
         a.adds_reg(3, 3, 4); // + phase   (period 16)
@@ -268,14 +304,44 @@ pub fn emit_diagonal_sweep(
     buf_len: u32,
 ) -> Result<(), AsmError> {
     emit_effect_cave(a, anim, buf_addr, buf_len, CONFIG_DIAGONAL_SWEEP, |a| {
-        a.lsls(3, 0, 26); // i << 26
-        a.lsrs(3, 3, 28); // >> 28       (column group = (i & 63) >> 2)
-        a.lsrs(2, 0, 6); // strip s
-        a.adds_reg(3, 3, 2); // strip + column group
+        a.lsls(3, 0, 29); // i << 29
+        a.lsrs(3, 3, 28); // >> 28       (column group = (i & 7) << 1)
+        a.lsrs(2, 0, 6); // 8-row band s = i >> 6
+        a.adds_reg(3, 3, 2); // band + column group
         a.adds_reg(3, 3, 4); // + phase   (period 16)
         a.ands(3, 6); // & 15
     })
 }
+
+// ============================================================================
+// Clock animation hook — DEFERRED (RE-pending)
+// ============================================================================
+// The clock animation requires a separate hook site from the charge-screen
+// timeout effects. Per `resources/re/af_190602-dispatcher-analy.md` §7:
+//
+// - The timeout decision point at `0x9a16` (tst.w r2, #0x20000) branches to
+//   `0x9a20` (timeout/dim path) when the bit is SET, or `0x9a32` (clock path)
+//   when the bit is CLEAR.
+// - The clock path at `0x9a32` draws the clock via `0x136b4`, `0x90`, `0xb230`,
+//   `0x13760`, `0x13798`.
+//
+// The existing charge-screen effects (CONFIG_GRADIENT_FADE through
+// CONFIG_RIPPLING_WAVE) use the `0x9a16` hook site and run when the timeout
+// bit is SET. A clock animation would need to intercept the clock drawing path
+// (when timeout bit is CLEAR), which is a distinct injection seam.
+//
+// TODO: Identify a clock-side hook site in the clock renderer path.
+// Candidate approaches (need RE confirmation against af_190602.dec.bin):
+// 1. Hook into the clock drawing function(s) at `0x136b4`/`0x13760`/`0x13798`
+// 2. Hook the dispatcher's clock-path branch at `0x9a32`
+// 3. Use the post-render commit selector at `0x13bf4` (§7.3 site C) with a
+//    clock-specific mode byte
+//
+// Until RE confirms a clock hook site, CONFIG_CLOCK_ANIMATION (6) is reserved
+// but no emitter/patch builder is provided. The existing charge-screen cave at
+// `0x9a16` already handles the "show-clock-on-timeout" pathway: when the
+// timeout bit is clear, the cave branches to the stock clock path at `0x9a32`.
+// ============================================================================
 
 /// Builds the full patch: 4-byte B.W detour at `hook_site` + cave body at
 /// `code_cave.start`. `desc_json` is the full descriptor document.
@@ -589,11 +655,11 @@ mod tests {
         gradient_fade_apply(&mut a, 64, 128, 0);
         gradient_fade_apply(&mut b, 64, 128, 8);
         assert_ne!(a, b, "frames at phases 0 and 8 must differ");
-        // band is horizontal: each 64-byte strip is constant along its columns
+        // bands are horizontal: each 64-byte group (8 rows) is one brightness
         for s in 0..16 {
             let base = s * 64;
             for i in 0..64 {
-                assert_eq!(a[base + i], a[base], "strip {s} constant along columns");
+                assert_eq!(a[base + i], a[base], "band {s} constant across its 8 rows");
             }
         }
     }

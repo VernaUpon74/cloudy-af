@@ -792,28 +792,114 @@ impl Cpu {
                 bus.write_u32(addr, self.reg(rt))?;
                 self.pc = self.pc.wrapping_add(4);
             }
-            Instr::Thumb2(Thumb2::StrbT4 { rt, rn, imm, pre, sub }) => {
-                // 32-bit STRB with writeback: pre => mem8[Rn ± imm] = Rt, Rn ±=
-                // imm; post => mem8[Rn] = Rt, Rn ±= imm. No flags.
+            Instr::Thumb2(Thumb2::StrbT4 { rt, rn, imm, pre, sub, wb }) => {
+                // 32-bit STRB, optional writeback: pre => mem8[Rn ± imm] = Rt
+                // (Rn ±= imm iff wb); post => mem8[Rn] = Rt, Rn ±= imm. No flags.
                 let base = self.reg(rn);
                 let addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
-                if pre {
-                    bus.write_u8(addr, (self.reg(rt) & 0xFF) as u8)?;
-                    self.set_reg(rn, addr);
-                } else {
-                    bus.write_u8(base, (self.reg(rt) & 0xFF) as u8)?;
+                bus.write_u8(if pre { addr } else { base }, (self.reg(rt) & 0xFF) as u8)?;
+                if wb {
                     self.set_reg(rn, addr);
                 }
                 self.pc = self.pc.wrapping_add(4);
             }
-            Instr::Thumb2(Thumb2::LdrbT4 { rt, rn, imm, pre, sub }) => {
-                // 32-bit LDRB with writeback: same addressing as StrbT4, byte
-                // load zero-extended into Rt. No flags.
+            Instr::Thumb2(Thumb2::LdrbT4 { rt, rn, imm, pre, sub, wb }) => {
+                // 32-bit LDRB, optional writeback: same addressing as StrbT4,
+                // byte load zero-extended into Rt. No flags.
                 let base = self.reg(rn);
                 let addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
                 let v = bus.read_u8(if pre { addr } else { base })?;
-                self.set_reg(rn, addr);
+                if wb {
+                    self.set_reg(rn, addr);
+                }
                 self.set_reg(rt, v as u32);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::Pld) => {
+                // Preload hint: no architectural effect. No flags.
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::StrT4 { rt, rn, imm, pre, sub, wb }) => {
+                // 32-bit STR, optional writeback: pre => mem32[Rn ± imm] = Rt
+                // (Rn ±= imm iff wb); post => mem32[Rn] = Rt, Rn ±= imm. No flags.
+                let base = self.reg(rn);
+                let addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
+                bus.write_u32(if pre { addr } else { base }, self.reg(rt))?;
+                if wb {
+                    self.set_reg(rn, addr);
+                }
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::LdrT4 { rt, rn, imm, pre, sub, wb }) => {
+                // 32-bit LDR, optional writeback: same addressing as StrT4,
+                // word load. No flags.
+                let base = self.reg(rn);
+                let addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
+                let v = bus.read_u32(if pre { addr } else { base })?;
+                if wb {
+                    self.set_reg(rn, addr);
+                }
+                self.set_reg(rt, v);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::StrhT4 { rt, rn, imm, pre, sub, wb }) => {
+                // 32-bit STRH, optional writeback: same addressing as StrT4,
+                // halfword store. No flags.
+                let base = self.reg(rn);
+                let addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
+                bus.write_u16(if pre { addr } else { base }, (self.reg(rt) & 0xFFFF) as u16)?;
+                if wb {
+                    self.set_reg(rn, addr);
+                }
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::LdrhT4 { rt, rn, imm, pre, sub, wb }) => {
+                // 32-bit LDRH, optional writeback: same addressing as StrT4,
+                // halfword load zero-extended. No flags.
+                let base = self.reg(rn);
+                let addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
+                let v = bus.read_u16(if pre { addr } else { base })?;
+                if wb {
+                    self.set_reg(rn, addr);
+                }
+                self.set_reg(rt, v as u32);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::LdrsbT4 { rt, rn, imm, pre, sub, wb }) => {
+                // 32-bit LDRSB, optional writeback: same addressing as StrT4,
+                // byte load SIGN-extended. No flags.
+                let base = self.reg(rn);
+                let addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
+                let v = bus.read_u8(if pre { addr } else { base })? as i8 as i32 as u32;
+                if wb {
+                    self.set_reg(rn, addr);
+                }
+                self.set_reg(rt, v);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::LdrshT4 { rt, rn, imm, pre, sub, wb }) => {
+                // 32-bit LDRSH, optional writeback: same addressing as StrT4,
+                // halfword load SIGN-extended. No flags.
+                let base = self.reg(rn);
+                let addr = if sub { base.wrapping_sub(imm as u32) } else { base.wrapping_add(imm as u32) };
+                let v = bus.read_u16(if pre { addr } else { base })? as i16 as i32 as u32;
+                if wb {
+                    self.set_reg(rn, addr);
+                }
+                self.set_reg(rt, v);
+                self.pc = self.pc.wrapping_add(4);
+            }
+            Instr::Thumb2(Thumb2::LdrsbImm { rt, rn, imm }) => {
+                // 32-bit LDRSB (immediate) T3: byte load SIGN-extended.
+                // Rn = 15 is the literal form, addressed like LdrLitW
+                // ((pc+4) & !3). No flags.
+                let base = if rn == 15 {
+                    (self.pc.wrapping_add(4)) & !3
+                } else {
+                    self.reg(rn)
+                };
+                let v = bus.read_u8(base.wrapping_add(imm as u32))? as i8 as i32 as u32;
+                self.set_reg(rt, v);
                 self.pc = self.pc.wrapping_add(4);
             }
             Instr::Thumb2(Thumb2::Sdiv { rd, rn, rm }) => {

@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "Spegni il dispositivo ",
   "DischargeCurveEditor.CancelButton": "Annulla",
   "DischargeCurveEditor.ChartNameLabel": "Curva di scarica:",
+  "DischargeCurveEditor.NameLabel": "Nome:",
   "DischargeCurveEditor.CutoffLabel": "Taglio:",
   "DischargeCurveEditor.ExportButton": "Esporta",
   "DischargeCurveEditor.ImportButton": "Importa",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "Formato data",
   "Screen.Regional.TimeFormat": "Formato ora",
   "Screen.Regional.TemperatureUnits": "Unità di temperatura",
-  "Animation.ComingSoon": "Prossimamente — l'animazione dell'orologio richiede una patch del firmware."
+  "Animation.ComingSoon": "Prossimamente — l'animazione dell'orologio richiede una patch del firmware.",
+  "Animation.Clock": "Orologio",
+  "Animation.PendingRE": "In attesa di conferma RE dell'hook dell'orologio",
+  "Stats.PuffTimeHHMMSSLabel": "Durata Tiro (HH:MM:SS)"
 }

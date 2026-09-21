@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "Ugasi Uređaj",
   "DischargeCurveEditor.CancelButton": "Otkaži",
   "DischargeCurveEditor.ChartNameLabel": "Kriva Pražnjenja:",
+  "DischargeCurveEditor.NameLabel": "Naziv Profila:",
   "DischargeCurveEditor.CutoffLabel": "Prekid rada uređaja:",
   "DischargeCurveEditor.ExportButton": "Izvoz",
   "DischargeCurveEditor.ImportButton": "Uvoz",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "Формат датума",
   "Screen.Regional.TimeFormat": "Формат времена",
   "Screen.Regional.TemperatureUnits": "Јединице температуре",
-  "Animation.ComingSoon": "Ускоро — за анимацију сата потребна је закрпа фирмвера."
+  "Animation.ComingSoon": "Ускоро — за анимацију сата потребна је закрпа фирмвера.",
+  "Animation.Clock": "Сат",
+  "Animation.PendingRE": "Чека RE потврду за куку сата",
+  "Stats.PuffTimeHHMMSSLabel": "Puff tajmer (HH:MM:SS)"
 }

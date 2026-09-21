@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "设备关机",
   "DischargeCurveEditor.CancelButton": "取消",
   "DischargeCurveEditor.ChartNameLabel": "放电曲线:",
+  "DischargeCurveEditor.NameLabel": "名字:",
   "DischargeCurveEditor.CutoffLabel": "截止:",
   "DischargeCurveEditor.ExportButton": "另存为",
   "DischargeCurveEditor.ImportButton": "载入",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "日期格式",
   "Screen.Regional.TimeFormat": "时间格式",
   "Screen.Regional.TemperatureUnits": "温度单位",
-  "Animation.ComingSoon": "即将推出——时钟动画需要固件补丁支持。"
+  "Animation.ComingSoon": "即将推出——时钟动画需要固件补丁支持。",
+  "Animation.Clock": "时钟",
+  "Animation.PendingRE": "等待 RE 确认时钟钩子位置",
+  "Stats.PuffTimeHHMMSSLabel": "吸烟时间 (HH:MM:SS)"
 }

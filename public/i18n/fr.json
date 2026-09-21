@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "Éteindre l'appareil",
   "DischargeCurveEditor.CancelButton": "Annuler",
   "DischargeCurveEditor.ChartNameLabel": "Courbe de décharge:",
+  "DischargeCurveEditor.NameLabel": "Nom:",
   "DischargeCurveEditor.CutoffLabel": "Coupe:",
   "DischargeCurveEditor.ExportButton": "Exporter",
   "DischargeCurveEditor.ImportButton": "Importer",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "Format de date",
   "Screen.Regional.TimeFormat": "Format de l'heure",
   "Screen.Regional.TemperatureUnits": "Unités de température",
-  "Animation.ComingSoon": "Bientôt disponible — l'animation d'horloge nécessite un patch firmware."
+  "Animation.ComingSoon": "Bientôt disponible — l'animation d'horloge nécessite un patch firmware.",
+  "Animation.Clock": "Horloge",
+  "Animation.PendingRE": "Confirmation RE du hook horloge en attente",
+  "Stats.PuffTimeHHMMSSLabel": "Durée de bouffée (HH:MM:SS)"
 }

@@ -23,8 +23,41 @@
     "effects": {
       "gradient_fade": 2,
       "center_pulse": 3,
-      "diagonal_sweep": 4
+      "diagonal_sweep": 4,
+      "rippling_wave": 5
     }
+  },
+  "clock_animations": {
+    "status": "pending_re_confirmation",
+    "note": "Clock animation requires a separate hook site from the charge-screen timeout effects. The clock is drawn when the timeout bit is CLEAR (beq 0x9a32 in FUN_00009a10). See resources/re/af_190602-dispatcher-analy.md §7 for the clock pathway. Hook site addresses below are placeholders from RE notes — confirm against af_190602.dec.bin before flash.",
+    "candidate_hook_sites": [
+      {
+        "approach": 1,
+        "description": "Hook into clock drawing function(s)",
+        "addresses": {
+          "clock_draw_entry": "0x136b4",
+          "note": "Entry to big time widget drawing (from RE notes §7)"
+        }
+      },
+      {
+        "approach": 2,
+        "description": "Hook the dispatcher's clock-path branch",
+        "addresses": {
+          "clock_branch_target": "0x9a32",
+          "note": "beq target when timeout bit is clear (from RE notes §7.4)"
+        }
+      },
+      {
+        "approach": 3,
+        "description": "Use post-render commit selector with clock-specific mode",
+        "addresses": {
+          "post_render_commit": "0x13bf4",
+          "note": "Most general but touches shared funnel — higher regression risk (§7.3 site C)"
+        }
+      }
+    ],
+    "config_byte_value": 6,
+    "config_byte_value_note": "CONFIG_CLOCK_ANIMATION = 6, reserved but not yet implemented. See CONFIG_CLOCK_ANIMATION constant in effects.rs for value assignment rationale."
   },
   "stubs": [
     { "addr": "0x1f7f0", "value": 2 }

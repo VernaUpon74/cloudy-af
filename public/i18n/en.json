@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "Turn Off Device",
   "DischargeCurveEditor.CancelButton": "Cancel",
   "DischargeCurveEditor.ChartNameLabel": "Discharge curve:",
+  "DischargeCurveEditor.NameLabel": "Name:",
   "DischargeCurveEditor.CutoffLabel": "Cutoff:",
   "DischargeCurveEditor.ExportButton": "Export",
   "DischargeCurveEditor.ImportButton": "Import",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "Date Format",
   "Screen.Regional.TimeFormat": "Time Format",
   "Screen.Regional.TemperatureUnits": "Temperature Units",
-  "Animation.ComingSoon": "Coming soon — requires a firmware patch for clock animation support."
+  "Animation.ComingSoon": "Coming soon — requires a firmware patch for clock animation support.",
+  "Animation.Clock": "Clock",
+  "Animation.PendingRE": "Pending RE confirmation of the clock hook site",
+  "Stats.PuffTimeHHMMSSLabel": "Puff Time (HH:MM:SS)"
 }

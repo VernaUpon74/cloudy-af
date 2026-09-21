@@ -17,6 +17,8 @@ enum Region {
 }
 
 pub struct Bus {
+    #[cfg(test)]
+    ldrom: Option<Vec<u8>>,
     flash: Vec<u8>,
     ram: Vec<u8>,
     allow: Vec<std::ops::Range<u32>>,
@@ -29,6 +31,8 @@ pub struct Bus {
 impl Bus {
     pub fn new(flash: Vec<u8>, ram_size: usize) -> Self {
         Self {
+            #[cfg(test)]
+            ldrom: None,
             flash,
             ram: vec![0u8; ram_size],
             allow: Vec::new(),
@@ -36,6 +40,17 @@ impl Bus {
             write_log: Vec::new(),
             acl_violations: Vec::new(),
             dropped_writes: Vec::new(),
+        }
+    }
+
+    /// Test-only read-only LDROM fixture. Models ISP read completion instantly;
+    /// does not emulate flash programming, controller timing, or real hardware.
+    #[cfg(test)]
+    pub fn set_ldrom(&mut self, bytes: Vec<u8>) {
+        assert_eq!(bytes.len(), 0x1000);
+        self.ldrom = Some(bytes);
+        for addr in [0x4000_c004, 0x4000_c008, 0x4000_c00c, 0x4000_c010] {
+            self.stubs.insert(addr, 0);
         }
     }
 
@@ -79,6 +94,16 @@ impl Bus {
 
     fn read(&self, addr: u32, size: u8) -> Result<u32, EmuError> {
         self.check_align(addr, size)?;
+        #[cfg(test)]
+        if let Some(ldrom) = &self.ldrom {
+            if (0x100000..0x101000).contains(&addr) {
+                let offset = (addr - 0x100000) as usize;
+                if offset + size as usize > ldrom.len() {
+                    return Err(EmuError::Unmapped { addr });
+                }
+                return Ok(self.read_le(ldrom, offset, size as usize));
+            }
+        }
         let size_us = size as usize;
         match self.resolve(addr, size)? {
             Region::Flash(off) => Ok(self.read_le(&self.flash, off, size_us)),
@@ -118,6 +143,26 @@ impl Bus {
 
     fn write(&mut self, addr: u32, value: u32, size: u8) -> Result<(), EmuError> {
         self.check_align(addr, size)?;
+        #[cfg(test)]
+        if self.ldrom.is_some() && size == 4 {
+            match addr {
+                0x4000_c004 | 0x4000_c008 | 0x4000_c00c => {
+                    self.stubs.insert(addr, value);
+                }
+                0x4000_c010 if value & 1 != 0 => {
+                    // ISP command 0 is a read. Refuse to pretend to implement
+                    // any flash erase/write command in this read-only fixture.
+                    if self.stubs.get(&0x4000_c00c).copied().unwrap_or(0) != 0 {
+                        return Err(EmuError::Unmapped { addr });
+                    }
+                    let target = self.stubs.get(&0x4000_c004).copied().unwrap_or(0);
+                    let data = self.read_u32(target)?;
+                    self.stubs.insert(0x4000_c008, data);
+                    self.stubs.insert(0x4000_c010, 0);
+                }
+                _ => {}
+            }
+        }
         let record = WriteRecord { addr, value, size };
         match self.resolve(addr, size)? {
             Region::Flash(_) => {

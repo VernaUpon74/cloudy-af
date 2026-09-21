@@ -3,14 +3,14 @@ import './style.css';
 import $ from 'jquery';
 import Highcharts from 'highcharts';
 import { getLocale, readTextFile, resolveResourcePath, readMonitoringData, screenshot } from './lib/tauri-bridge.js';
+import { drawScreenshot, base64ToBytes } from './lib/screenshot.js';
 
 let lang = {};
 
 async function uiTranslate() {
     try {
-        // Locale files are two-letter (de.json, en.json); getLocale() returns
-        // full BCP-47 tags like "de-DE" that would miss every file.
-        const locale = (await getLocale()).substr(0, 2);
+        // Normalized to two letters in tauri-bridge.
+        const locale = await getLocale();
         const fp = await resolveResourcePath('i18n/' + locale + '.json');
         const text = await readTextFile(fp);
         lang = JSON.parse(text);
@@ -283,41 +283,10 @@ function setPaused(p) {
 $('#monitor-pause').click(() => setPaused(!paused));
 
 // --- Screenshot (0xC1) -------------------------------------------------
-// 1024 raw framebuffer bytes, 1bpp vertical packing: byte = x + (y/8)*width,
-// bit y%8, LSB = top pixel. Geometry: 96x16 if bytes 192..1024 are all zero
-// (its 1bpp image is 96*16/8 = 192 bytes and the tail is padding), else 64x128
-// (exactly 64*128/8 = 1024 bytes). ArcticFox firmware only — stock firmware
-// has no 0xC1 handler and the read times out.
-const SCREENSHOT_GEOMS = [
-    { width: 96, height: 16 },
-    { width: 64, height: 128 },
-];
-
-function decodeScreenshot(raw) {
-    let geom = SCREENSHOT_GEOMS[1];
-    let tailZero = true;
-    for (let i = 192; i < raw.length; i++) {
-        if (raw[i] !== 0) { tailZero = false; break; }
-    }
-    if (tailZero) geom = SCREENSHOT_GEOMS[0];
-    const { width, height } = geom;
-    const canvas = document.getElementById('screenshot-canvas');
-    const ZOOM = 4;
-    canvas.width = width * ZOOM;
-    canvas.height = height * ZOOM;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#9acd32'; // ArcticFox LCD green
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            if (raw[x + (y >> 3) * width] & (1 << (y & 7))) {
-                ctx.fillRect(x * ZOOM, y * ZOOM, ZOOM, ZOOM);
-            }
-        }
-    }
-    return geom;
-}
+// 1024 raw framebuffer bytes, 1bpp horizontally packed (MSB = leftmost) —
+// same layout NToolbox copies verbatim into a Format1bppIndexed bitmap.
+// Decode/geometry heuristic lives in lib/screenshot.js. ArcticFox firmware
+// only — stock firmware has no 0xC1 handler and the read times out.
 
 function openScreenshotModal() {
     $('#screenshot-modal').show();
@@ -332,10 +301,7 @@ $('#monitor-screenshot').click(() => {
     const $btn = $('#monitor-screenshot').prop('disabled', true);
     screenshot()
         .then(b64 => {
-            const bin = atob(b64);
-            const raw = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
-            decodeScreenshot(raw);
+            drawScreenshot(document.getElementById('screenshot-canvas'), base64ToBytes(b64));
             openScreenshotModal();
         })
         .catch(err => {

@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "Выкл. устр-во",
   "DischargeCurveEditor.CancelButton": "Отмена",
   "DischargeCurveEditor.ChartNameLabel": "Кривая разряда:",
+  "DischargeCurveEditor.NameLabel": "Имя профиля:",
   "DischargeCurveEditor.CutoffLabel": "Отсечка:",
   "DischargeCurveEditor.ExportButton": "Экспорт",
   "DischargeCurveEditor.ImportButton": "Импорт",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "Формат даты",
   "Screen.Regional.TimeFormat": "Формат времени",
   "Screen.Regional.TemperatureUnits": "Единицы температуры",
-  "Animation.ComingSoon": "Скоро — для анимации часов требуется патч прошивки."
+  "Animation.ComingSoon": "Скоро — для анимации часов требуется патч прошивки.",
+  "Animation.Clock": "Часы",
+  "Animation.PendingRE": "Ожидает RE-подтверждения хука часов",
+  "Stats.PuffTimeHHMMSSLabel": "Затяжка (HH:MM:SS)"
 }

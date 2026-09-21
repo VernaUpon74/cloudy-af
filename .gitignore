@@ -1,6 +1,5 @@
 node_modules
 .idea
-.github/workflows
 dist
 release
 src-tauri/target
@@ -24,8 +23,11 @@ test-fixtures/
 # Reverse-engineering and build scratch directories
 scratch-stash/
 work/
-# Sensitive / ephemeral keys
-vp_aes_key.txt
 # Local Rust tool build artifacts
 tools/telemetry_dump/target/
 local-flags.json
+.flatpak-builder/
+sidecar/test-hid-bridge.js
+sidecar/test-hid-fix.js
+sidecar/verify-hid-patch.js
+sidecar/verify-fix.js

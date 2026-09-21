@@ -422,12 +422,17 @@
                 <tr>
                   <td class="c1" data-lang="Screen.Appearance.ClockAnimationLabel">Clock Animation</td>
                   <td class="c2">
-                    <!-- Disabled until VandalProof firmware decryption/patching lands. -->
-                    <select class="fox-val" id="ClockAnimation" disabled data-lang-title="Animation.ComingSoon" title="Requires firmware patch support (coming soon)">
+                    <!-- Disabled: clock hook is RE-pending. The clock animation requires a separate
+                         hook site from the charge-screen timeout effects (see resources/re/af_190602-dispatcher-analy.md §7).
+                         The clock is drawn when the timeout bit is CLEAR (beq 0x9a32), a distinct pathway
+                         from the timeout branch at 0x9a20 that the existing effects use. Clock-side hook
+                         site RE confirmation is required before this can be enabled. -->
+                    <select class="fox-val" id="ClockAnimation" disabled data-lang-title="Animation.PendingRE" title="Clock hook pending RE confirmation">
                       <option value="0" data-lang="Animation.Off">Off</option>
                       <option value="1" data-lang="Animation.Swirl">Swirl</option>
                       <option value="2" data-lang="Animation.GradientFade">Gradient Fade</option>
                       <option value="3" data-lang="Animation.RipplingWave">Rippling Wave</option>
+                      <option value="6" data-lang="Animation.Clock">Clock</option>
                     </select>
                   </td>
                   <td class="c3"></td>

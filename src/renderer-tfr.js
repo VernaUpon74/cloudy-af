@@ -61,7 +61,7 @@ $('#import').click(async function () {
 
 async function uiTranslate() {
     try {
-        const locale = (await getLocale()).substr(0, 2); // locale files are two-letter; getLocale() returns full BCP-47 tags like "de-DE"
+        const locale = await getLocale(); // already normalized to two letters in tauri-bridge
         const fp = await resolveResourcePath('i18n/' + locale + '.json');
         const text = await readTextFile(fp);
         lang = JSON.parse(text);

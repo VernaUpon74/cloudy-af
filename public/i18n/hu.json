@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "Eszköz kikapcsolása",
   "DischargeCurveEditor.CancelButton": "Mégsem",
   "DischargeCurveEditor.ChartNameLabel": "Merülési görbe:",
+  "DischargeCurveEditor.NameLabel": "Név:",
   "DischargeCurveEditor.CutoffLabel": "Kikapcsolás:",
   "DischargeCurveEditor.ExportButton": "Exportálás",
   "DischargeCurveEditor.ImportButton": "Importálás",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "Dátumformátum",
   "Screen.Regional.TimeFormat": "Időformátum",
   "Screen.Regional.TemperatureUnits": "Hőmérsékleti egységek",
-  "Animation.ComingSoon": "Hamarosan — az óra-animációhoz firmware-javítás szükséges."
+  "Animation.ComingSoon": "Hamarosan — az óra-animációhoz firmware-javítás szükséges.",
+  "Animation.Clock": "Óra",
+  "Animation.PendingRE": "Az óra horog RE-megerősítése függőben",
+  "Stats.PuffTimeHHMMSSLabel": "Slukk idő (HH:MM:SS)"
 }

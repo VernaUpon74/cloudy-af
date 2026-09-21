@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.2.1 — 2026-09-20 (rebuilt binaries)
+
+*Entry rewritten at the 2026-09-20 rebuild: it covers everything actually in the
+shipped 1.2.1 binaries — the 2026-09-18 evening commits that missed the original
+entry, plus the working-tree changes at rebuild time.*
+
+### Added
+- **TFR curve calculator**: "Calculate from Resistance" in the TFR Curve Editor computes the 7-point temperature factor table from measured coil resistances (68–1112 °F), with optional extrapolation of the top point and one-click apply to the chart. A forked implementation of SkrunksModEXT by Aiden Lopez (CC BY-NC-SA 4.0). Shipped in all 17 locales (`scripts/check-i18n.py` green: 398 keys per locale).
+- **Device fire command end-to-end**: `fire_cmd` (Tauri) → sidecar `makePuff` (0x44 puff command, firmware-managed puff timer) → `fireDevice()` bridge — the backend for the Device Monitor press-and-hold fire button and autofire.
+- **Ctrl+`` ` `` sub-tab cycling**: next sub-tab within the active main tab (main-tab `Ctrl`+`Tab` unchanged); documented in `docs/keyboard-shortcuts.md`.
+- **Controls sub-tab tooltips**: Settings, Multi Clicks, Shortcuts VW, and Shortcuts TC tabs now show descriptive tooltips on hover.
+- **Device Monitor fire button**: press-and-hold fires; double-click toggles autofire mode with visual indicator.
+
+### Changed
+- **Device Monitor button moved back to Stats tab** (out of Advanced → Settings).
+- **Resistance precision**: Device Monitor shows resistance values to 3 decimal places.
+- **build.sh CLI simplified**: `./build.sh [appimage|flatpak] [-y|-n]` (`-y`/`--experimental` enables experimental patches, `-n`/`--skip` disables; prompts skipped), including the pre-build `check_disk_space()` gate. The flatpak stage now pre-creates the local OSTree repo with `core.min-free-space-size 200MB` — the default 3%-of-volume floor aborts the bundle commit on near-full disks.
+- **AppImage validation scripted**: `scripts/verify-appimage.sh` launches the build inside the build toolbx (extract-mode, sandbox enabled) and gates on a mapped "Cloudy AF" window plus live WebKit helper processes; see AGENTS.md "Distribution validation".
+- **Emulator progress (Nuvoton M041)**: FMC ISP model, ARMv7-M unaligned load/store legalization, UXTB/UXTH/SXTB/SXTH — M041 firmware boots through all init and ~212K main-loop instructions (pushed-LR divergence at 0xA46 still open). Suites green: emu 112/112, anim 24/24.
+
+### Fixed
+- **Linux packaging**: Flatpak/AppImage install all icon sizes + `StartupWMClass`; build.sh toolbox cargo fallback and gtk plugin path; AppImage carries root-level `libexec`/`lib64` symlinks plus the injected-bundle `.so` so the WebKit helper path resolves.
+- **Device Monitor flicker**: the sidecar emits only the first disconnect instead of one per repeated probe failure.
+- **Boot gate bit fix**: bus write hook sets bit 2 (not bit 3) of RAM 0x20002C30, matching firmware's `lsls r3, #0x1d` check.
+- **Flatpak runtime-repo**: install uses `--runtime-repo=https://flathub.org/repo/flathub.flatpakrepo`.
+
 ## 1.2.0 — 2026-09-12
 
 ### Added

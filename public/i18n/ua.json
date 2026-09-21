@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "Выкл. устр-во",
   "DischargeCurveEditor.CancelButton": "Скасувати",
   "DischargeCurveEditor.ChartNameLabel": "Крива розряду:",
+  "DischargeCurveEditor.NameLabel": "Ім’я профілю:",
   "DischargeCurveEditor.CutoffLabel": "Відсічка:",
   "DischargeCurveEditor.ExportButton": "Експорт",
   "DischargeCurveEditor.ImportButton": "Імпорт",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "Формат дати",
   "Screen.Regional.TimeFormat": "Формат часу",
   "Screen.Regional.TemperatureUnits": "Одиниці температури",
-  "Animation.ComingSoon": "Незабаром — для анімації годинника потрібен патч прошивки."
+  "Animation.ComingSoon": "Незабаром — для анімації годинника потрібен патч прошивки.",
+  "Animation.Clock": "Годинник",
+  "Animation.PendingRE": "Очікує RE-підтвердження хука годинника",
+  "Stats.PuffTimeHHMMSSLabel": "Затяжка (HH:MM:SS)"
 }

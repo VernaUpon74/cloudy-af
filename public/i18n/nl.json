@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "Apparaat uitschakelen",
   "DischargeCurveEditor.CancelButton": "Annuleren",
   "DischargeCurveEditor.ChartNameLabel": "Ontladings curve:",
+  "DischargeCurveEditor.NameLabel": "Naam:",
   "DischargeCurveEditor.CutoffLabel": "Afschakeling:",
   "DischargeCurveEditor.ExportButton": "Exporteren",
   "DischargeCurveEditor.ImportButton": "Importeren",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "Datumnotatie",
   "Screen.Regional.TimeFormat": "Tijdnotatie",
   "Screen.Regional.TemperatureUnits": "Temperatuureenheden",
-  "Animation.ComingSoon": "Binnenkort — klok-animatie vereist een firmware-patch."
+  "Animation.ComingSoon": "Binnenkort — klok-animatie vereist een firmware-patch.",
+  "Animation.Clock": "Klok",
+  "Animation.PendingRE": "Wacht op RE-bevestiging van de clock-hook",
+  "Stats.PuffTimeHHMMSSLabel": "Puff Tijd (HH:MM:SS)"
 }

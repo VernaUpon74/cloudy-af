@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "Wyłącz Urządzenie",
   "DischargeCurveEditor.CancelButton": "Anuluj",
   "DischargeCurveEditor.ChartNameLabel": "Krzywa rozładowania:",
+  "DischargeCurveEditor.NameLabel": "Nazwa:",
   "DischargeCurveEditor.CutoffLabel": "Odcięcie:",
   "DischargeCurveEditor.ExportButton": "Eksportuj",
   "DischargeCurveEditor.ImportButton": "Importuj",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "Format daty",
   "Screen.Regional.TimeFormat": "Format czasu",
   "Screen.Regional.TemperatureUnits": "Jednostki temperatury",
-  "Animation.ComingSoon": "Wkrótce — animacja zegara wymaga poprawki firmware."
+  "Animation.ComingSoon": "Wkrótce — animacja zegara wymaga poprawki firmware.",
+  "Animation.Clock": "Zegar",
+  "Animation.PendingRE": "Oczekuje na potwierdzenie RE punktu zaczepienia zegara",
+  "Stats.PuffTimeHHMMSSLabel": "Czas wapowania (HH:MM:SS)"
 }

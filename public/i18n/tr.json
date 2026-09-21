@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "Cihazı Kapat",
   "DischargeCurveEditor.CancelButton": "İptal",
   "DischargeCurveEditor.ChartNameLabel": "Deşarj Eğrisi:",
+  "DischargeCurveEditor.NameLabel": "İsim:",
   "DischargeCurveEditor.CutoffLabel": "Kesme:",
   "DischargeCurveEditor.ExportButton": "Dışarı Vermek",
   "DischargeCurveEditor.ImportButton": "İçeri Almak",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "Tarih biçimi",
   "Screen.Regional.TimeFormat": "Saat biçimi",
   "Screen.Regional.TemperatureUnits": "Sıcaklık birimleri",
-  "Animation.ComingSoon": "Yakında — saat animasyonu için firmware yaması gerekiyor."
+  "Animation.ComingSoon": "Yakında — saat animasyonu için firmware yaması gerekiyor.",
+  "Animation.Clock": "Saat",
+  "Animation.PendingRE": "Saat kancası için RE onayı bekleniyor",
+  "Stats.PuffTimeHHMMSSLabel": "Puff Süresi (HH:MM:SS)"
 }

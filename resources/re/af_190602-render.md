@@ -51,3 +51,34 @@ See `resources/animations/af_190602.json`:
 ## Next Step
 
 Implement 32-bit Thumb-2 decoding in `src-tauri/src/firmware/emu/thumb.rs` / `cpu.rs`, driven by repeated `test_af_190602_render_gate` failures, until the layer-4 gate runs clean.
+
+## Packing correction (2026-09-13)
+
+Earlier docs and code referring to "vertical packing" of the display buffer
+(byte = `x + (y/8)*width`, bit `y%8`) are SUPERSEDED. Two independent pieces
+of hardware-grounded evidence show the on-device framebuffer is 1bpp
+HORIZONTALLY packed, MSB = leftmost pixel (byte = `y*(width/8) + x/8`,
+bit = `0x80 >> (x%8)`):
+
+1. A live `0xC1` HID screenshot from an Eleaf iStick Pico 25 (ProductId
+   M077, ArcticFox SettingsVersion 12, 128x32 panel) renders readable text
+   (the device clock) only under the horizontal decode; the vertical decode
+   produces noise.
+2. Decompiled NToolbox (`NToolbox.exe CreateBitmapFromBytesArray`) copies
+   the `0xC1` bytes verbatim into a GDI+ `Format1bppIndexed` bitmap, which
+   is exactly the horizontal MSB-first layout — for all ArcticFox devices,
+   including this build's 64x128 panel.
+
+Consequences for a 64-wide buffer: byte `i` maps to row `y = i >> 3` and
+byte-column `bc = i & 7` (pixels `bc*8 .. bc*8+7`). A 64-byte group `i >> 6`
+spans 8 full rows — numerically the same "8-row band" the old model called
+a strip, which is why the band-indexed effects (Gradient Fade, Center
+Pulse) rendered as designed on hardware, while Diagonal Sweep (column
+group `(i & 63) >> 2` under the old model) mixed rows and columns and
+rendered streaky blocks; its column group is now `(i & 7) << 1`.
+
+The emulator decode (`emu/harness.rs unpack_block1`), the JS screenshot
+decoder (`src/lib/screenshot.js`), and the Diagonal Sweep reference +
+Thumb emitter were switched to the horizontal packing on 2026-09-13.
+Golden on-pixel COUNTS (e.g. the 409-pixel render gate) are
+packing-invariant (popcount of the buffer) and remain valid.

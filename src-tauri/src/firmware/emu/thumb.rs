@@ -227,15 +227,61 @@ pub enum Thumb2 {
     /// hw1 = 11111 000 1010 Rn (0xF8A0|Rn, Capstone-verified:
     /// strh.w r2, [r5, #0x2a] = F8A5 202A), hw2 = Rt 0 imm12.
     StrhImm { rt: u8, rn: u8, imm: u16 },
-    /// STRB.W Rt, [Rn, ±imm8] with writeback (T4): P=1 pre-indexed
-    /// (`[Rn, #-imm8]!`), P=0 post-indexed (`[Rn], #±imm8`).
-    /// hw1 = 11111 000 0000 Rn (0xF800|Rn), hw2 = Rt 1 PU 1 imm8
+    /// STRB.W Rt, [Rn, ±imm8] T4 with optional writeback (W): P=1 pre-indexed
+    /// (`[Rn, #-imm8]`, writeback iff W=1), P=0 post-indexed (`[Rn], #±imm8`,
+    /// always writeback; P=0/W=0 is UNPREDICTABLE → rejected at decode).
+    /// hw1 = 11111 000 0000 Rn (0xF800|Rn), hw2 = Rt 1 P U W 1 imm8
     /// (Capstone-verified: strb r7, [lr, #-1]! = F80E 7D01, af_190602 0x13d10).
-    StrbT4 { rt: u8, rn: u8, imm: u8, pre: bool, sub: bool },
-    /// LDRB.W Rt, [Rn, ±imm8] with writeback (T4): same shape as StrbT4 but
-    /// hw1 bits 7:4 = 0001 (0xF810|Rn). Byte load, zero-extended. No flags.
-    /// (Capstone-verified: ldrb r1, [r3], #-1 = F813 1901, af_190602 0x13d18.)
-    LdrbT4 { rt: u8, rn: u8, imm: u8, pre: bool, sub: bool },
+    StrbT4 { rt: u8, rn: u8, imm: u8, pre: bool, sub: bool, wb: bool },
+    /// LDRB.W Rt, [Rn, ±imm8] T4 with optional writeback: same shape as StrbT4
+    /// but hw1 bits 7:4 = 0001 (0xF810|Rn). Byte load, zero-extended. No flags.
+    /// (Capstone-verified: ldrb r1, [r3], #-1 = F813 1901, af_190602 0x13d18;
+    /// ldrb r1, [r1, #-4] = F811 1C04, af_190602 0x1a4 — hit by the
+    /// boot-dispatch gate, W=0 no-writeback form.)
+    LdrbT4 { rt: u8, rn: u8, imm: u8, pre: bool, sub: bool, wb: bool },
+    /// PLD (preload) hint: the load-single T4 encoding with Rt = 15 and
+    /// hw2 bit 11 = 1. Capstone-verified: pld [pc, #-0x899] = F81F F899
+    /// (af_190602 0x870c). Performance hint with no architectural effect —
+    /// decoded so it doesn't fall through to the DpImm catch-all. Unlike
+    /// real loads/stores, the P=0/W=0 form IS valid here (the negative-
+    /// offset literal form), so the UNPREDICTABLE check is bypassed.
+    Pld,
+    /// STRH.W Rt, [Rn, ±imm8] T4 with optional writeback: same PUW shape as
+    /// StrT4 but hw1 bits 7:4 = 0010 (0xF820|Rn). Halfword store. No flags.
+    /// (Capstone-verified: strh r4, [sb], #6 = F829 4B06, af_190602 0x116c2.)
+    StrhT4 { rt: u8, rn: u8, imm: u8, pre: bool, sub: bool, wb: bool },
+    /// LDRH.W Rt, [Rn, ±imm8] T4 with optional writeback: same shape as
+    /// StrhT4 but hw1 bits 7:4 = 0011 (0xF830|Rn). Halfword load,
+    /// zero-extended. No flags. (Capstone-verified: ldrh r2, [r3, #2]! =
+    /// F833 2F02, af_190602 0x2414 — boot-gate hit.)
+    LdrhT4 { rt: u8, rn: u8, imm: u8, pre: bool, sub: bool, wb: bool },
+    /// LDRSB.W Rt, [Rn, ±imm8] T4 with optional writeback: same shape as
+    /// StrhT4 but hw1 bits 7:4 = 1001 (0xF910|Rn). Byte load, SIGN-extended.
+    /// (Capstone-verified: ldrsb r4, [r8], #0x4b = F918 4B4B, af_190602
+    /// 0x6446.)
+    LdrsbT4 { rt: u8, rn: u8, imm: u8, pre: bool, sub: bool, wb: bool },
+    /// LDRSH.W Rt, [Rn, ±imm8] T4 with optional writeback: same shape as
+    /// StrhT4 but hw1 bits 7:4 = 1011 (0xF930|Rn). Halfword load,
+    /// SIGN-extended. (Capstone-verified: ldrsh r4, [r4, #-0x96]! = F934
+    /// 4D96, af_190602 0xa4c6.)
+    LdrshT4 { rt: u8, rn: u8, imm: u8, pre: bool, sub: bool, wb: bool },
+    /// LDRSB.W Rt, [Rn, #imm12] (T3): byte load, SIGN-extended. hw1 =
+    /// 11111 001 1001 Rn (0xF990|Rn), hw2 = Rt 0 imm12. Rn = 15 is the
+    /// literal form. (Capstone-verified: ldrsb.w r6, [pc, #0x86a] = F99F
+    /// 686A, af_190602 0xc3f0.)
+    LdrsbImm { rt: u8, rn: u8, imm: u16 },
+    /// STR.W Rt, [Rn, ±imm8] T4 with optional writeback (W): P=1 pre-indexed,
+    /// P=0 post-indexed (always writeback; P=0/W=0 rejected at decode). Word.
+    /// hw1 = 11111 000 0100 Rn (0xF840|Rn), hw2 = Rt 1 P U W 1 imm8 — the
+    /// 12-bit offset form (StrImm) is a DIFFERENT hw1 encoding (0xF8C0|Rn,
+    /// hw2 bit 11 = 0). (Capstone-verified: str r2, [r0], #4 = F840 2B04,
+    /// af_190602 0x606 — hit by the boot-dispatch gate; previously fell
+    /// through to the DpImm catch-all, which executed it as
+    /// `orr.w r11, r0, #imm`, silently corrupting r11 and never storing.)
+    StrT4 { rt: u8, rn: u8, imm: u8, pre: bool, sub: bool, wb: bool },
+    /// LDR.W Rt, [Rn, ±imm8] T4 with optional writeback: same shape as StrT4
+    /// but hw1 bits 7:4 = 0101 (0xF850|Rn). Word load. No flags.
+    LdrT4 { rt: u8, rn: u8, imm: u8, pre: bool, sub: bool, wb: bool },
     /// SDIV.W Rd, Rn, Rm: signed divide, truncated toward zero. No flags.
     /// hw1 = 11111 011 1001 Rn (0xFB90|Rn), hw2 = 1111 Rd 1111 Rm
     /// (Capstone-verified: sdiv r8, r1, ip = FB91 F8FC, af_190602 0x13d04).
@@ -616,30 +662,82 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         return Some(Instr::Thumb2(Thumb2::StrhImm { rt, rn, imm }));
     }
 
-    // 32-bit STRB / LDRB (immediate) T4 with writeback: `[rn, #-imm8]!` /
-    // `[rn], #±imm8`. hw1 bits 7:4 = 0000 (STRB) / 0001 (LDRB); hw2 = Rt 1 P U 1 imm8.
-    // Capstone-verified: strb r7, [lr, #-1]! = F80E 7D01 (0x13d10);
-    // ldrb r1, [r3], #-1 = F813 1901 (0x13d18). The hw2 bits 11:8 = 1PU1
-    // distinguish this from StrbReg (hw2 bits 11:6 = 0) at the same hw1.
-    if op1 == 0b11111 && (hw1 & 0x0FF0) == 0x0800 && (hw2 & 0x0900) == 0x0900 {
+    // 32-bit STRB/LDRB/STR/LDR (immediate) T4 with optional writeback:
+    // hw1 = 11111 000 A Rn where A (bits 7:4) selects STRB/LDRB/STR/LDR,
+    // hw2 = Rt 1 P U W 1 imm8 (bit 11 = 1 distinguishes these from the
+    // imm12 offset forms above, whose hw2 bit 11 = 0). P=1 pre-indexed
+    // (writeback iff W=1), P=0 post-indexed (always writeback; P=0/W=0 is
+    // UNPREDICTABLE and rejected). Loads with Rt = 15 are PLD (preload
+    // hint, architecturally a no-op); stores with Rt = 15 are UNPREDICTABLE
+    // and rejected.
+    // Capstone-verified: strb r7, [lr, #-1]! = F80E 7D01 (0x13d10); ldrb
+    // r1, [r3], #-1 = F813 1901 (0x13d18); ldrb r1, [r1, #-4] = F811 1C04
+    // (0x1a4, boot-gate hit); strb r3, [r0], #1 = F800 3B01 (0x16fe); str
+    // r2, [r0], #4 = F840 2B04 (0x606, boot-gate hit); ldr r1, [r4], #4 =
+    // F854 1B04 (0x3538); pld [pc, #-0x899] = F81F F899 (0x870c).
+    // Previously ALL of these fell through to the DpImm catch-all (whose
+    // guard wrongly admitted op1 = 11111) and silently misexecuted — e.g.
+    // the str r2, [r0], #4 above executed as `orr.w r11, r0, #imm`,
+    // corrupting r11 and never storing (found by the boot-dispatch gate,
+    // 2026-09-14).
+    if op1 == 0b11111
+        && matches!(hw1 & 0x0FF0, 0x0800 | 0x0810 | 0x0820 | 0x0830 | 0x0840 | 0x0850 | 0x0910 | 0x0930)
+        && hw2 & 0x0800 != 0
+    {
         let rt = ((hw2 >> 12) & 0xF) as u8;
         let rn = (hw1 & 0xF) as u8;
         let imm = (hw2 & 0xFF) as u8;
-        // hw2 = Rt 1 P U 1 imm8: P (pre-indexed) is bit 10, U (add, not
-        // subtract) is bit 9. Verified: F80E 7D01 = strb r7, [lr, #-1]!
-        // has bit 10 set, bit 9 clear.
         let pre = (hw2 >> 10) & 1 == 1;
         let sub = (hw2 >> 9) & 1 == 0;
-        return Some(Instr::Thumb2(Thumb2::StrbT4 { rt, rn, imm, pre, sub }));
+        let w = (hw2 >> 8) & 1 == 1;
+        // P=0/W=0 is UNPREDICTABLE for real loads/stores per ARM ARM —
+        // EXCEPT for PLD (Rt = 15 in the byte-load group), where the
+        // P=0/W=0 negative-offset literal form is valid (Capstone-verified:
+        // pld [pc, #-0x899] = F81F F899, af_190602 0x870c).
+        let is_pld = (hw1 & 0x0FF0) == 0x0810 && rt == 15;
+        if !pre && !w && !is_pld {
+            return None; // UNPREDICTABLE per ARM ARM
+        }
+        let wb = if pre { w } else { true };
+        return match hw1 & 0x0FF0 {
+            0x0800 if rt != 15 => {
+                Some(Instr::Thumb2(Thumb2::StrbT4 { rt, rn, imm, pre, sub, wb }))
+            }
+            0x0810 if rt == 15 => Some(Instr::Thumb2(Thumb2::Pld)),
+            0x0810 => Some(Instr::Thumb2(Thumb2::LdrbT4 { rt, rn, imm, pre, sub, wb })),
+            0x0820 if rt != 15 => {
+                Some(Instr::Thumb2(Thumb2::StrhT4 { rt, rn, imm, pre, sub, wb }))
+            }
+            0x0830 if rt != 15 => {
+                Some(Instr::Thumb2(Thumb2::LdrhT4 { rt, rn, imm, pre, sub, wb }))
+            }
+            0x0840 if rt != 15 => {
+                Some(Instr::Thumb2(Thumb2::StrT4 { rt, rn, imm, pre, sub, wb }))
+            }
+            0x0850 if rt != 15 => {
+                Some(Instr::Thumb2(Thumb2::LdrT4 { rt, rn, imm, pre, sub, wb }))
+            }
+            0x0910 if rt != 15 => {
+                Some(Instr::Thumb2(Thumb2::LdrsbT4 { rt, rn, imm, pre, sub, wb }))
+            }
+            0x0930 if rt != 15 => {
+                Some(Instr::Thumb2(Thumb2::LdrshT4 { rt, rn, imm, pre, sub, wb }))
+            }
+            // Rt = 15 store / load is UNPREDICTABLE.
+            _ => None,
+        };
     }
-    if op1 == 0b11111 && (hw1 & 0x0FF0) == 0x0810 && (hw2 & 0x0900) == 0x0900 {
+
+    // 32-bit LDRSB (immediate) T3: `ldrsb.w rt, [rn, #imm12]` — byte load,
+    // SIGN-extended. This encoding has NO U bit (imm12 is always positive;
+    // negative-offset signed loads use the T4 form above), and Rn = 15 is
+    // the literal form, addressed like LdrLitW. Capstone-verified:
+    // ldrsb.w r6, [pc, #0x86a] = F99F 686A (af_190602 0xc3f0, 5 sites).
+    if op1 == 0b11111 && (hw1 & 0x0FF0) == 0x0990 {
         let rt = ((hw2 >> 12) & 0xF) as u8;
         let rn = (hw1 & 0xF) as u8;
-        let imm = (hw2 & 0xFF) as u8;
-        // Same field layout as StrbT4: P = bit 10, U = bit 9.
-        let pre = (hw2 >> 10) & 1 == 1;
-        let sub = (hw2 >> 9) & 1 == 0;
-        return Some(Instr::Thumb2(Thumb2::LdrbT4 { rt, rn, imm, pre, sub }));
+        let imm = (hw2 & 0xFFF) as u16;
+        return Some(Instr::Thumb2(Thumb2::LdrsbImm { rt, rn, imm }));
     }
 
     // 32-bit SDIV: `sdiv.w rd, rn, rm`.
@@ -841,8 +939,8 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
         return Some(Instr::Thumb2(Thumb2::B { off }));
     }
 
-    // 32-bit data-processing (modified immediate): op1 = 11110, 11111
-    // Format: hw1 = 11110 i op1[1:0] 0 10 op2[1:0] S Rn
+    // 32-bit data-processing (modified immediate): op1 = 11110 ONLY (see the
+    // structural guard comment at the arm below).
     // Actually simpler: op1 = hw1[9:8] is the top-level class:
     //   op1=00: AND (TST if Rd=15), ORR (MOV if Rn=15), EOR, BIC
     //   op1=01: ADD (CMN if Rd=15), SUB (CMP if Rd=15), ADC, SBC, RSB
@@ -858,7 +956,16 @@ pub fn decode32(hw1: u16, hw2: u16) -> Option<Instr> {
     // reaches here only for non-branch bit patterns (e.g. 0xE000: BL-invalid),
     // which must fault as `Undefined` (see `test_bl_rejects_bad_second_halfword`
     // and the 0xF000-prefix test in cpu.rs).
-    if (op1 == 0b11110 || op1 == 0b11111) && hw2 & 0x8000 == 0 {
+    // 32-bit data-processing (modified immediate): op1 = 11110 ONLY.
+    // Format: hw1 = 11110 i op1[1:0] 0 10 op2[1:0] S Rn — genuine DpImm
+    // always has hw1 bits 15:11 = 11110 (Capstone-verified instances: mov.w
+    // F44F, mvn.w F46F, movw F242, subw F2A1 — all >>11 = 0b11110). hw1
+    // = 11111 (>= 0xF800) with hw2[15] = 0 is the load/store-immediate
+    // space: it must decode in the load/store arms above or fault as
+    // Undefined — falling through here misexecuted `str r2, [r0], #4`
+    // (F840 2B04) as `orr.w r11, r0, #imm`, silently corrupting r11 and
+    // never storing (found by the boot-dispatch gate, 2026-09-14).
+    if op1 == 0b11110 && hw2 & 0x8000 == 0 {
         let op1_class = (hw1 >> 8) & 0b11; // bits 9:8
         let i = (hw1 >> 10) & 1;
         let s = (hw1 >> 4) & 1 == 1;
@@ -1010,12 +1117,12 @@ mod tests {
         // `strb r7, [lr, #-1]!` = F80E 7D01 (Capstone-verified): hw2 bits
         // 11:8 = 1101, so P (bit 10) = 1 = pre-indexed, U (bit 9) = 0 =
         // subtract. The pre/sub fields were originally read from swapped
-        // bits, decoding this as a post-indexed add.
+        // bits, decoding this as a post-indexed add. W (bit 8) = 1.
         let i = decode32(0xF80E, 0x7D01).unwrap();
         match i {
-            Instr::Thumb2(Thumb2::StrbT4 { rt, rn, imm, pre, sub }) => {
+            Instr::Thumb2(Thumb2::StrbT4 { rt, rn, imm, pre, sub, wb }) => {
                 assert_eq!((rt, rn, imm), (7, 14, 1));
-                assert!(pre && sub);
+                assert!(pre && sub && wb);
             }
             _ => panic!("expected StrbT4, got {:?}", i),
         }
@@ -1101,6 +1208,155 @@ mod tests {
             }
             _ => panic!("expected LdrStrReg STRB, got {:?}", i),
         }
+    }
+
+    #[test]
+    fn test_decode32_str_post_indexed_t4() {
+        // Capstone-verified: str r2, [r0], #4 = F840 2B04 (af_190602 0x606,
+        // hit by the boot-dispatch gate). Previously fell through to the
+        // DpImm catch-all (guard admitted op1 = 11111) and executed as
+        // `orr.w r11, r0, #imm` — no store, no r0 writeback. Post-indexed
+        // always writes back.
+        let i = decode32(0xF840, 0x2B04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::StrT4 { rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((rt, rn, imm, pre, sub, wb), (2, 0, 4, false, false, true));
+            }
+            _ => panic!("expected StrT4 post-indexed, got {:?}", i),
+        }
+        // Capstone-verified: str r3, [r1, #-4]! (pre-indexed, subtract,
+        // writeback) = F841 3D04 → P=1, U=0, W=1.
+        let i = decode32(0xF841, 0x3D04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::StrT4 { rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((rt, rn, imm, pre, sub, wb), (3, 1, 4, true, true, true));
+            }
+            _ => panic!("expected StrT4 pre-indexed, got {:?}", i),
+        }
+        // The 12-bit offset word form is a DIFFERENT hw1 encoding
+        // (0xF8C0|Rn): it must NOT match the writeback arm.
+        let i = decode32(0xF8C0, 0x2B04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::StrImm { rt, rn, imm }) => {
+                assert_eq!((rt, rn, imm), (2, 0, 0xB04));
+            }
+            _ => panic!("expected StrImm offset form, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_ldr_post_indexed_t4() {
+        // Capstone-verified: ldr r2, [r0], #4 = F850 2B04 (word LDR T4 with
+        // writeback, post-indexed add).
+        let i = decode32(0xF850, 0x2B04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrT4 { rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((rt, rn, imm, pre, sub, wb), (2, 0, 4, false, false, true));
+            }
+            _ => panic!("expected LdrT4 post-indexed, got {:?}", i),
+        }
+    }
+
+    #[test]
+    fn test_decode32_t4_w0_no_writeback_and_pld() {
+        // Capstone-verified: ldrb r1, [r1, #-4] = F811 1C04 (af_190602 0x1a4,
+        // boot-gate hit) — pre-indexed, NO writeback (W=0), byte load.
+        let i = decode32(0xF811, 0x1C04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrbT4 { rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((rt, rn, imm, pre, sub, wb), (1, 1, 4, true, true, false));
+            }
+            _ => panic!("expected LdrbT4 W=0, got {:?}", i),
+        }
+        // Capstone-verified: str r1, [r2, #-4] = F842 1C04 (af_190602 0x6a82)
+        // — the 11-site W=0 word-store form.
+        let i = decode32(0xF842, 0x1C04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::StrT4 { rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((rt, rn, imm, pre, sub, wb), (1, 2, 4, true, true, false));
+            }
+            _ => panic!("expected StrT4 W=0, got {:?}", i),
+        }
+        // Capstone-verified: ldr r1, [r4], #4 = F854 1B04 (af_190602 0x3538).
+        let i = decode32(0xF854, 0x1B04).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrT4 { rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((rt, rn, imm, pre, sub, wb), (1, 4, 4, false, false, true));
+            }
+            _ => panic!("expected LdrT4 post-indexed, got {:?}", i),
+        }
+        // Capstone-verified: pld [pc, #-0x899] = F81F F899 (af_190602
+        // 0x870c) — Rt = 15 load-byte encoding is the PLD hint.
+        let i = decode32(0xF81F, 0xF899).unwrap();
+        assert!(matches!(i, Instr::Thumb2(Thumb2::Pld)));
+        // P=0/W=0 is UNPREDICTABLE: hw2 = Rt 0 P0 U1 W0 1 imm8 → 0x2A01
+        // (Rt=2, bit 11 set, U=1, W=0).
+        assert!(decode32(0xF840, 0x2A01).is_none());
+        // Rt = 15 word store / word load is UNPREDICTABLE → None
+        // (Rt is hw2 bits 15:12: F840 F804 / F850 F804).
+        assert!(decode32(0xF840, 0xF804).is_none());
+        assert!(decode32(0xF850, 0xF804).is_none());
+    }
+
+    #[test]
+    fn test_decode32_t4_halfword_signed_family() {
+        // Capstone-verified: strh r4, [sb], #6 = F829 4B06 (af_190602
+        // 0x116c2) — post-indexed add halfword store.
+        let i = decode32(0xF829, 0x4B06).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::StrhT4 { rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((rt, rn, imm, pre, sub, wb), (4, 9, 6, false, false, true));
+            }
+            _ => panic!("expected StrhT4, got {:?}", i),
+        }
+        // Capstone-verified: ldrh r2, [r3, #2]! = F833 2F02 (af_190602
+        // 0x2414, boot-gate hit) — pre-indexed writeback halfword load.
+        let i = decode32(0xF833, 0x2F02).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrhT4 { rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((rt, rn, imm, pre, sub, wb), (2, 3, 2, true, false, true));
+            }
+            _ => panic!("expected LdrhT4, got {:?}", i),
+        }
+        // Capstone-verified: ldrsb r4, [r8], #0x4b = F918 4B4B (af_190602
+        // 0x6446) — post-indexed add signed byte load.
+        let i = decode32(0xF918, 0x4B4B).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrsbT4 { rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((rt, rn, imm, pre, sub, wb), (4, 8, 0x4B, false, false, true));
+            }
+            _ => panic!("expected LdrsbT4, got {:?}", i),
+        }
+        // Capstone-verified: ldrsh r4, [r4, #-0x96]! = F934 4D96 (af_190602
+        // 0xa4c6) — pre-indexed subtract signed halfword load.
+        let i = decode32(0xF934, 0x4D96).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrshT4 { rt, rn, imm, pre, sub, wb }) => {
+                assert_eq!((rt, rn, imm, pre, sub, wb), (4, 4, 0x96, true, true, true));
+            }
+            _ => panic!("expected LdrshT4, got {:?}", i),
+        }
+        // Capstone-verified: ldrsb.w r6, [pc, #0x86a] = F99F 686A (af_190602
+        // 0xc3f0) — the imm12 T3 form with Rn = 15 (literal).
+        let i = decode32(0xF99F, 0x686A).unwrap();
+        match i {
+            Instr::Thumb2(Thumb2::LdrsbImm { rt, rn, imm }) => {
+                assert_eq!((rt, rn, imm), (6, 15, 0x86A));
+            }
+            _ => panic!("expected LdrsbImm, got {:?}", i),
+        }
+        // P=0/W=0 stays UNPREDICTABLE in the halfword group too
+        // (Capstone refuses to decode F820 0A01).
+        assert!(decode32(0xF820, 0x0A01).is_none());
+        // Rt = 15 halfword store → None (bit 11 forms checked, Rt = F).
+        assert!(decode32(0xF820, 0xF804).is_none());
+        // F820 F004 has hw2 bit 11 = 0: it is the register-offset STRH
+        // family, NOT the T4 immediate family.
+        let i = decode32(0xF820, 0xF004).unwrap();
+        assert!(matches!(
+            i,
+            Instr::Thumb2(Thumb2::LdrStrReg { load: false, size: 2, .. })
+        ));
     }
 
     #[test]

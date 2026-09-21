@@ -7,7 +7,8 @@ const handlers = {};
 
 export const ipc = {
     send(channel, data) {
-        invoke('ipc_send', { request: { channel, data } })
+        return ipcListenerReady
+            .then(() => invoke('ipc_send', { request: { channel, data } }))
             .catch(err => console.error('ipc.send error', channel, err));
     },
     on(channel, callback) {
@@ -24,15 +25,32 @@ export const ipc = {
 };
 
 // Listen to backend-emitted Tauri events and dispatch to ipc.on callbacks.
-listen('ipc-event', event => {
-    const { channel, data } = event.payload;
+function dispatch(channel, data) {
     if (handlers[channel]) {
         handlers[channel].forEach(cb => cb({ sender: {} }, data));
     }
+}
+
+const ipcListenerReady = listen('ipc-event', event => {
+    const { channel, data } = event.payload;
+    dispatch(channel, data);
 });
 
+// Sub-window editors announce readiness after the event listener exists; the
+// backend answers with the initialization payload queued at window creation
+// (or null). This removes the create-then-emit race for new editor windows.
+ipcListenerReady
+    .then(() => invoke('editor_ready'))
+    .then(data => {
+        if (data != null) dispatch('data', data);
+    })
+    .catch(err => console.error('editor_ready failed', err));
+
 export async function getLocale() {
-    return invoke('get_locale');
+    // Locale files are two-letter (de.json, en.json); the OS returns full
+    // BCP-47 tags like "de-DE" that would miss every file. Normalize here so
+    // every page gets a usable locale.
+    return (await invoke('get_locale')).substr(0, 2);
 }
 
 export async function getAppVersion() {

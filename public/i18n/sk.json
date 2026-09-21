@@ -102,6 +102,7 @@
   "DeepSleepMode.TurnOffDevice": "Vypnúť zariadenie",
   "DischargeCurveEditor.CancelButton": "Zrušiť",
   "DischargeCurveEditor.ChartNameLabel": "Krivka vybíjania:",
+  "DischargeCurveEditor.NameLabel": "Názov:",
   "DischargeCurveEditor.CutoffLabel": "Prerušiť:",
   "DischargeCurveEditor.ExportButton": "Exportovať",
   "DischargeCurveEditor.ImportButton": "Importovať",
@@ -384,5 +385,8 @@
   "Screen.Regional.DateFormat": "Formát dátumu",
   "Screen.Regional.TimeFormat": "Formát času",
   "Screen.Regional.TemperatureUnits": "Jednotky teploty",
-  "Animation.ComingSoon": "Čoskoro — pre animáciu hodín je potrebný patch firmvéru."
+  "Animation.ComingSoon": "Čoskoro — pre animáciu hodín je potrebný patch firmvéru.",
+  "Animation.Clock": "Hodiny",
+  "Animation.PendingRE": "Čaká na RE potvrdenie hodinového háku",
+  "Stats.PuffTimeHHMMSSLabel": "Čas šľuku (HH:MM:SS)"
 }

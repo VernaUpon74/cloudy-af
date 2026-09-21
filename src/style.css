@@ -400,6 +400,16 @@ body,
     background-color: var(--accent-color) !important;
 }
 
+/* Feature-flagged tab that is present but greyed out (e.g. Patches until the
+   dev build confirms feature support). Applied by renderer-firmware.js when
+   the __CLOUDY_PATCHES__ build flag is false. */
+.tab-item.disabled {
+    color: var(--border-color) !important;
+    opacity: 0.5 !important;
+    pointer-events: none !important;
+    cursor: default !important;
+}
+
 .btn,
 .btn-default,
 .btn-primary,

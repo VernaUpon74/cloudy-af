@@ -168,14 +168,20 @@ impl Harness {
     }
 }
 
-/// Block1 vertical packing: byte `x + (y/8)*width`, bit `y%8`
-/// (LSB = topmost of the 8-pixel column group), set bit = pixel on.
+/// Horizontal 1bpp packing, MSB = leftmost pixel: byte `y*(width/8) + x/8`,
+/// bit `0x80 >> (x%8)` — the GDI+ `Format1bppIndexed` layout NToolbox copies
+/// the 0xC1 screenshot bytes into verbatim (CreateBitmapFromBytesArray),
+/// confirmed on hardware (Pico 25 capture renders readable text only under
+/// this packing). The earlier "Block1 vertical packing" decode was wrong for
+/// the on-device framebuffer; the on-pixel COUNT is packing-invariant
+/// (popcount), so golden pixel counts stay valid.
 pub fn unpack_block1(buf: &[u8], width: usize, height: usize) -> Frame {
+    let stride = width / 8;
     let mut pixels = vec![0u8; width * height];
     for y in 0..height {
         for x in 0..width {
-            let byte = buf[x + (y / 8) * width];
-            pixels[y * width + x] = (byte >> (y % 8)) & 1;
+            let byte = buf[y * stride + x / 8];
+            pixels[y * width + x] = (byte >> (7 - (x % 8))) & 1;
         }
     }
     Frame { width, height, pixels }
@@ -239,8 +245,8 @@ mod tests {
         let d = load_descriptor(DESC_JSON).unwrap();
         let mut h = Harness::new(&synthetic_image(), d);
         let frame = h.run_frame(100_000).unwrap();
-        assert_eq!(frame.pixels[0], 1);       // x=0,y=0 set by the 0xFF byte
-        assert_eq!(frame.pixels[7 * 64], 1);  // x=0,y=7: bit 7 of the same byte
+        assert_eq!(frame.pixels[0], 1);       // x=0,y=0 set by the 0xFF byte (MSB)
+        assert_eq!(frame.pixels[7], 1);       // x=7,y=0: bit 0 of the same byte
         assert_eq!(frame.pixels[8], 0);       // x=8,y=0: byte 1 untouched
     }
 
@@ -319,12 +325,12 @@ mod tests {
     #[test]
     fn test_unpack_block1_layout() {
         let mut buf = vec![0u8; 64 * 128 / 8];
-        buf[0] = 0b0000_0101; // y=0 and y=2 at x=0
-        buf[64] = 0x80;       // second byte-row group: y=15 at x=0
+        buf[0] = 0b1000_0010; // y=0: x=0 (MSB) and x=6
+        buf[8] = 0x01;        // y=1 (second row, stride 8): x=7 (LSB)
         let f = unpack_block1(&buf, 64, 128);
         assert_eq!(f.pixels[0], 1);          // (0,0)
-        assert_eq!(f.pixels[2 * 64], 1);     // (0,2)
-        assert_eq!(f.pixels[15 * 64], 1);    // (0,15)
-        assert_eq!(f.pixels[64], 0);         // (0,1)
+        assert_eq!(f.pixels[6], 1);          // (6,0)
+        assert_eq!(f.pixels[64 + 7], 1);     // (7,1)
+        assert_eq!(f.pixels[1], 0);          // (1,0)
     }
 }

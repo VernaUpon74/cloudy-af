@@ -38,7 +38,7 @@ struct SidecarErrorEvent {
 pub(crate) struct SidecarState {
     child: Arc<Mutex<Option<Child>>>,
     stdin: Arc<Mutex<Option<ChildStdin>>>,
-    pending: Arc<Mutex<HashMap<String, oneshot::Sender<serde_json::Value>>>>,
+    pending: Arc<std::sync::Mutex<HashMap<String, oneshot::Sender<serde_json::Value>>>>,
 }
 
 impl SidecarState {
@@ -46,7 +46,7 @@ impl SidecarState {
         Self {
             child: Arc::new(Mutex::new(None)),
             stdin: Arc::new(Mutex::new(None)),
-            pending: Arc::new(Mutex::new(HashMap::new())),
+            pending: Arc::new(std::sync::Mutex::new(HashMap::new())),
         }
     }
 }
@@ -125,15 +125,42 @@ async fn sidecar_send(state: &SidecarState, mut cmd: serde_json::Value, request_
     }
 }
 
+// A synchronous map lock permits cancellation-safe cleanup in Drop. Never hold
+// this lock across an await or while performing sidecar I/O.
+struct PendingRequest<'a> {
+    state: &'a SidecarState,
+    id: String,
+}
+
+impl Drop for PendingRequest<'_> {
+    fn drop(&mut self) {
+        self.state.pending.lock().unwrap().remove(&self.id);
+    }
+}
+
+fn sidecar_response(payload: serde_json::Value) -> Result<serde_json::Value, String> {
+    if payload.get("error").and_then(|v| v.as_bool()) == Some(true) {
+        let message = payload.get("message").and_then(|v| v.as_str()).unwrap_or("Sidecar error");
+        let detail = payload.get("detail").and_then(|v| v.as_str());
+        return Err(match detail {
+            Some(detail) => format!("{}: {}", message, detail),
+            None => message.to_string(),
+        });
+    }
+    Ok(payload)
+}
+
 async fn sidecar_request(state: &SidecarState, cmd: serde_json::Value) -> Result<serde_json::Value, String> {
     let id = Uuid::new_v4().to_string();
     let (tx, rx) = oneshot::channel();
-    {
-        let mut pending = state.pending.lock().await;
-        pending.insert(id.clone(), tx);
-    }
-    sidecar_send(state, cmd, Some(id)).await?;
-    rx.await.map_err(|_| "Sidecar response cancelled".to_string())
+    state.pending.lock().unwrap().insert(id.clone(), tx);
+    let _pending = PendingRequest { state, id: id.clone() };
+    // Bound both the pipe write and response wait (including lock contention).
+    tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        sidecar_send(state, cmd, Some(id)).await?;
+        let payload = rx.await.map_err(|_| "Sidecar disconnected before replying".to_string())?;
+        sidecar_response(payload)
+    }).await.map_err(|_| "Sidecar request timed out after 30 seconds".to_string())?
 }
 
 /// Tell the HID sidecar to close the device and stop polling/reconnecting.
@@ -183,6 +210,17 @@ async fn ipc_send(
     }
 }
 
+#[derive(Default)]
+struct EditorState(std::sync::Mutex<HashMap<String, (bool, serde_json::Value)>>);
+
+#[tauri::command]
+fn editor_ready(window: tauri::WebviewWindow, state: State<'_, EditorState>) -> Option<serde_json::Value> {
+    let mut editors = state.0.lock().unwrap();
+    let entry = editors.get_mut(window.label())?;
+    entry.0 = true;
+    Some(entry.1.clone())
+}
+
 async fn open_sub_window(
     app: &tauri::AppHandle,
     channel: &str,
@@ -198,25 +236,30 @@ async fn open_sub_window(
         _ => return Err("Unknown sub-window".to_string()),
     };
 
-    let window = if let Some(w) = app.get_webview_window(label) {
-        w
-    } else {
-        WebviewWindowBuilder::new(app, label, WebviewUrl::App(html.into()))
-            .title(title)
-            .inner_size(width as f64, height as f64)
-            .resizable(true)
-            .build()
-            .map_err(|e| e.to_string())?
-    };
-
-    window.emit(
-        "ipc-event",
-        IpcEvent {
-            channel: "data".to_string(),
-            data,
-        },
-    )
-    .map_err(|e| e.to_string())
+    let state: State<'_, EditorState> = app.state();
+    // Serialize creation/update with editor_ready so data is either returned by
+    // the handshake or emitted to an already registered listener, never lost.
+    let mut editors = state.0.lock().unwrap();
+    if let Some(window) = app.get_webview_window(label) {
+        let entry = editors.entry(label.to_string()).or_insert((false, data.clone()));
+        entry.1 = data.clone();
+        if entry.0 {
+            window.emit("ipc-event", IpcEvent { channel: "data".to_string(), data })
+                .map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    editors.insert(label.to_string(), (false, data));
+    if let Err(error) = WebviewWindowBuilder::new(app, label, WebviewUrl::App(html.into()))
+        .title(title)
+        .inner_size(width as f64, height as f64)
+        .resizable(true)
+        .build()
+    {
+        editors.remove(label);
+        return Err(error.to_string());
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -364,10 +407,8 @@ async fn save_config(
         "type": "encode_afc",
         "config": config
     });
+    // sidecar_request already rejects error payloads with their message.
     let res = sidecar_request(&state, cmd).await?;
-    if let Some(msg) = res.get("message").and_then(|v| v.as_str()) {
-        return Err(format!("Sidecar error: {}", msg));
-    }
     let data = res
         .get("data")
         .and_then(|v| v.as_str())
@@ -527,6 +568,7 @@ async fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
 
     let app_handle = app.clone();
     let pending = state.pending.clone();
+    let sidecar_stdin = state.stdin.clone();
     tokio::spawn(async move {
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
@@ -542,7 +584,7 @@ async fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
                         // If this error is a response to a pending request, fulfill it
                         // so the caller does not hang.
                         if let Some(id) = event.payload.get("request_id").and_then(|v| v.as_str()) {
-                            let mut pending_guard = pending.lock().await;
+                            let mut pending_guard = pending.lock().unwrap();
                             if let Some(tx) = pending_guard.remove(id) {
                                 let _ = tx.send(event.payload.clone());
                                 continue;
@@ -573,7 +615,7 @@ async fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
                     _ => {
                         // Check if this is a response to a pending request.
                         if let Some(id) = event.payload.get("request_id").and_then(|v| v.as_str()) {
-                            let mut pending_guard = pending.lock().await;
+                            let mut pending_guard = pending.lock().unwrap();
                             if let Some(tx) = pending_guard.remove(id) {
                                 let _ = tx.send(event.payload.clone());
                                 continue;
@@ -585,6 +627,14 @@ async fn spawn_sidecar(app: &tauri::AppHandle) -> Result<(), String> {
                 }
             }
         }
+        // EOF/read failure means no further responses can arrive. Drop all
+        // senders to wake waiters, and prevent subsequent writes to a dead pipe.
+        sidecar_stdin.lock().await.take();
+        pending.lock().unwrap().clear();
+        let _ = app_handle.emit("sidecar-error", SidecarErrorEvent {
+            message: "HID sidecar disconnected".to_string(),
+            detail: None,
+        });
     });
 
     if let Some(stderr) = stderr {
@@ -636,6 +686,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
         .manage(SidecarState::new())
+        .manage(EditorState::default())
         .manage(firmware::state::FirmwareState::new())
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
@@ -718,6 +769,7 @@ pub fn run() {
             commands::firmware::write_string_cmd,
             commands::firmware::list_resource_packs,
             commands::firmware::apply_resource_pack_cmd,
+            editor_ready,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
