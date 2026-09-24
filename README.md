@@ -171,9 +171,8 @@ Kimi Code and local models assisted in the rewrite. Images edited with OSS tools
 
 # Donations
 
-Accepting donations, not expecting; I've used WinRAR.
-- BTC bc1qpfq3c6hdflafccqmsl4v7ussvlw8pazpwez09m
-- XMR 85YdUQXSMTgTeySZCyJjh9QTnzevgCHtZA6dhmFYMZqtE529pUZ5K8ceEC2ysaV2o4CuMuYtoaYPYdJfHYGX7m1WMgyM53i
+~~Accepting donations, not expecting; I've used WinRAR.~~
+- Crypto wallets closed
 
 # License
 
